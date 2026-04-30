@@ -1,0 +1,42 @@
+{
+  "config": {
+    "request": {
+      "requestType": "POST",
+      "requestTemplate": "{\"questionId\":\"${input.questionId}\",\"value\":${input.value}}",
+      "requestUrlTemplate": "{{DOMAIN_NAME}}/api/question-answers",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "${authResponse.token_type} ${authResponse.access_token}"
+      }
+    },
+    "response": {
+      "translationMap": {},
+      "translationMapDefaults": {},
+      "successTemplate": "${rawResult}"
+    }
+  },
+  "contract": {
+    "input": {
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "questionId": { "type": "string" },
+          "value": { "type": "integer" }
+        },
+        "required": ["questionId", "value"]
+      }
+    },
+    "output": {
+      "successSchema": {
+        "type": "object",
+        "properties": {
+          "tenantId": { "type": "string" },
+          "questionId": { "type": "string" },
+          "totalResponses": { "type": "integer" },
+          "updatedAt": { "type": "string" },
+          "counts": { "type": "object" }
+        }
+      }
+    }
+  }
+}

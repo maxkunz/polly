@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+
+.app-icon {
+	--app-icon-size: 1.25rem;
+	--app-icon-scale: 1;
+	width: var(--app-icon-size);
+	height: var(--app-icon-size);
+	font-size: var(--app-icon-size);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	transform: scale(var(--app-icon-scale));
+	transform-origin: center;
+}
+
+.app-icon.sm { --app-icon-scale: 0.8; }
+.app-icon.md { --app-icon-scale: 1.2; }
+.app-icon.lg { --app-icon-scale: 1.6; }
+.app-icon.white { color: white; }
+
+.app-highlight-category.p-tag {
+	background: var(--p-app-highlight-category-background);
+	color: var(--p-app-highlight-category-color);
+}
+
+.app-highlight-concern.p-tag {
+	background: var(--p-app-highlight-concern-background);
+	color: var(--p-app-highlight-concern-color);
+}

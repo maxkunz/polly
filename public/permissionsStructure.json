@@ -1,0 +1,14 @@
+{
+  "name": "{{ROLE_NAME}}",
+  "permissions": [
+    "architect:datatable:*"
+  ],
+  "permissionPolicies": [
+    {
+      "domain": "architect",
+      "entityName": "datatable",
+      "actionSet": ["*"],
+      "allowConditions": false
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.975.0",
+    "@aws-sdk/client-dynamodb": "^3.975.0",
+    "@aws-sdk/client-secrets-manager": "^3.975.0",
+    "@aws-sdk/lib-dynamodb": "^3.975.0",
+    "@heroicons/vue": "^2.2.0",
+    "@primeuix/themes": "^2.0.2",
+    "pinia": "^2.2.0",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.5.4",
+    "purecloud-platform-client-v2": "^221.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@aws-amplify/backend": "^1.2.1",
+    "@aws-amplify/backend-cli": "^1.2.2",
+    "@tailwindcss/vite": "^4.1.17",
+    "@types/node": "^20.12.5",
+    "@vitejs/plugin-vue": "^6.0.2",
+    "aws-cdk": "^2.137.0",
+    "aws-cdk-lib": "^2.137.0",
+    "constructs": "^10.3.0",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.7",
+    "vue-tsc": "^2.0.11"
+  }
+}
