@@ -96,40 +96,38 @@ export const useAppStore = defineStore("app", {
 		},
 		async initializeFromLocation(currentUrl?: string): Promise<void> {
 			if (this.initialized) return;
-			const url = currentUrl ?? window.location.href;
 			this.initGenesysClients();
 
-			// URL analysieren und eine bereinigte Version ohne Query-Parameter erstellen
-			const urlObj = new URL(url);
-			const cleanRedirectUri = urlObj.origin + urlObj.pathname;
+			const search =
+				currentUrl !== undefined
+					? new URL(currentUrl).search
+					: window.location.search;
+			const params = new URLSearchParams(search);
 
-			const params = new URLSearchParams(urlObj.search);
+			this.clientId =
+				params.get("client_id") || sessionStorage.getItem("gc_client_id");
+			this.datatableId =
+				params.get("datatable_id") || sessionStorage.getItem("gc_datatable_id");
 
-			// Werte aus der URL lesen
-			const urlClientId = params.get("client_id");
-			const urlDatatableId = params.get("datatable_id");
+			if (this.clientId) sessionStorage.setItem("gc_client_id", this.clientId);
+			if (this.datatableId)
+				sessionStorage.setItem("gc_datatable_id", this.datatableId);
 
-			// Im sessionStorage zwischenspeichern, damit sie nach dem Genesys-Redirect noch da sind
-			if (urlClientId) sessionStorage.setItem("saved_client_id", urlClientId);
-			if (urlDatatableId) sessionStorage.setItem("saved_datatable_id", urlDatatableId);
+			let redirectUri = sessionStorage.getItem("gc_redirect_uri");
 
-			// Werte laden (entweder aus der aktuellen URL oder dem Speicher nach dem Redirect)
-			this.clientId = urlClientId || sessionStorage.getItem("saved_client_id");
-			this.datatableId = urlDatatableId || sessionStorage.getItem("saved_datatable_id");
-
-			console.log(`initializeFromLocation called (${this.initialized}) with clientId: ${this.clientId}`);
-
-			// Den Login mit der SAUBEREN Basis-URL aufrufen
-			await (genesysHelper as any).login(this.clientId, cleanRedirectUri);
-
-			if (!this.datatableId) {
-				console.info("Setup mode: missing datatable_id.");
-				return;
+			if (!redirectUri) {
+				const urlObj = new URL(currentUrl ?? window.location.href);
+				urlObj.hash = "";
+				redirectUri = urlObj.toString();
+				sessionStorage.setItem("gc_redirect_uri", redirectUri);
 			}
 
+			await (genesysHelper as any).login(this.clientId, redirectUri);
+
+			if (!this.datatableId) return;
+
 			await genesysHelper.getConfigurationDataFromGenesys(this.datatableId);
-			await this.loadQuestionAnswers();
 			this.initialized = true;
-		}
+		},
 	}
 });
