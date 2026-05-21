@@ -94,22 +94,33 @@ export const useAppStore = defineStore("app", {
 				items.map(item => [item.questionId, item])
 			);
 		},
-
-		async initializeFromLocation(currentUrl?: string): Promise<void> {			
+		async initializeFromLocation(currentUrl?: string): Promise<void> {
 			if (this.initialized) return;
 			const url = currentUrl ?? window.location.href;
 			this.initGenesysClients();
-			const search =
-				currentUrl !== undefined
-					? new URL(currentUrl).search
-					: window.location.search;
-			const params = new URLSearchParams(search);
 
-			this.clientId = params.get("client_id");
-			this.datatableId = params.get("datatable_id");
+			// URL analysieren und eine bereinigte Version ohne Query-Parameter erstellen
+			const urlObj = new URL(url);
+			const cleanRedirectUri = urlObj.origin + urlObj.pathname;
+
+			const params = new URLSearchParams(urlObj.search);
+
+			// Werte aus der URL lesen
+			const urlClientId = params.get("client_id");
+			const urlDatatableId = params.get("datatable_id");
+
+			// Im sessionStorage zwischenspeichern, damit sie nach dem Genesys-Redirect noch da sind
+			if (urlClientId) sessionStorage.setItem("saved_client_id", urlClientId);
+			if (urlDatatableId) sessionStorage.setItem("saved_datatable_id", urlDatatableId);
+
+			// Werte laden (entweder aus der aktuellen URL oder dem Speicher nach dem Redirect)
+			this.clientId = urlClientId || sessionStorage.getItem("saved_client_id");
+			this.datatableId = urlDatatableId || sessionStorage.getItem("saved_datatable_id");
+
 			console.log(`initializeFromLocation called (${this.initialized}) with clientId: ${this.clientId}`);
 
-			await (genesysHelper as any).login(this.clientId, url);
+			// Den Login mit der SAUBEREN Basis-URL aufrufen
+			await (genesysHelper as any).login(this.clientId, cleanRedirectUri);
 
 			if (!this.datatableId) {
 				console.info("Setup mode: missing datatable_id.");
