@@ -118,9 +118,9 @@ export async function runFullProvisioning(
     }),
   });
 
-  // if (!startResponse.ok) {
-  //   throw new Error("Backend onboarding start failed.");
-  // }
+  if (!startResponse.ok) {
+    throw new Error("Backend onboarding start failed.");
+  }
 
   const startData = await startResponse.json();
   const backendAuth = startData.backendAuth;
