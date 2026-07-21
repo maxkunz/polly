@@ -65,7 +65,7 @@ export function moduleRegistry() {
 			key: "questions",
 			title: "Questions",
 			color: "#14B8A6",
-			description: "Pflege Bewertungsfragen mit Prompt, Reprompt und numerischer Skala.",
+			description: "Pflege der Bewertungsfragen mit Prompt, Reprompt und numerischer Skala.",
 			page: true,
 			dashboardColumn: 1,
 			routeModule: false,
