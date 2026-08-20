@@ -37,3 +37,5 @@ coverage
 .amplify
 amplify_outputs*
 amplifyconfiguration*
+
+.agents

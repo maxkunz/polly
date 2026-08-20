@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
+import { OneRowDataTable } from "@/services/genesys/dataTable";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
@@ -32,6 +33,7 @@ export const useAppStore = defineStore("app", {
 
 		domain: new Domain(),
 		questionAnswers: {} as Record<string, QuestionAnswerStats>,
+		surveys: [] as any[],
 
 		dropdowns: {} as Record<string, { selected: any }>,
 
@@ -94,6 +96,23 @@ export const useAppStore = defineStore("app", {
 				items.map(item => [item.questionId, item])
 			);
 		},
+
+		async loadSurveys(): Promise<void> {
+			const datatableId = "f928c3fd-a861-49ab-a148-738be4a62e35";
+			const rowId = "survey_list";
+			try {
+				const data = await OneRowDataTable(datatableId, rowId);
+				if (data) {
+					const rawDraft = data.Draft ?? data.draft;
+					if (rawDraft) {
+						this.surveys = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
+					}
+				}
+			} catch (e) {
+				console.error("Failed to load surveys:", e);
+			}
+		},
+
 		async initializeFromLocation(currentUrl?: string): Promise<void> {
 			if (this.initialized) return;
 			this.initGenesysClients();
@@ -127,6 +146,7 @@ export const useAppStore = defineStore("app", {
 			if (!this.datatableId) return;
 
 			await genesysHelper.getConfigurationDataFromGenesys(this.datatableId);
+			await this.loadSurveys();
 			this.initialized = true;
 		},
 	}

@@ -1,8 +1,7 @@
 import { computed } from "vue";
 import { useAppStore } from "@/stores/appStore";
 
-export type ModuleKey = "dashboard" | "questions" | "settings" | "page";
-
+export type ModuleKey = "dashboard" | "questions" | "surveys" | "settings" | "page";
 export interface RouteReference {
 	type: ModuleKey;
 	id: string | number | null;
@@ -69,7 +68,7 @@ export function moduleRegistry() {
 			page: true,
 			dashboardColumn: 1,
 			routeModule: false,
-			isActive: () => true,
+			isActive: () => false,
 			getChildren: () =>
 				Object.values(useAppStore().domain.questions.all() ?? {}).map((question: any) => ({
 					key: question.id,
@@ -78,6 +77,27 @@ export function moduleRegistry() {
 					title: question.name,
 					text: question.prompt
 				}))
+		},
+		{
+			key: "surveys",
+			title: "Umfragen",
+			color: "#8B5CF6",
+			description: "Erstellung, Konfiguration und Auswertung von Umfragen.",
+			page: true,
+			dashboardColumn: 3,
+			routeModule: false,
+			isActive: () => true,
+			getChildren: () =>
+				(useAppStore().surveys ?? []).map((survey: any, index: number) => {
+					const surveyId = String(survey.id ?? survey.key ?? index);
+					const label = survey.title?.trim() ? survey.title : (survey.name?.trim() ? survey.name : (survey.Name?.trim() ? survey.Name : `Umfrage ${index + 1}`));
+					return {
+						key: surveyId,
+						value: { type: "surveys", id: surveyId },
+						label,
+						title: label
+					};
+				})
 		},
 		{
 			key: "settings",
