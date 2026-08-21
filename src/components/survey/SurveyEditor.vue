@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import Card from "primevue/card";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
@@ -114,6 +114,16 @@ async function handleSave() {
 			detail: "Bitte beheben Sie die markierten Fehler vor dem Speichern.",
 			life: 5000
 		});
+
+		const firstError = validationErrors.value.find(e => e.fieldId);
+		if (firstError?.fieldId) {
+			await nextTick();
+			const el = document.getElementById(firstError.fieldId);
+			if (el) {
+				el.scrollIntoView({ behavior: "smooth", block: "center" });
+				el.focus();
+			}
+		}
 		return;
 	}
 
@@ -269,7 +279,8 @@ function handleBack() {
 								class="w-full"
 								placeholder="z. B. Kundenzufriedenheit 2026"
 								:disabled="disabled"
-								:aria-invalid="!draftSurvey.title?.trim()"
+								:invalid="saveAttempted && !draftSurvey.title?.trim()"
+								:aria-invalid="saveAttempted && !draftSurvey.title?.trim()"
 							/>
 						</div>
 
@@ -404,6 +415,7 @@ function handleBack() {
 					:isSaved="isQuestionSaved(question.id)"
 					:isQuestionSaved="isQuestionSaved"
 					:disabled="disabled"
+					:showValidation="saveAttempted"
 					@move-up="moveQuestion(qIndex, 'up')"
 					@move-down="moveQuestion(qIndex, 'down')"
 					@delete="removeQuestion(question.id)"

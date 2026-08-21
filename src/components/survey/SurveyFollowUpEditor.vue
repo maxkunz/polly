@@ -23,10 +23,12 @@ const props = withDefaults(
 		index: number;
 		isSaved?: boolean;
 		disabled?: boolean;
+		showValidation?: boolean;
 	}>(),
 	{
 		isSaved: false,
-		disabled: false
+		disabled: false,
+		showValidation: false
 	}
 );
 
@@ -78,9 +80,9 @@ const booleanOptions = [
 
 const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_${props.index}`);
 const conditionOpId = computed(() => `fu_cond_op_${props.parentQuestion.id}_${props.index}`);
-const titleId = computed(() => `fu_title_${props.parentQuestion.id}_${props.index}`);
-const descId = computed(() => `fu_desc_${props.parentQuestion.id}_${props.index}`);
-const typeId = computed(() => `fu_type_${props.parentQuestion.id}_${props.index}`);
+const titleId = computed(() => `q_title_${props.followUp.question.id}`);
+const descId = computed(() => `fu_desc_${props.followUp.question.id}`);
+const typeId = computed(() => `fu_type_${props.followUp.question.id}`);
 
 function handleTypeChange(newType: QuestionType) {
 	props.followUp.question.type = newType;
@@ -215,7 +217,8 @@ function confirmDelete() {
 						class="w-full text-sm"
 						placeholder="z. B. Was war der Grund für Ihre Bewertung?"
 						:disabled="disabled"
-						:aria-invalid="!followUp.question.title.trim()"
+						:invalid="showValidation && !followUp.question.title?.trim()"
+						:aria-invalid="showValidation && !followUp.question.title?.trim()"
 					/>
 				</div>
 

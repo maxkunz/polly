@@ -10,6 +10,7 @@ export interface ValidationError {
 	field: string;
 	message: string;
 	questionId?: string;
+	fieldId?: string;
 }
 
 export function validateQuestion(
@@ -23,7 +24,8 @@ export function validateQuestion(
 		errors.push({
 			field: `${qField}.title`,
 			message: "Fragetitel darf nicht leer sein.",
-			questionId: question.id
+			questionId: question.id,
+			fieldId: `q_title_${question.id}`
 		});
 	}
 
@@ -31,7 +33,8 @@ export function validateQuestion(
 		errors.push({
 			field: `${qField}.name`,
 			message: "Name der Frage darf nicht leer sein.",
-			questionId: question.id
+			questionId: question.id,
+			fieldId: `q_name_${question.id}`
 		});
 	}
 
@@ -48,21 +51,24 @@ export function validateQuestion(
 				errors.push({
 					field: `${qField}.options.min_value`,
 					message: "Minimalwert muss zwischen 0 und 8 liegen.",
-					questionId: question.id
+					questionId: question.id,
+					fieldId: `q_rating_min_${question.id}`
 				});
 			}
 			if (max_value < 0 || max_value > 8) {
 				errors.push({
 					field: `${qField}.options.max_value`,
 					message: "Maximalwert muss zwischen 0 und 8 liegen.",
-					questionId: question.id
+					questionId: question.id,
+					fieldId: `q_rating_max_${question.id}`
 				});
 			}
 			if (min_value >= max_value) {
 				errors.push({
 					field: `${qField}.options.range`,
 					message: "Minimalwert muss kleiner als der Maximalwert sein.",
-					questionId: question.id
+					questionId: question.id,
+					fieldId: `q_rating_min_${question.id}`
 				});
 			}
 		}
@@ -94,7 +100,8 @@ export function validateQuestion(
 					errors.push({
 						field: `${qField}.options.labels[${idx}]`,
 						message: `Option ${idx + 1} darf nicht leer sein.`,
-						questionId: question.id
+						questionId: question.id,
+						fieldId: `opt_${question.id}_${idx}`
 					});
 				}
 			});
@@ -129,14 +136,16 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 	if (!survey.title || !survey.title.trim()) {
 		errors.push({
 			field: "survey.title",
-			message: "Der Titel der Umfrage darf nicht leer sein."
+			message: "Der Titel der Umfrage darf nicht leer sein.",
+			fieldId: "survey_title_input"
 		});
 	}
 
 	if (!survey.name || !survey.name.trim()) {
 		errors.push({
 			field: "survey.name",
-			message: "Der Name der Umfrage darf nicht leer sein."
+			message: "Der Name der Umfrage darf nicht leer sein.",
+			fieldId: "survey_name_input"
 		});
 	}
 

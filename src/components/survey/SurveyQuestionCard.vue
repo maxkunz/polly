@@ -33,10 +33,12 @@ const props = withDefaults(
 		isSaved?: boolean;
 		isQuestionSaved?: (id: string) => boolean;
 		disabled?: boolean;
+		showValidation?: boolean;
 	}>(),
 	{
 		isSaved: false,
-		disabled: false
+		disabled: false,
+		showValidation: false
 	}
 );
 
@@ -279,7 +281,8 @@ function getRatingScaleArray(): number[] {
 						class="w-full"
 						placeholder="z. B. Wie zufrieden sind Sie mit unserem Service?"
 						:disabled="disabled"
-						:aria-invalid="!question.title?.trim()"
+						:invalid="showValidation && !question.title?.trim()"
+						:aria-invalid="showValidation && !question.title?.trim()"
 					/>
 				</div>
 
@@ -411,7 +414,8 @@ function getRatingScaleArray(): number[] {
 								class="flex-1 text-sm"
 								:placeholder="`Option ${optIdx + 1}`"
 								:disabled="disabled"
-								:aria-invalid="!opt.label?.trim()"
+								:invalid="showValidation && !opt.label?.trim()"
+								:aria-invalid="showValidation && !opt.label?.trim()"
 							/>
 							<Button
 								size="small"
@@ -482,6 +486,7 @@ function getRatingScaleArray(): number[] {
 							:index="fuIdx"
 							:isSaved="isQuestionSaved ? isQuestionSaved(fu.question.id) : false"
 							:disabled="disabled"
+							:showValidation="showValidation"
 							@remove="emit('remove-follow-up', fuIdx)"
 						/>
 					</div>
