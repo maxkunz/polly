@@ -101,9 +101,9 @@ watch(
 			<main class="relative flex-1 overflow-y-auto app-main">
 				<RouterView />
 			</main>
-			<div class="control-toolbar-wrapper pointer-events-auto">
+			<!-- <div class="control-toolbar-wrapper pointer-events-auto">
 				<ControlToolbar />
-			</div>
+			</div> -->
 		</div>
 	</div>
 
