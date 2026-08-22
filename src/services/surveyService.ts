@@ -12,7 +12,7 @@ export interface LoadSurveyResult {
 
 export interface SurveyListItem {
 	id: string;
-	name: string;
+	title: string;
 	[key: string]: any;
 }
 
@@ -46,6 +46,8 @@ export async function syncSurveyInList(
 	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
 	survey: Survey
 ): Promise<SurveyListItem[]> {
+	console.log("syncing survey in list", survey);
+
 	const rowKey = "survey_list";
 	let listRow: Record<string, any> | null = null;
 	let currentList: SurveyListItem[] = [];
@@ -71,12 +73,12 @@ export async function syncSurveyInList(
 		currentList[existingIndex] = {
 			...currentList[existingIndex],
 			id: survey.id,
-			name: displayName
+			title: displayName
 		};
 	} else {
 		currentList.push({
 			id: survey.id,
-			name: displayName
+			title: displayName,
 		});
 	}
 
