@@ -6,10 +6,12 @@ withDefaults(
 	defineProps<{
 		isDirty: boolean;
 		isSaving: boolean;
+		isDeleting?: boolean;
 		version?: number;
 		disabled?: boolean;
 	}>(),
 	{
+		isDeleting: false,
 		version: 1,
 		disabled: false
 	}
@@ -20,6 +22,7 @@ const emit = defineEmits<{
 	(e: "discard"): void;
 	(e: "save"): void;
 	(e: "deploy"): void;
+	(e: "delete"): void;
 }>();
 </script>
 
@@ -43,10 +46,20 @@ const emit = defineEmits<{
 		<div class="flex items-center gap-2">
 			<Button
 				size="small"
+				severity="danger"
+				icon="pi pi-trash"
+				label="Löschen"
+				:loading="isDeleting"
+				:disabled="isSaving || isDeleting || disabled"
+				aria-label="Umfrage löschen"
+				@click="emit('delete')"
+			/>
+			<Button
+				size="small"
 				severity="secondary"
 				icon="pi pi-refresh"
 				label="Verwerfen"
-				:disabled="!isDirty || isSaving || disabled"
+				:disabled="!isDirty || isSaving || isDeleting || disabled"
 				@click="emit('discard')"
 			/>
 			<Button
@@ -54,7 +67,7 @@ const emit = defineEmits<{
 				severity="info"
 				icon="pi pi-cloud-upload"
 				label="Deploy"
-				:disabled="isDirty || isSaving || disabled"
+				:disabled="isDirty || isSaving || isDeleting || disabled"
 				aria-label="Zur Deployment-Ansicht"
 				@click="emit('deploy')"
 			/>
@@ -64,7 +77,7 @@ const emit = defineEmits<{
 				icon="pi pi-save"
 				:loading="isSaving"
 				label="Speichern"
-				:disabled="disabled || !isDirty"
+				:disabled="disabled || !isDirty || isDeleting"
 				@click="emit('save')"
 			/>
 		</div>

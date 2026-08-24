@@ -99,6 +99,11 @@ function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): voi
 	}
 }
 
+async function handleSurveyDeleted(): Promise<void> {
+	await loadSurveysList();
+	handleBackToList();
+}
+
 async function loadSurveyDetail(surveyId: string): Promise<void> {
 	if (!surveyId) {
 		selectedSurveyDetail.value = null;
@@ -238,6 +243,7 @@ onMounted(async () => {
 				@saved="handleSurveySaved"
 				@back="handleBackToList"
 				@deploy="handleDeploy"
+				@deleted="handleSurveyDeleted"
 			/>
 
 			<!-- Deployment View -->

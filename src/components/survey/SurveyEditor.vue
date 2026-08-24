@@ -31,6 +31,7 @@ const emit = defineEmits<{
 	(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
 	(e: "back"): void;
 	(e: "deploy"): void;
+	(e: "deleted"): void;
 }>();
 
 const existingRowRef = ref<Record<string, any> | null>(props.existingRow ?? null);
@@ -73,9 +74,11 @@ watch(
 
 const {
 	isSaving,
+	isDeleting,
 	saveAttempted,
 	handleSave,
 	handleDiscard,
+	handleDelete,
 	handleBack
 } = useSurveySaveActions({
 	draftSurvey,
@@ -102,12 +105,14 @@ const {
 		<SurveyEditorToolbar
 			:isDirty="isDirty"
 			:isSaving="isSaving"
+			:isDeleting="isDeleting"
 			:version="draftSurvey.version"
 			:disabled="disabled"
 			@back="handleBack"
 			@discard="handleDiscard"
 			@save="handleSave"
 			@deploy="emit('deploy')"
+			@delete="handleDelete"
 		/>
 
 		<!-- Validation Errors Summary -->

@@ -3,7 +3,7 @@ import { useToast } from "primevue/usetoast";
 import { useConfirm } from "primevue/useconfirm";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
-import { saveSurveyDetail, fetchSurveyDetail } from "@/services/surveyService";
+import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey } from "@/services/surveyService";
 
 export interface SurveySaveActionsOptions {
 	draftSurvey: Ref<Survey | null>;
@@ -16,9 +16,11 @@ export interface SurveySaveActionsOptions {
 	surveyId: string;
 	existingRow?: Ref<Record<string, any> | null>;
 	onRowRefreshed?: (freshRow: Record<string, any>) => void;
+	onDeleted?: () => void;
 	emit: {
 		(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
 		(e: "back"): void;
+		(e: "deleted"): void;
 	};
 }
 
@@ -27,6 +29,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const confirm = useConfirm();
 
 	const isSaving = ref<boolean>(false);
+	const isDeleting = ref<boolean>(false);
 	const saveAttempted = ref<boolean>(false);
 
 	async function handleSave() {
@@ -122,6 +125,44 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 		});
 	}
 
+	function handleDelete() {
+		const title = options.draftSurvey.value?.title || options.surveyId;
+		confirm.require({
+			header: "Umfrage löschen",
+			message: `Möchten Sie die Umfrage „${title}“ wirklich unwiderruflich löschen?`,
+			icon: "pi pi-exclamation-triangle",
+			acceptLabel: "Ja, löschen",
+			rejectLabel: "Abbrechen",
+			acceptClass: "p-button-danger",
+			accept: async () => {
+				isDeleting.value = true;
+				try {
+					await deleteSurvey(options.datatableId, options.surveyId);
+					toast.add({
+						severity: "success",
+						summary: "Umfrage gelöscht",
+						detail: `Die Umfrage „${title}“ wurde erfolgreich gelöscht.`,
+						life: 3500
+					});
+					if (options.onDeleted) {
+						options.onDeleted();
+					}
+					options.emit("deleted");
+				} catch (err: any) {
+					console.error("Delete survey error:", err);
+					toast.add({
+						severity: "error",
+						summary: "Fehler beim Löschen",
+						detail: err?.message || "Fehler beim Löschen der Umfrage aus der Data Table.",
+						life: 5000
+					});
+				} finally {
+					isDeleting.value = false;
+				}
+			}
+		});
+	}
+
 	function handleBack() {
 		if (options.isDirty.value) {
 			confirm.require({
@@ -142,9 +183,11 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 
 	return {
 		isSaving,
+		isDeleting,
 		saveAttempted,
 		handleSave,
 		handleDiscard,
+		handleDelete,
 		handleBack
 	};
 }

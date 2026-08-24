@@ -1,4 +1,4 @@
-import { OneRowDataTable, updateDataTableRow } from "@/services/genesys/dataTable";
+import { OneRowDataTable, updateDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { generateTechnicalName, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { useAppStore } from "@/stores/appStore";
@@ -194,6 +194,56 @@ export async function saveSurveyDetail(
 	await syncSurveyInList(datatableId, updatedSurvey);
 
 	return updatedSurvey;
+}
+
+export async function deleteSurvey(
+	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	surveyId: string
+): Promise<void> {
+	const rowKey = `survey_${surveyId}`;
+
+	// 1. Delete data table row
+	await deleteDataTableRow(datatableId, rowKey);
+
+	// 2. Remove survey from survey_list row
+	const listRowKey = "survey_list";
+	let listRow: Record<string, any> | null = null;
+	let currentList: SurveyListItem[] = [];
+
+	try {
+		listRow = await OneRowDataTable(datatableId, listRowKey);
+		if (listRow) {
+			const rawDraft = listRow.Draft ?? listRow.draft;
+			if (rawDraft) {
+				currentList = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
+			}
+		}
+	} catch (e) {
+		console.warn("Could not load survey_list row during delete:", e);
+	}
+
+	const updatedList = currentList.filter(
+		item => String(item.id ?? item.key) !== String(surveyId)
+	);
+
+	const serializedDraft = JSON.stringify(updatedList);
+	const rowPayload: Record<string, any> = {
+		key: listRowKey,
+		Draft: serializedDraft,
+		Prod: listRow?.Prod ?? "{}",
+		Stage: listRow?.Stage ?? "{}",
+		Backup: listRow?.Backup ?? "{}",
+		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
+	};
+
+	await updateDataTableRow(datatableId, listRowKey, rowPayload);
+
+	try {
+		const app = useAppStore();
+		app.surveys = updatedList;
+	} catch {
+		// Ignored if Pinia store is not active
+	}
 }
 
 
