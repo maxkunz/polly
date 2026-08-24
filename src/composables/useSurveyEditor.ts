@@ -1,4 +1,4 @@
-import { ref, computed, toRaw } from "vue";
+import { ref, computed, nextTick } from "vue";
 import type { Survey, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
 import {
 	createEmptyQuestion,
@@ -76,13 +76,21 @@ export function useSurveyEditor(initialData?: Survey | null) {
 		return validationErrors.value.length === 0;
 	});
 
-	function addQuestion(type: QuestionType = "rating"): SurveyQuestion | null {
+	function addQuestion(type: QuestionType = "yes_no"): SurveyQuestion | null {
 		if (!survey.value || !canAddQuestion.value) return null;
 		const newQuestion = createEmptyQuestion(type);
 		if (!survey.value.questions) {
 			survey.value.questions = [];
 		}
 		survey.value.questions.push(newQuestion);
+		nextTick(() => {
+			if (typeof document !== "undefined") {
+				const element = document.getElementById(`question-${newQuestion.id}`);
+				if (element) {
+					element.scrollIntoView({ behavior: "smooth", block: "center" });
+				}
+			}
+		});
 		return newQuestion;
 	}
 

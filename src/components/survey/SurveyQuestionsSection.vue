@@ -29,7 +29,7 @@ const emit = defineEmits<{
 
 const toast = useToast();
 
-function handleAddNewQuestion(type: QuestionType = "rating") {
+function handleAddNewQuestion(type: QuestionType = "yes_no") {
 	if (!props.canAddQuestion) {
 		toast.add({
 			severity: "warn",
@@ -71,7 +71,7 @@ function handleAddNewQuestion(type: QuestionType = "rating") {
 					label="Frage hinzufügen"
 					:disabled="disabled || !canAddQuestion"
 					aria-label="Neue Frage zur Umfrage hinzufügen"
-					@click="handleAddNewQuestion('rating')"
+					@click="handleAddNewQuestion()"
 				/>
 			</div>
 		</div>
@@ -94,7 +94,7 @@ function handleAddNewQuestion(type: QuestionType = "rating") {
 				icon="pi pi-plus"
 				label="Erste Frage erstellen"
 				:disabled="disabled"
-				@click="handleAddNewQuestion('rating')"
+				@click="handleAddNewQuestion()"
 			/>
 		</div>
 
@@ -117,6 +117,18 @@ function handleAddNewQuestion(type: QuestionType = "rating") {
 				@add-follow-up="emit('add-follow-up', question.id)"
 				@remove-follow-up="(fuIdx) => emit('remove-follow-up', question.id, fuIdx)"
 			/>
+
+			<div class="flex items-center justify-end pt-2">
+				<Button
+					size="small"
+					severity="primary"
+					icon="pi pi-plus"
+					label="Frage hinzufügen"
+					:disabled="disabled || !canAddQuestion"
+					aria-label="Weitere Frage zur Umfrage hinzufügen"
+					@click="handleAddNewQuestion()"
+				/>
+			</div>
 		</div>
 	</section>
 </template>

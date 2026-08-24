@@ -48,7 +48,7 @@ const {
 </script>
 
 <template>
-	<Card class="border border-[var(--p-content-border-color)] shadow-sm rounded-2xl overflow-hidden mb-6">
+	<Card :id="`question-${question.id}`" class="border border-[var(--p-content-border-color)] shadow-sm rounded-2xl overflow-hidden mb-6">
 		<template #header>
 			<QuestionCardHeader
 				:question="question"
