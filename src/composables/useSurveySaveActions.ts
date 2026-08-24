@@ -3,7 +3,7 @@ import { useToast } from "primevue/usetoast";
 import { useConfirm } from "primevue/useconfirm";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
-import { saveSurveyDetail } from "@/services/surveyService";
+import { saveSurveyDetail, fetchSurveyDetail } from "@/services/surveyService";
 
 export interface SurveySaveActionsOptions {
 	draftSurvey: Ref<Survey | null>;
@@ -14,9 +14,10 @@ export interface SurveySaveActionsOptions {
 	markClean: (survey: Survey) => void;
 	datatableId: string;
 	surveyId: string;
-	existingRow?: Record<string, any>;
+	existingRow?: Ref<Record<string, any> | null>;
+	onRowRefreshed?: (freshRow: Record<string, any>) => void;
 	emit: {
-		(e: "saved", updated: Survey): void;
+		(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
 		(e: "back"): void;
 	};
 }
@@ -58,10 +59,24 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				options.datatableId,
 				options.surveyId,
 				options.draftSurvey.value,
-				options.existingRow
+				options.existingRow?.value ?? undefined
 			);
 			options.markClean(updated);
 			saveAttempted.value = false;
+
+			let freshRow: Record<string, any> | undefined;
+			try {
+				const res = await fetchSurveyDetail(options.datatableId, options.surveyId);
+				freshRow = res.rawRow;
+				if (options.existingRow) {
+					options.existingRow.value = freshRow;
+				}
+				if (options.onRowRefreshed) {
+					options.onRowRefreshed(freshRow);
+				}
+			} catch (fetchErr) {
+				console.warn("Could not refresh raw row after save:", fetchErr);
+			}
 
 			toast.add({
 				severity: "success",
@@ -70,7 +85,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				life: 3500
 			});
 
-			options.emit("saved", updated);
+			options.emit("saved", updated, freshRow);
 		} catch (err: any) {
 			console.error("Save survey error:", err);
 			toast.add({

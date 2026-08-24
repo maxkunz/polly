@@ -104,6 +104,62 @@ export async function syncSurveyInList(
 	return currentList;
 }
 
+export type DeployTarget = "Stage" | "Prod";
+
+/**
+ * Deployt den Draft-Inhalt auf Stage oder Prod.
+ * Bei Prod wird der aktuelle Prod-Inhalt zuerst in Backup gesichert.
+ */
+export async function deploySurvey(
+	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	surveyId: string,
+	target: DeployTarget,
+	existingRow: Record<string, any>
+): Promise<void> {
+	const rowKey = `survey_${surveyId}`;
+
+	const rowPayload: Record<string, any> = {
+		key: rowKey,
+		Draft: existingRow.Draft ?? "{}",
+		Stage: existingRow.Stage ?? "{}",
+		Prod: existingRow.Prod ?? "{}",
+		Backup: existingRow.Backup ?? "{}",
+		lock: existingRow.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
+	};
+
+	if (target === "Stage") {
+		rowPayload.Stage = existingRow.Draft ?? "{}";
+	} else {
+		// Prod deployen: erst Backup sichern, dann Prod überschreiben
+		rowPayload.Backup = existingRow.Prod ?? "{}";
+		rowPayload.Prod = existingRow.Draft ?? "{}";
+	}
+
+	await updateDataTableRow(datatableId, rowKey, rowPayload);
+}
+
+/**
+ * Stellt die letzte Backup-Version auf Prod wieder her.
+ */
+export async function rollbackSurvey(
+	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	surveyId: string,
+	existingRow: Record<string, any>
+): Promise<void> {
+	const rowKey = `survey_${surveyId}`;
+
+	const rowPayload: Record<string, any> = {
+		key: rowKey,
+		Draft: existingRow.Draft ?? "{}",
+		Stage: existingRow.Stage ?? "{}",
+		Prod: existingRow.Backup ?? "{}",
+		Backup: existingRow.Backup ?? "{}",
+		lock: existingRow.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
+	};
+
+	await updateDataTableRow(datatableId, rowKey, rowPayload);
+}
+
 export async function saveSurveyDetail(
 	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
 	surveyId: string,

@@ -12,6 +12,7 @@ import { usePageControlBar } from "@/app/usePageControlBar";
 import { fetchSurveyDetail, DEFAULT_SURVEY_DATATABLE_ID } from "@/services/surveyService";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import SurveyEditor from "@/components/survey/SurveyEditor.vue";
+import SurveyDeploymentView from "@/components/survey/SurveyDeploymentView.vue";
 
 const app = useAppStore();
 const route = useRoute();
@@ -50,6 +51,10 @@ const selectedSurveyId = computed((): string | null => {
 	return typeof raw === "string" && raw.length ? raw : null;
 });
 
+const isDeployView = computed(
+	() => route.query.deploy === "1" && !!selectedSurveyId.value
+);
+
 const selectedSurvey = computed(() => {
 	if (!selectedSurveyId.value || !surveysList.value.length) return null;
 	return (
@@ -68,8 +73,22 @@ function handleBackToList(): void {
 	router.push({ name: "surveys" });
 }
 
-function handleSurveySaved(updated: Survey): void {
+function handleDeploy(): void {
+	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, deploy: "1" } });
+}
+
+async function handleDeployBack(): Promise<void> {
+	if (selectedSurveyId.value) {
+		await loadSurveyDetail(selectedSurveyId.value);
+	}
+	router.push({ name: "surveys", query: { id: selectedSurveyId.value! } });
+}
+
+function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): void {
 	selectedSurveyDetail.value = updated;
+	if (freshRow) {
+		rawRowData.value = freshRow;
+	}
 	// Update in survey list if present
 	const found = surveysList.value.find(
 		(s: any) => String(s.id ?? s.key) === updated.id
@@ -212,12 +231,22 @@ onMounted(async () => {
 
 			<!-- Editor Component -->
 			<SurveyEditor
-				v-else-if="selectedSurveyDetail"
+				v-else-if="selectedSurveyDetail && !isDeployView"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId"
 				:existingRow="rawRowData ?? undefined"
 				@saved="handleSurveySaved"
 				@back="handleBackToList"
+				@deploy="handleDeploy"
+			/>
+
+			<!-- Deployment View -->
+			<SurveyDeploymentView
+				v-else-if="isDeployView && selectedSurveyDetail && rawRowData"
+				:survey="selectedSurveyDetail"
+				:surveyId="selectedSurveyId!"
+				:existingRow="rawRowData"
+				@back="handleDeployBack"
 			/>
 
 			<!-- Empty Draft fallback -->

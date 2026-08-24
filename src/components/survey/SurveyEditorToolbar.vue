@@ -19,6 +19,7 @@ const emit = defineEmits<{
 	(e: "back"): void;
 	(e: "discard"): void;
 	(e: "save"): void;
+	(e: "deploy"): void;
 }>();
 </script>
 
@@ -47,6 +48,15 @@ const emit = defineEmits<{
 				label="Verwerfen"
 				:disabled="!isDirty || isSaving || disabled"
 				@click="emit('discard')"
+			/>
+			<Button
+				size="small"
+				severity="info"
+				icon="pi pi-cloud-upload"
+				label="Deploy"
+				:disabled="isDirty || isSaving || disabled"
+				aria-label="Zur Deployment-Ansicht"
+				@click="emit('deploy')"
 			/>
 			<Button
 				size="small"

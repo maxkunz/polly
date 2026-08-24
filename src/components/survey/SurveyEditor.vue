@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { ref, watch } from "vue";
 import ConfirmDialog from "primevue/confirmdialog";
 
 import type { Survey } from "@/domain/survey/surveyTypes";
@@ -28,9 +28,20 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-	(e: "saved", updated: Survey): void;
+	(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
 	(e: "back"): void;
+	(e: "deploy"): void;
 }>();
+
+const existingRowRef = ref<Record<string, any> | null>(props.existingRow ?? null);
+
+watch(
+	() => props.existingRow,
+	newVal => {
+		existingRowRef.value = newVal ?? null;
+	},
+	{ deep: true }
+);
 
 const {
 	survey: draftSurvey,
@@ -75,7 +86,10 @@ const {
 	markClean,
 	datatableId: props.datatableId,
 	surveyId: props.surveyId,
-	existingRow: props.existingRow,
+	existingRow: existingRowRef,
+	onRowRefreshed: freshRow => {
+		existingRowRef.value = freshRow;
+	},
 	emit
 });
 </script>
@@ -93,6 +107,7 @@ const {
 			@back="handleBack"
 			@discard="handleDiscard"
 			@save="handleSave"
+			@deploy="emit('deploy')"
 		/>
 
 		<!-- Validation Errors Summary -->
