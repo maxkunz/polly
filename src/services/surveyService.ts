@@ -1,4 +1,4 @@
-import { OneRowDataTable, updateDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
+import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { generateTechnicalName, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { useAppStore } from "@/stores/appStore";
@@ -164,7 +164,8 @@ export async function saveSurveyDetail(
 	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
 	surveyId: string,
 	survey: Survey,
-	existingRow?: Record<string, any>
+	existingRow?: Record<string, any>,
+	isNew?: boolean
 ): Promise<Survey> {
 	const rowKey = `survey_${surveyId}`;
 
@@ -188,7 +189,11 @@ export async function saveSurveyDetail(
 		lock: existingRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
 	};
 
-	await updateDataTableRow(datatableId, rowKey, rowPayload);
+	if (isNew) {
+		await addDataTableRow(datatableId, rowPayload);
+	} else {
+		await updateDataTableRow(datatableId, rowKey, rowPayload);
+	}
 
 	// Also sync the survey in the survey_list row
 	await syncSurveyInList(datatableId, updatedSurvey);

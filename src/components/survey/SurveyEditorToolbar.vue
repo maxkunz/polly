@@ -9,11 +9,13 @@ withDefaults(
 		isDeleting?: boolean;
 		version?: number;
 		disabled?: boolean;
+		isNew?: boolean;
 	}>(),
 	{
 		isDeleting: false,
 		version: 1,
-		disabled: false
+		disabled: false,
+		isNew: false
 	}
 );
 
@@ -45,6 +47,7 @@ const emit = defineEmits<{
 
 		<div class="flex items-center gap-2">
 			<Button
+				v-if="!isNew"
 				size="small"
 				severity="danger"
 				icon="pi pi-trash"
@@ -63,6 +66,7 @@ const emit = defineEmits<{
 				@click="emit('discard')"
 			/>
 			<Button
+				v-if="!isNew"
 				size="small"
 				severity="info"
 				icon="pi pi-cloud-upload"

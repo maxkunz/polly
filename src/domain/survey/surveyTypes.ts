@@ -179,8 +179,13 @@ export function ensureTechnicalName(
 	id: string,
 	defaultSlug = "umfrage"
 ): string {
-	// If a technical name is already present and set (not default unassigned "frage_..."), preserve it!
-	if (existingName && existingName.trim() && !existingName.toLowerCase().startsWith("frage_")) {
+	// If a technical name is already present and set (not default unassigned "frage_..." or "umfrage_..."), preserve it!
+	if (
+		existingName &&
+		existingName.trim() &&
+		!existingName.toLowerCase().startsWith("frage_") &&
+		!existingName.toLowerCase().startsWith("umfrage_")
+	) {
 		return existingName.trim();
 	}
 
@@ -206,5 +211,21 @@ export function ensureSurveyTechnicalNames(survey: Survey): void {
 		}
 	}
 }
+
+export function createEmptySurvey(): Survey {
+	const id = crypto.randomUUID();
+	return {
+		id,
+		name: `umfrage_${id.replace(/-/g, "").slice(0, 8)}`,
+		title: "",
+		description: "",
+		greeting_message: "",
+		closing_message: "",
+		created_at: new Date().toISOString(),
+		version: 0,
+		questions: []
+	};
+}
+
 
 

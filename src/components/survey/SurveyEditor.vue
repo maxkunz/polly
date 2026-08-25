@@ -20,10 +20,12 @@ const props = withDefaults(
 		surveyId: string;
 		existingRow?: Record<string, any>;
 		disabled?: boolean;
+		isNew?: boolean;
 	}>(),
 	{
 		datatableId: DEFAULT_SURVEY_DATATABLE_ID,
-		disabled: false
+		disabled: false,
+		isNew: false
 	}
 );
 
@@ -90,6 +92,7 @@ const {
 	datatableId: props.datatableId,
 	surveyId: props.surveyId,
 	existingRow: existingRowRef,
+	isNew: props.isNew,
 	onRowRefreshed: freshRow => {
 		existingRowRef.value = freshRow;
 	},
@@ -108,6 +111,7 @@ const {
 			:isDeleting="isDeleting"
 			:version="draftSurvey.version"
 			:disabled="disabled"
+			:isNew="isNew"
 			@back="handleBack"
 			@discard="handleDiscard"
 			@save="handleSave"

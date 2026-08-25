@@ -15,6 +15,7 @@ export interface SurveySaveActionsOptions {
 	datatableId: string;
 	surveyId: string;
 	existingRow?: Ref<Record<string, any> | null>;
+	isNew?: boolean;
 	onRowRefreshed?: (freshRow: Record<string, any>) => void;
 	onDeleted?: () => void;
 	emit: {
@@ -62,7 +63,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				options.datatableId,
 				options.surveyId,
 				options.draftSurvey.value,
-				options.existingRow?.value ?? undefined
+				options.existingRow?.value ?? undefined,
+				options.isNew
 			);
 			options.markClean(updated);
 			saveAttempted.value = false;

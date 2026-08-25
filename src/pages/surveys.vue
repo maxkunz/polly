@@ -11,6 +11,7 @@ import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
 import { fetchSurveyDetail, DEFAULT_SURVEY_DATATABLE_ID } from "@/services/surveyService";
 import type { Survey } from "@/domain/survey/surveyTypes";
+import { createEmptySurvey } from "@/domain/survey/surveyTypes";
 import SurveyEditor from "@/components/survey/SurveyEditor.vue";
 import SurveyDeploymentView from "@/components/survey/SurveyDeploymentView.vue";
 
@@ -29,6 +30,32 @@ const selectedSurveyDetail = ref<Survey | null>(null);
 const rawRowData = ref<Record<string, any> | null>(null);
 const isDetailLoading = ref<boolean>(false);
 const detailError = ref<string | null>(null);
+
+const isNewSurvey = computed(() => route.query.new === "1");
+const newSurveyDraft = ref<Survey | null>(null);
+
+function handleCreateNew(): void {
+	newSurveyDraft.value = createEmptySurvey();
+	router.push({ name: "surveys", query: { new: "1" } });
+}
+
+watch(
+	isNewSurvey,
+	(newVal) => {
+		if (newVal && !newSurveyDraft.value) {
+			newSurveyDraft.value = createEmptySurvey();
+		} else if (!newVal) {
+			newSurveyDraft.value = null;
+		}
+	},
+	{ immediate: true }
+);
+
+async function handleNewSurveySaved(updated: Survey): Promise<void> {
+	await loadSurveysList();
+	newSurveyDraft.value = null;
+	router.push({ name: "surveys", query: { id: updated.id } });
+}
 
 const surveysList = computed(() => app.surveys ?? []);
 
@@ -146,11 +173,11 @@ usePageControlBar(
 	"surveys",
 	() => ({
 		search: {
-			enabled: !selectedSurveyId.value,
+			enabled: !selectedSurveyId.value && !isNewSurvey.value,
 			placeholder: "Umfrage suchen...",
 			query: ""
 		},
-		actions: selectedSurveyId.value
+		actions: (selectedSurveyId.value || isNewSurvey.value)
 			? [
 					{
 						id: "surveys.back",
@@ -162,6 +189,13 @@ usePageControlBar(
 			  ]
 			: [
 					{
+						id: "surveys.new",
+						label: "Neue Umfrage",
+						iconKey: "add",
+						severity: "primary",
+						handler: handleCreateNew
+					},
+					{
 						id: "surveys.reload",
 						label: "Umfragen neu laden",
 						iconKey: "reload",
@@ -170,7 +204,7 @@ usePageControlBar(
 					}
 			  ]
 	}),
-	[() => selectedSurveyId.value]
+	[() => selectedSurveyId.value, () => isNewSurvey.value]
 );
 
 async function loadSurveysList(): Promise<void> {
@@ -197,14 +231,26 @@ onMounted(async () => {
 		<div class="mb-6">
 			<PageHeader
 				v-if="moduleMeta"
-				:title="selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title)"
+				:title="isNewSurvey ? 'Neue Umfrage' : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title))"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
 			/>
 		</div>
 
+		<!-- New Survey Draft Editor -->
+		<div v-if="isNewSurvey && newSurveyDraft">
+			<SurveyEditor
+				:survey="newSurveyDraft"
+				:surveyId="newSurveyDraft.id"
+				:existingRow="undefined"
+				:isNew="true"
+				@saved="handleNewSurveySaved"
+				@back="handleBackToList"
+			/>
+		</div>
+
 		<!-- Selected Survey: Loading / Error / Editor -->
-		<div v-if="selectedSurveyId">
+		<div v-else-if="selectedSurveyId">
 			<!-- Loading State -->
 			<div
 				v-if="isDetailLoading"
@@ -280,6 +326,13 @@ onMounted(async () => {
 						<h2 class="text-base font-semibold text-[var(--p-text-color)]">
 							Verfügbare Umfragen ({{ filteredSurveys.length }})
 						</h2>
+						<Button
+							size="small"
+							severity="primary"
+							label="Neue Umfrage"
+							icon="pi pi-plus"
+							@click="handleCreateNew"
+						/>
 					</div>
 				</template>
 				<template #content>
