@@ -1,9 +1,14 @@
 import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { generateTechnicalName, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
+import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { useAppStore } from "@/stores/appStore";
 
-export const DEFAULT_SURVEY_DATATABLE_ID = "f928c3fd-a861-49ab-a148-738be4a62e35";
+async function resolveDataTableId(datatableId?: string): Promise<string> {
+	if (datatableId && datatableId.trim()) {
+		return datatableId;
+	}
+	return await useAppStore().ensureDataTableId();
+}
 
 export interface LoadSurveyResult {
 	survey: Survey;
@@ -17,11 +22,12 @@ export interface SurveyListItem {
 }
 
 export async function fetchSurveyDetail(
-	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId: string | undefined,
 	surveyId: string
 ): Promise<LoadSurveyResult> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = `survey_${surveyId}`;
-	const row = await OneRowDataTable(datatableId, rowKey);
+	const row = await OneRowDataTable(resolvedTableId, rowKey);
 
 	if (!row) {
 		throw new Error(`Keine Zeile für '${rowKey}' in der Data Table gefunden.`);
@@ -43,17 +49,18 @@ export async function fetchSurveyDetail(
 }
 
 export async function syncSurveyInList(
-	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId: string | undefined,
 	survey: Survey
 ): Promise<SurveyListItem[]> {
 	console.log("syncing survey in list", survey);
 
+	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = "survey_list";
 	let listRow: Record<string, any> | null = null;
 	let currentList: SurveyListItem[] = [];
 
 	try {
-		listRow = await OneRowDataTable(datatableId, rowKey);
+		listRow = await OneRowDataTable(resolvedTableId, rowKey);
 		if (listRow) {
 			const rawDraft = listRow.Draft ?? listRow.draft;
 			if (rawDraft) {
@@ -92,7 +99,7 @@ export async function syncSurveyInList(
 		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
 	};
 
-	await updateDataTableRow(datatableId, rowKey, rowPayload);
+	await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
 
 	try {
 		const app = useAppStore();
@@ -111,11 +118,12 @@ export type DeployTarget = "Stage" | "Prod";
  * Bei Prod wird der aktuelle Prod-Inhalt zuerst in Backup gesichert.
  */
 export async function deploySurvey(
-	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId: string | undefined,
 	surveyId: string,
 	target: DeployTarget,
 	existingRow: Record<string, any>
 ): Promise<void> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = `survey_${surveyId}`;
 
 	const rowPayload: Record<string, any> = {
@@ -135,17 +143,18 @@ export async function deploySurvey(
 		rowPayload.Prod = existingRow.Draft ?? "{}";
 	}
 
-	await updateDataTableRow(datatableId, rowKey, rowPayload);
+	await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
 }
 
 /**
  * Stellt die letzte Backup-Version auf Prod wieder her.
  */
 export async function rollbackSurvey(
-	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId: string | undefined,
 	surveyId: string,
 	existingRow: Record<string, any>
 ): Promise<void> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = `survey_${surveyId}`;
 
 	const rowPayload: Record<string, any> = {
@@ -157,16 +166,17 @@ export async function rollbackSurvey(
 		lock: existingRow.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
 	};
 
-	await updateDataTableRow(datatableId, rowKey, rowPayload);
+	await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
 }
 
 export async function saveSurveyDetail(
-	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId: string | undefined,
 	surveyId: string,
 	survey: Survey,
 	existingRow?: Record<string, any>,
 	isNew?: boolean
 ): Promise<Survey> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = `survey_${surveyId}`;
 
 	const updatedSurvey: Survey = JSON.parse(JSON.stringify(survey));
@@ -190,25 +200,26 @@ export async function saveSurveyDetail(
 	};
 
 	if (isNew) {
-		await addDataTableRow(datatableId, rowPayload);
+		await addDataTableRow(resolvedTableId, rowPayload);
 	} else {
-		await updateDataTableRow(datatableId, rowKey, rowPayload);
+		await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
 	}
 
 	// Also sync the survey in the survey_list row
-	await syncSurveyInList(datatableId, updatedSurvey);
+	await syncSurveyInList(resolvedTableId, updatedSurvey);
 
 	return updatedSurvey;
 }
 
 export async function deleteSurvey(
-	datatableId: string = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId: string | undefined,
 	surveyId: string
 ): Promise<void> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = `survey_${surveyId}`;
 
 	// 1. Delete data table row
-	await deleteDataTableRow(datatableId, rowKey);
+	await deleteDataTableRow(resolvedTableId, rowKey);
 
 	// 2. Remove survey from survey_list row
 	const listRowKey = "survey_list";
@@ -216,7 +227,7 @@ export async function deleteSurvey(
 	let currentList: SurveyListItem[] = [];
 
 	try {
-		listRow = await OneRowDataTable(datatableId, listRowKey);
+		listRow = await OneRowDataTable(resolvedTableId, listRowKey);
 		if (listRow) {
 			const rawDraft = listRow.Draft ?? listRow.draft;
 			if (rawDraft) {
@@ -241,7 +252,7 @@ export async function deleteSurvey(
 		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
 	};
 
-	await updateDataTableRow(datatableId, listRowKey, rowPayload);
+	await updateDataTableRow(resolvedTableId, listRowKey, rowPayload);
 
 	try {
 		const app = useAppStore();
@@ -250,5 +261,3 @@ export async function deleteSurvey(
 		// Ignored if Pinia store is not active
 	}
 }
-
-

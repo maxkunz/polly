@@ -12,7 +12,7 @@ export interface SurveySaveActionsOptions {
 	validationErrors: Ref<Array<{ message: string; fieldId?: string }>>;
 	reset: () => void;
 	markClean: (survey: Survey) => void;
-	datatableId: string;
+	datatableId?: string;
 	surveyId: string;
 	existingRow?: Ref<Record<string, any> | null>;
 	isNew?: boolean;

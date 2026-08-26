@@ -3,19 +3,15 @@ import { ref, watch } from "vue";
 import Button from "primevue/button";
 import Message from "primevue/message";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { DEFAULT_SURVEY_DATATABLE_ID } from "@/services/surveyService";
 import { useSurveyDeployment } from "@/composables/useSurveyDeployment";
 import SurveyDeploymentStatus from "./SurveyDeploymentStatus.vue";
 
-const props = withDefaults(
-	defineProps<{
-		survey: Survey;
-		surveyId: string;
-		datatableId?: string;
-		existingRow: Record<string, any>;
-	}>(),
-	{ datatableId: DEFAULT_SURVEY_DATATABLE_ID }
-);
+const props = defineProps<{
+	survey: Survey;
+	surveyId: string;
+	datatableId?: string;
+	existingRow: Record<string, any>;
+}>();
 
 const emit = defineEmits<{
 	(e: "back"): void;

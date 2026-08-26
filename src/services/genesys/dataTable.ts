@@ -64,9 +64,16 @@ export async function deleteDataTable(datatableId: string, force: boolean = fals
 
 // LIST ALL DATATABLES
 
-export async function listDataTables() {
+export async function listDataTables(nameFilter: string = "") {
     const { architectApi } = useAppStore().genesys;
-    return architectApi.getFlowsDatatables();
+    let opts = {
+        'pageNumber': 1, // Number | Page number
+        'pageSize': 500, // Number | Page size
+        'sortBy': "name", // String | Sort by
+        'sortOrder': "descending", // String | Sort order
+        'name': nameFilter,
+    };
+    return architectApi.getFlowsDatatables(opts);
 }
 // GET COLUMNS / SCHEMA OF DATATABLE
 

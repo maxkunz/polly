@@ -4,8 +4,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import {
 	deploySurvey,
 	rollbackSurvey,
-	fetchSurveyDetail,
-	DEFAULT_SURVEY_DATATABLE_ID
+	fetchSurveyDetail
 } from "@/services/surveyService";
 
 export interface UseSurveyDeploymentOptions {
@@ -37,7 +36,7 @@ function parseField(row: Record<string, any> | null, field: string): Survey | nu
 }
 
 export function useSurveyDeployment({
-	datatableId = DEFAULT_SURVEY_DATATABLE_ID,
+	datatableId,
 	surveyId,
 	existingRow
 }: UseSurveyDeploymentOptions): UseSurveyDeploymentReturn {

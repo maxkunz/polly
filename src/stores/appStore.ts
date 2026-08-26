@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
-import { OneRowDataTable } from "@/services/genesys/dataTable";
+import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
+import { POLLY_DATA_TABLE_NAME } from "@/constants/surveyConstants";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
@@ -10,18 +11,18 @@ export type CurrentUser = { id: string; name: string; email?: string };
 
 const SESSION_ID_KEY = "app.sessionId";
 function loadSessionId(): string {
-  try {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return crypto.randomUUID();
-    }
-    const existing = window.localStorage.getItem(SESSION_ID_KEY);
-    if (existing) return existing;
-    const created = crypto.randomUUID();
-    window.localStorage.setItem(SESSION_ID_KEY, created);
-    return created;
-  } catch {
-    return crypto.randomUUID();
-  }
+	try {
+		if (typeof window === "undefined" || !window.localStorage) {
+			return crypto.randomUUID();
+		}
+		const existing = window.localStorage.getItem(SESSION_ID_KEY);
+		if (existing) return existing;
+		const created = crypto.randomUUID();
+		window.localStorage.setItem(SESSION_ID_KEY, created);
+		return created;
+	} catch {
+		return crypto.randomUUID();
+	}
 }
 
 export const useAppStore = defineStore("app", {
@@ -51,6 +52,7 @@ export const useAppStore = defineStore("app", {
 
 		clientId: null as string | null,
 		datatableId: null as string | null,
+		dataTableId: null as string | null,
 		devView: false,
 
 	}),
@@ -85,6 +87,22 @@ export const useAppStore = defineStore("app", {
 			}
 		},
 
+		async ensureDataTableId(): Promise<string> {
+			if (this.dataTableId) {
+				return this.dataTableId;
+			}
+			this.initGenesysClients();
+			const res = await listDataTables(POLLY_DATA_TABLE_NAME);
+			const entities = res?.entities || res || [];
+			console.log("datatables found: ", entities);
+			const targetTable = entities.find((t: any) => t.name === POLLY_DATA_TABLE_NAME);
+			if (!targetTable || !targetTable.id) {
+				throw new Error(`Data table '${POLLY_DATA_TABLE_NAME}' not found.`);
+			}
+			this.dataTableId = targetTable.id;
+			return targetTable.id;
+		},
+
 		async save(): Promise<string> {
 			await genesysHelper.syncConfigurationToGenesys(this.datatableId);
 			return "";
@@ -98,9 +116,9 @@ export const useAppStore = defineStore("app", {
 		},
 
 		async loadSurveys(): Promise<void> {
-			const datatableId = "f928c3fd-a861-49ab-a148-738be4a62e35";
 			const rowId = "survey_list";
 			try {
+				const datatableId = await this.ensureDataTableId();
 				const data = await OneRowDataTable(datatableId, rowId);
 				if (data) {
 					const rawDraft = data.Draft ?? data.draft;

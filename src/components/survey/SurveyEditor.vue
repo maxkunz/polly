@@ -5,7 +5,6 @@ import ConfirmDialog from "primevue/confirmdialog";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { useSurveyEditor } from "@/composables/useSurveyEditor";
 import { useSurveySaveActions } from "@/composables/useSurveySaveActions";
-import { DEFAULT_SURVEY_DATATABLE_ID } from "@/services/surveyService";
 
 import SurveyEditorToolbar from "./SurveyEditorToolbar.vue";
 import SurveyValidationSummary from "./SurveyValidationSummary.vue";
@@ -23,7 +22,7 @@ const props = withDefaults(
 		isNew?: boolean;
 	}>(),
 	{
-		datatableId: DEFAULT_SURVEY_DATATABLE_ID,
+		datatableId: undefined,
 		disabled: false,
 		isNew: false
 	}

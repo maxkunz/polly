@@ -9,7 +9,7 @@ import { useAppStore } from "@/stores/appStore";
 import { useControlBarStore } from "@/stores/controlBarStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
-import { fetchSurveyDetail, DEFAULT_SURVEY_DATATABLE_ID } from "@/services/surveyService";
+import { fetchSurveyDetail } from "@/services/surveyService";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { createEmptySurvey } from "@/domain/survey/surveyTypes";
 import SurveyEditor from "@/components/survey/SurveyEditor.vue";
@@ -144,7 +144,7 @@ async function loadSurveyDetail(surveyId: string): Promise<void> {
 	rawRowData.value = null;
 
 	try {
-		const res = await fetchSurveyDetail(DEFAULT_SURVEY_DATATABLE_ID, surveyId);
+		const res = await fetchSurveyDetail(undefined, surveyId);
 		selectedSurveyDetail.value = res.survey;
 		rawRowData.value = res.rawRow;
 	} catch (e: any) {
