@@ -1,6 +1,7 @@
 import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
+import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/queueMappingTypes";
 import { useAppStore } from "@/stores/appStore";
 
 async function resolveDataTableId(datatableId?: string): Promise<string> {
@@ -261,3 +262,121 @@ export async function deleteSurvey(
 		// Ignored if Pinia store is not active
 	}
 }
+
+export interface FetchQueueMappingResult {
+	mapping: QueueMappingData;
+	rawRow: Record<string, any> | null;
+}
+
+export async function fetchQueueMapping(
+	datatableId?: string
+): Promise<FetchQueueMappingResult> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
+	const rowKey = "queue_mapping";
+	let rawRow: Record<string, any> | null = null;
+	let mapping: QueueMappingData = [];
+
+	try {
+		rawRow = await OneRowDataTable(resolvedTableId, rowKey);
+		if (rawRow) {
+			const rawProd = rawRow.Prod ?? rawRow.prod;
+			if (rawProd) {
+				const parsed = typeof rawProd === "string" ? JSON.parse(rawProd) : rawProd;
+				if (Array.isArray(parsed)) {
+					mapping = parsed;
+				}
+			}
+		}
+	} catch (e) {
+		console.warn("Could not load queue_mapping row from data table:", e);
+	}
+
+	return {
+		mapping,
+		rawRow
+	};
+}
+
+export async function saveQueueMapping(
+	datatableId: string | undefined,
+	surveyId: string,
+	queues: string[],
+	deliveryRate: number,
+	existingRawRow?: Record<string, any> | null
+): Promise<QueueMappingData> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
+	const rowKey = "queue_mapping";
+
+	let currentRow = existingRawRow;
+	if (!currentRow) {
+		try {
+			currentRow = await OneRowDataTable(resolvedTableId, rowKey);
+		} catch {
+			currentRow = null;
+		}
+	}
+
+	let currentMapping: QueueMappingData = [];
+	const rawProd = currentRow?.Prod ?? currentRow?.prod;
+	if (rawProd) {
+		try {
+			const parsed = typeof rawProd === "string" ? JSON.parse(rawProd) : rawProd;
+			if (Array.isArray(parsed)) {
+				currentMapping = parsed;
+			}
+		} catch {
+			currentMapping = [];
+		}
+	}
+
+	// Clean inputs: unique, trimmed non-empty queues
+	const cleanedQueues = Array.from(
+		new Set(
+			queues
+				.map(q => q.trim())
+				.filter(q => q.length > 0)
+		)
+	);
+
+	// Ensure each queue only exists once:
+	// 1. Remove all previous entries belonging to this surveyId
+	// 2. Also remove any entry whose queueName matches one of the new cleanedQueues (case-insensitive)
+	const remainingEntries = currentMapping.filter(
+		entry =>
+			entry.surveyId !== surveyId &&
+			!cleanedQueues.some(q => q.toLowerCase() === (entry.queueName ?? "").toLowerCase())
+	);
+
+	// Create new entries for this survey
+	const safeDeliveryRate = Math.max(1, Math.min(100, Math.round(deliveryRate)));
+	const newEntries: QueueMappingEntry[] = cleanedQueues.map(queueName => ({
+		queueName,
+		surveyId,
+		deliveryRate: safeDeliveryRate
+	}));
+
+	const updatedMapping: QueueMappingData = [...remainingEntries, ...newEntries];
+	const serializedProd = JSON.stringify(updatedMapping);
+
+	const rowPayload: Record<string, any> = {
+		key: rowKey,
+		Draft: currentRow?.Draft ?? "[]",
+		Stage: currentRow?.Stage ?? "[]",
+		Prod: serializedProd,
+		Backup: currentRow?.Backup ?? "[]",
+		lock: currentRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
+	};
+
+	if (!currentRow) {
+		try {
+			await addDataTableRow(resolvedTableId, rowPayload);
+		} catch {
+			await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
+		}
+	} else {
+		await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
+	}
+
+	return updatedMapping;
+}
+

@@ -5,6 +5,7 @@ import Message from "primevue/message";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { useSurveyDeployment } from "@/composables/useSurveyDeployment";
 import SurveyDeploymentStatus from "./SurveyDeploymentStatus.vue";
+import SurveyQueueMappingForm from "./SurveyQueueMappingForm.vue";
 
 const props = defineProps<{
 	survey: Survey;
@@ -103,6 +104,14 @@ const {
 				:disabled="isDeploying || !backupSnapshot"
 				aria-label="Backup auf Prod zurückspielen"
 				@click="rollback"
+			/>
+		</div>
+
+		<!-- Queue Mapping (nur wenn Version in Prod deployt ist) -->
+		<div v-if="prodSnapshot !== null" class="pt-4 border-t border-[var(--p-content-border-color)]">
+			<SurveyQueueMappingForm
+				:surveyId="surveyId"
+				:datatableId="datatableId"
 			/>
 		</div>
 	</div>
