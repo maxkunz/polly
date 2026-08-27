@@ -133,7 +133,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 					class="w-full text-sm"
 					rows="2"
 					autoResize
-					placeholder="Bitte beantworten Sie diese Frage."
+					placeholder="Zweite Aufforderung zur Beantwortung der Frage (optional)."
 					:disabled="disabled"
 				/>
 			</div>

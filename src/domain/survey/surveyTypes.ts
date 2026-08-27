@@ -92,7 +92,7 @@ export function createEmptyQuestion(type: QuestionType = "rating"): SurveyQuesti
 		type,
 		title: "",
 		description: "",
-		reprompt_message: "Bitte beantworten Sie diese Frage.",
+		reprompt_message: "",
 		mandatory: false
 	};
 

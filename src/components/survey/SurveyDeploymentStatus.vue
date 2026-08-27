@@ -48,7 +48,7 @@ function formatDate(iso?: string): string {
 		</template>
 
 		<div v-else class="text-xs text-[var(--p-text-muted-color)] italic">
-			leer
+			&ndash;
 		</div>
 	</div>
 </template>
