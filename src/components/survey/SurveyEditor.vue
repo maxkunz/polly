@@ -3,6 +3,7 @@ import { ref, watch } from "vue";
 import ConfirmDialog from "primevue/confirmdialog";
 
 import type { Survey } from "@/domain/survey/surveyTypes";
+import { cloneSurvey } from "@/domain/survey/surveyTypes";
 import { useSurveyEditor } from "@/composables/useSurveyEditor";
 import { useSurveySaveActions } from "@/composables/useSurveySaveActions";
 
@@ -33,6 +34,7 @@ const emit = defineEmits<{
 	(e: "back"): void;
 	(e: "deploy"): void;
 	(e: "deleted"): void;
+	(e: "clone", clonedSurvey: Survey): void;
 }>();
 
 const existingRowRef = ref<Record<string, any> | null>(props.existingRow ?? null);
@@ -97,6 +99,12 @@ const {
 	},
 	emit
 });
+
+function handleClone() {
+	if (!draftSurvey.value) return;
+	const cloned = cloneSurvey(draftSurvey.value);
+	emit("clone", cloned);
+}
 </script>
 
 <template>
@@ -116,6 +124,7 @@ const {
 			@save="handleSave"
 			@deploy="emit('deploy')"
 			@delete="handleDelete"
+			@clone="handleClone"
 		/>
 
 		<!-- Validation Errors Summary -->

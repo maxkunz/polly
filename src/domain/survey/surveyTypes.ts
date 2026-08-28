@@ -227,5 +227,52 @@ export function createEmptySurvey(): Survey {
 	};
 }
 
+export function cloneSurveyQuestion(source: SurveyQuestion): SurveyQuestion {
+	const newId = crypto.randomUUID();
+	let clonedOptions: QuestionOptions | undefined;
 
+	if (source.options) {
+		if (isChoiceOptions(source.options)) {
+			clonedOptions = {
+				labels: source.options.labels.map(l => ({
+					id: crypto.randomUUID(),
+					label: l.label
+				}))
+			};
+		} else {
+			clonedOptions = JSON.parse(JSON.stringify(source.options));
+		}
+	}
 
+	const clonedFollowUps = source.follow_ups?.map(fu => ({
+		condition: { ...fu.condition },
+		question: cloneSurveyQuestion(fu.question)
+	}));
+
+	return {
+		id: newId,
+		name: `frage_${newId.replace(/-/g, "").slice(0, 8)}`,
+		type: source.type,
+		title: source.title,
+		description: source.description,
+		reprompt_message: source.reprompt_message,
+		mandatory: source.mandatory,
+		options: clonedOptions,
+		follow_ups: clonedFollowUps
+	};
+}
+
+export function cloneSurvey(source: Survey): Survey {
+	const newId = crypto.randomUUID();
+	return {
+		id: newId,
+		name: `umfrage_${newId.replace(/-/g, "").slice(0, 8)}`,
+		title: source.title,
+		description: source.description,
+		greeting_message: source.greeting_message,
+		closing_message: source.closing_message,
+		created_at: new Date().toISOString(),
+		version: 0,
+		questions: (source.questions || []).map(q => cloneSurveyQuestion(q))
+	};
+}

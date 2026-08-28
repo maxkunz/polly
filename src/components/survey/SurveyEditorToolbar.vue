@@ -25,6 +25,7 @@ const emit = defineEmits<{
 	(e: "save"): void;
 	(e: "deploy"): void;
 	(e: "delete"): void;
+	(e: "clone"): void;
 }>();
 </script>
 
@@ -56,6 +57,16 @@ const emit = defineEmits<{
 				:disabled="isSaving || isDeleting || disabled"
 				aria-label="Umfrage löschen"
 				@click="emit('delete')"
+			/>
+			<Button
+				v-if="!isNew"
+				size="small"
+				severity="secondary"
+				icon="pi pi-clone"
+				label="Klonen"
+				:disabled="isSaving || isDeleting || disabled"
+				aria-label="Umfrage klonen"
+				@click="emit('clone')"
 			/>
 			<Button
 				size="small"

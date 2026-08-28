@@ -34,9 +34,17 @@ const detailError = ref<string | null>(null);
 const isNewSurvey = computed(() => route.query.new === "1");
 const newSurveyDraft = ref<Survey | null>(null);
 
+const isCloneSurvey = computed(() => route.query.clone === "1");
+const cloneSurveyDraft = ref<Survey | null>(null);
+
 function handleCreateNew(): void {
 	newSurveyDraft.value = createEmptySurvey();
 	router.push({ name: "surveys", query: { new: "1" } });
+}
+
+function handleClone(clonedSurvey: Survey): void {
+	cloneSurveyDraft.value = clonedSurvey;
+	router.push({ name: "surveys", query: { clone: "1" } });
 }
 
 watch(
@@ -51,9 +59,26 @@ watch(
 	{ immediate: true }
 );
 
+watch(
+	isCloneSurvey,
+	(newVal) => {
+		if (newVal && !cloneSurveyDraft.value) {
+			handleBackToList();
+		} else if (!newVal) {
+			cloneSurveyDraft.value = null;
+		}
+	}
+);
+
 async function handleNewSurveySaved(updated: Survey): Promise<void> {
 	await loadSurveysList();
 	newSurveyDraft.value = null;
+	router.push({ name: "surveys", query: { id: updated.id } });
+}
+
+async function handleCloneSurveySaved(updated: Survey): Promise<void> {
+	await loadSurveysList();
+	cloneSurveyDraft.value = null;
 	router.push({ name: "surveys", query: { id: updated.id } });
 }
 
@@ -173,11 +198,11 @@ usePageControlBar(
 	"surveys",
 	() => ({
 		search: {
-			enabled: !selectedSurveyId.value && !isNewSurvey.value,
+			enabled: !selectedSurveyId.value && !isNewSurvey.value && !isCloneSurvey.value,
 			placeholder: "Umfrage suchen...",
 			query: ""
 		},
-		actions: (selectedSurveyId.value || isNewSurvey.value)
+		actions: (selectedSurveyId.value || isNewSurvey.value || isCloneSurvey.value)
 			? [
 					{
 						id: "surveys.back",
@@ -204,7 +229,7 @@ usePageControlBar(
 					}
 			  ]
 	}),
-	[() => selectedSurveyId.value, () => isNewSurvey.value]
+	[() => selectedSurveyId.value, () => isNewSurvey.value, () => isCloneSurvey.value]
 );
 
 async function loadSurveysList(): Promise<void> {
@@ -231,7 +256,7 @@ onMounted(async () => {
 		<div class="mb-6">
 			<PageHeader
 				v-if="moduleMeta"
-				:title="isNewSurvey ? 'Neue Umfrage' : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title))"
+				:title="isNewSurvey ? 'Neue Umfrage' : (isCloneSurvey ? 'Umfrage klonen' : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title)))"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
 			/>
@@ -245,6 +270,18 @@ onMounted(async () => {
 				:existingRow="undefined"
 				:isNew="true"
 				@saved="handleNewSurveySaved"
+				@back="handleBackToList"
+			/>
+		</div>
+
+		<!-- Cloned Survey Draft Editor -->
+		<div v-else-if="isCloneSurvey && cloneSurveyDraft">
+			<SurveyEditor
+				:survey="cloneSurveyDraft"
+				:surveyId="cloneSurveyDraft.id"
+				:existingRow="undefined"
+				:isNew="true"
+				@saved="handleCloneSurveySaved"
 				@back="handleBackToList"
 			/>
 		</div>
@@ -290,6 +327,7 @@ onMounted(async () => {
 				@back="handleBackToList"
 				@deploy="handleDeploy"
 				@deleted="handleSurveyDeleted"
+				@clone="handleClone"
 			/>
 
 			<!-- Deployment View -->
