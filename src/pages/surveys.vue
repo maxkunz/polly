@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
 import Card from "primevue/card";
 import Button from "primevue/button";
 import ProgressSpinner from "primevue/progressspinner";
+import { useConfirm } from "primevue/useconfirm";
 import PageHeader from "@/components/layout/PageHeader.vue";
 import { useAppStore } from "@/stores/appStore";
 import { useControlBarStore } from "@/stores/controlBarStore";
@@ -18,6 +19,7 @@ import SurveyDeploymentView from "@/components/survey/SurveyDeploymentView.vue";
 const app = useAppStore();
 const route = useRoute();
 const router = useRouter();
+const confirm = useConfirm();
 const controlBar = useControlBarStore();
 
 const { selectModules } = moduleRegistry();
@@ -30,6 +32,67 @@ const selectedSurveyDetail = ref<Survey | null>(null);
 const rawRowData = ref<Record<string, any> | null>(null);
 const isDetailLoading = ref<boolean>(false);
 const detailError = ref<string | null>(null);
+const isCurrentSurveyDirty = ref<boolean>(false);
+
+function confirmLeave(): Promise<boolean> {
+	return new Promise<boolean>((resolve) => {
+		let resolved = false;
+		const finish = (result: boolean) => {
+			if (!resolved) {
+				resolved = true;
+				resolve(result);
+			}
+		};
+
+		confirm.require({
+			header: "Ungespeicherte Änderungen",
+			message: "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?",
+			icon: "pi pi-exclamation-triangle",
+			acceptLabel: "Verlassen",
+			rejectLabel: "Bleiben",
+			acceptClass: "p-button-danger",
+			rejectClass: "p-button-secondary",
+			accept: () => finish(true),
+			reject: () => finish(false),
+			onHide: () => finish(false)
+		});
+	});
+}
+
+onBeforeRouteLeave(async () => {
+	if (!isCurrentSurveyDirty.value) return true;
+	const confirmed = await confirmLeave();
+	if (confirmed) {
+		isCurrentSurveyDirty.value = false;
+		return true;
+	}
+	return false;
+});
+
+onBeforeRouteUpdate(async (to, from) => {
+	if (!isCurrentSurveyDirty.value) return true;
+	if (
+		to.query.id === from.query.id &&
+		to.query.new === from.query.new &&
+		to.query.clone === from.query.clone &&
+		to.query.deploy === from.query.deploy
+	) {
+		return true;
+	}
+	const confirmed = await confirmLeave();
+	if (confirmed) {
+		isCurrentSurveyDirty.value = false;
+		return true;
+	}
+	return false;
+});
+
+function handleBeforeUnload(e: BeforeUnloadEvent): void {
+	if (isCurrentSurveyDirty.value) {
+		e.preventDefault();
+		e.returnValue = "";
+	}
+}
 
 const isNewSurvey = computed(() => route.query.new === "1");
 const newSurveyDraft = ref<Survey | null>(null);
@@ -71,12 +134,14 @@ watch(
 );
 
 async function handleNewSurveySaved(updated: Survey): Promise<void> {
+	isCurrentSurveyDirty.value = false;
 	await loadSurveysList();
 	newSurveyDraft.value = null;
 	router.push({ name: "surveys", query: { id: updated.id } });
 }
 
 async function handleCloneSurveySaved(updated: Survey): Promise<void> {
+	isCurrentSurveyDirty.value = false;
 	await loadSurveysList();
 	cloneSurveyDraft.value = null;
 	router.push({ name: "surveys", query: { id: updated.id } });
@@ -137,6 +202,7 @@ async function handleDeployBack(): Promise<void> {
 }
 
 function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): void {
+	isCurrentSurveyDirty.value = false;
 	selectedSurveyDetail.value = updated;
 	if (freshRow) {
 		rawRowData.value = freshRow;
@@ -152,6 +218,7 @@ function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): voi
 }
 
 async function handleSurveyDeleted(): Promise<void> {
+	isCurrentSurveyDirty.value = false;
 	await loadSurveysList();
 	handleBackToList();
 }
@@ -247,7 +314,12 @@ async function loadSurveysList(): Promise<void> {
 }
 
 onMounted(async () => {
+	window.addEventListener("beforeunload", handleBeforeUnload);
 	await loadSurveysList();
+});
+
+onBeforeUnmount(() => {
+	window.removeEventListener("beforeunload", handleBeforeUnload);
 });
 </script>
 
@@ -269,6 +341,7 @@ onMounted(async () => {
 				:surveyId="newSurveyDraft.id"
 				:existingRow="undefined"
 				:isNew="true"
+				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleNewSurveySaved"
 				@back="handleBackToList"
 			/>
@@ -281,6 +354,7 @@ onMounted(async () => {
 				:surveyId="cloneSurveyDraft.id"
 				:existingRow="undefined"
 				:isNew="true"
+				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleCloneSurveySaved"
 				@back="handleBackToList"
 			/>
@@ -323,6 +397,7 @@ onMounted(async () => {
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId"
 				:existingRow="rawRowData ?? undefined"
+				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleSurveySaved"
 				@back="handleBackToList"
 				@deploy="handleDeploy"

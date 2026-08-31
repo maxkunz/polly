@@ -175,21 +175,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	}
 
 	function handleBack() {
-		if (options.isDirty.value) {
-			confirm.require({
-				header: "Ungespeicherte Änderungen",
-				message: "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?",
-				icon: "pi pi-exclamation-triangle",
-				acceptLabel: "Verlassen",
-				rejectLabel: "Bleiben",
-				acceptClass: "p-button-danger",
-				accept: () => {
-					options.emit("back");
-				}
-			});
-		} else {
-			options.emit("back");
-		}
+		options.emit("back");
 	}
 
 	return {

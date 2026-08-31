@@ -8,7 +8,6 @@ import Textarea from "primevue/textarea";
 import InputNumber from "primevue/inputnumber";
 import ToggleSwitch from "primevue/toggleswitch";
 import Button from "primevue/button";
-import ConfirmDialog from "primevue/confirmdialog";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue";
 
@@ -217,8 +216,6 @@ function getScaleValues(questionId: string): number[] {
 
 <template>
 	<section class="p-4">
-		<ConfirmDialog />
-
 		<div class="mb-8">
 			<PageHeader
 				v-if="moduleMeta"

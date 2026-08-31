@@ -107,6 +107,7 @@ watch(
 		</div>
 	</div>
 
+	<ConfirmDialog />
 	<ConfirmDialog group="global" />
 	<Toast :baseZIndex="9999" position="top-right" :style="{ top: '5rem' }" />
 </template>

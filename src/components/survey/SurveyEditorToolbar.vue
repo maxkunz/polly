@@ -48,6 +48,14 @@ const emit = defineEmits<{
 
 		<div class="flex items-center gap-2">
 			<Button
+				size="small"
+				severity="secondary"
+				icon="pi pi-refresh"
+				label="Verwerfen"
+				:disabled="!isDirty || isSaving || isDeleting || disabled"
+				@click="emit('discard')"
+			/>
+			<Button
 				v-if="!isNew"
 				size="small"
 				severity="danger"
@@ -61,20 +69,12 @@ const emit = defineEmits<{
 			<Button
 				v-if="!isNew"
 				size="small"
-				severity="secondary"
+				severity="info"
 				icon="pi pi-clone"
 				label="Klonen"
-				:disabled="isSaving || isDeleting || disabled"
+				:disabled="isDirty || isSaving || isDeleting || disabled"
 				aria-label="Umfrage klonen"
 				@click="emit('clone')"
-			/>
-			<Button
-				size="small"
-				severity="secondary"
-				icon="pi pi-refresh"
-				label="Verwerfen"
-				:disabled="!isDirty || isSaving || isDeleting || disabled"
-				@click="emit('discard')"
 			/>
 			<Button
 				v-if="!isNew"

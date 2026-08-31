@@ -7,7 +7,6 @@ import Button from "primevue/button";
 import Message from "primevue/message";
 import Tag from "primevue/tag";
 import ProgressSpinner from "primevue/progressspinner";
-import ConfirmDialog from "primevue/confirmdialog";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { useQueueMapping } from "@/composables/useQueueMapping";
@@ -80,8 +79,6 @@ function handleSave(): void {
 
 <template>
 	<section class="space-y-4" aria-labelledby="queue-mapping-heading">
-		<ConfirmDialog />
-
 		<Card class="border border-[var(--p-content-border-color)] shadow-sm rounded-2xl">
 			<template #title>
 				<div class="flex flex-wrap items-center justify-between gap-2">

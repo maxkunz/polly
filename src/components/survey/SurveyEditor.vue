@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import ConfirmDialog from "primevue/confirmdialog";
+import { ref, watch, onBeforeUnmount } from "vue";
 
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { cloneSurvey } from "@/domain/survey/surveyTypes";
@@ -36,6 +35,7 @@ const emit = defineEmits<{
 	(e: "deploy"): void;
 	(e: "deleted"): void;
 	(e: "clone", clonedSurvey: Survey): void;
+	(e: "update:isDirty", isDirty: boolean): void;
 }>();
 
 const existingRowRef = ref<Record<string, any> | null>(props.existingRow ?? null);
@@ -125,6 +125,18 @@ const {
 	emit
 });
 
+watch(
+	isDirty,
+	val => {
+		emit("update:isDirty", val);
+	},
+	{ immediate: true }
+);
+
+onBeforeUnmount(() => {
+	emit("update:isDirty", false);
+});
+
 function handleClone() {
 	if (!draftSurvey.value) return;
 	const cloned = cloneSurvey(draftSurvey.value);
@@ -134,8 +146,6 @@ function handleClone() {
 
 <template>
 	<div v-if="draftSurvey" class="space-y-6">
-		<ConfirmDialog />
-
 		<!-- Top Action Header & Breadcrumb -->
 		<SurveyEditorToolbar
 			:isDirty="isDirty"
