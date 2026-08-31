@@ -3,6 +3,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/queueMappingTypes";
 import { useAppStore } from "@/stores/appStore";
+import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
 
 async function resolveDataTableId(datatableId?: string): Promise<string> {
 	if (datatableId && datatableId.trim()) {
@@ -197,7 +198,7 @@ export async function saveSurveyDetail(
 		Prod: existingRow?.Prod ?? "{}",
 		Stage: existingRow?.Stage ?? "{}",
 		Backup: existingRow?.Backup ?? "{}",
-		lock: existingRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
+		lock: JSON.stringify({ locked_by: "", locked_since: "" })
 	};
 
 	if (isNew) {
@@ -378,5 +379,149 @@ export async function saveQueueMapping(
 	}
 
 	return updatedMapping;
+}
+
+export interface SurveyLockData {
+	locked_by: string;
+	locked_since: string;
+}
+
+export function parseSurveyLock(lockRaw: unknown): SurveyLockData {
+	const defaultLock: SurveyLockData = { locked_by: "", locked_since: "" };
+	if (!lockRaw) return defaultLock;
+	if (typeof lockRaw === "object") {
+		return {
+			locked_by: String((lockRaw as any).locked_by ?? "").trim(),
+			locked_since: String((lockRaw as any).locked_since ?? "").trim()
+		};
+	}
+	if (typeof lockRaw === "string") {
+		try {
+			const parsed = JSON.parse(lockRaw);
+			return {
+				locked_by: String(parsed?.locked_by ?? "").trim(),
+				locked_since: String(parsed?.locked_since ?? "").trim()
+			};
+		} catch {
+			return defaultLock;
+		}
+	}
+	return defaultLock;
+}
+
+export function isSurveyLockStale(
+	lock: SurveyLockData,
+	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES
+): boolean {
+	if (!lock.locked_by || !lock.locked_since) {
+		return true;
+	}
+	const lockedAt = new Date(lock.locked_since).getTime();
+	if (Number.isNaN(lockedAt)) {
+		return true;
+	}
+	const diffMinutes = (Date.now() - lockedAt) / (1000 * 60);
+	return diffMinutes >= ttlMinutes;
+}
+
+export function checkSurveyLockConflict(
+	lock: SurveyLockData,
+	currentUsername: string,
+	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES
+): { hasConflict: boolean; lock: SurveyLockData } {
+	if (isSurveyLockStale(lock, ttlMinutes)) {
+		return { hasConflict: false, lock };
+	}
+	const cleanCurrent = currentUsername.trim().toLowerCase();
+	const cleanLockBy = lock.locked_by.trim().toLowerCase();
+	const isOwnedByMe = Boolean(cleanCurrent && cleanLockBy === cleanCurrent);
+	return {
+		hasConflict: !isOwnedByMe,
+		lock
+	};
+}
+
+export async function acquireSurveyLock(
+	datatableId: string | undefined,
+	surveyId: string,
+	username: string,
+	existingRow?: Record<string, any>
+): Promise<Record<string, any>> {
+	const resolvedTableId = await resolveDataTableId(datatableId);
+	const rowKey = `survey_${surveyId}`;
+
+	let currentRow = existingRow;
+	if (!currentRow) {
+		currentRow = await OneRowDataTable(resolvedTableId, rowKey);
+	}
+
+	const newLock: SurveyLockData = {
+		locked_by: username,
+		locked_since: new Date().toISOString()
+	};
+
+	const rowPayload: Record<string, any> = {
+		key: rowKey,
+		Draft: currentRow?.Draft ?? "{}",
+		Prod: currentRow?.Prod ?? "{}",
+		Stage: currentRow?.Stage ?? "{}",
+		Backup: currentRow?.Backup ?? "{}",
+		lock: JSON.stringify(newLock)
+	};
+
+	await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
+
+	return {
+		...(currentRow || {}),
+		...rowPayload
+	};
+}
+
+export async function releaseSurveyLock(
+	datatableId: string | undefined,
+	surveyId: string,
+	username?: string,
+	existingRow?: Record<string, any>
+): Promise<Record<string, any> | null> {
+	try {
+		const resolvedTableId = await resolveDataTableId(datatableId);
+		const rowKey = `survey_${surveyId}`;
+
+		let currentRow = existingRow;
+		if (!currentRow) {
+			currentRow = await OneRowDataTable(resolvedTableId, rowKey);
+		}
+
+		if (!currentRow) return null;
+
+		const currentLock = parseSurveyLock(currentRow.lock);
+		// If lock is held by someone else and not stale, do not overwrite unless forced or username matched
+		if (
+			username &&
+			currentLock.locked_by &&
+			currentLock.locked_by.trim().toLowerCase() !== username.trim().toLowerCase() &&
+			!isSurveyLockStale(currentLock)
+		) {
+			return currentRow;
+		}
+
+		const rowPayload: Record<string, any> = {
+			key: rowKey,
+			Draft: currentRow?.Draft ?? "{}",
+			Prod: currentRow?.Prod ?? "{}",
+			Stage: currentRow?.Stage ?? "{}",
+			Backup: currentRow?.Backup ?? "{}",
+			lock: JSON.stringify({ locked_by: "", locked_since: "" })
+		};
+
+		await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
+		return {
+			...currentRow,
+			...rowPayload
+		};
+	} catch (err) {
+		console.warn("Could not release survey lock:", err);
+		return null;
+	}
 }
 

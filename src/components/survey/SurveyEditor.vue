@@ -6,6 +6,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { cloneSurvey } from "@/domain/survey/surveyTypes";
 import { useSurveyEditor } from "@/composables/useSurveyEditor";
 import { useSurveySaveActions } from "@/composables/useSurveySaveActions";
+import { useSurveyLock } from "@/composables/useSurveyLock";
 
 import SurveyEditorToolbar from "./SurveyEditorToolbar.vue";
 import SurveyValidationSummary from "./SurveyValidationSummary.vue";
@@ -65,6 +66,24 @@ const {
 	markClean
 } = useSurveyEditor(props.survey);
 
+const {
+	isLockedByMe,
+	markLockReleased,
+	releaseLock
+} = useSurveyLock({
+	datatableId: props.datatableId,
+	surveyId: props.surveyId,
+	existingRow: existingRowRef,
+	isDirty,
+	isNew: props.isNew,
+	onRowRefreshed: freshRow => {
+		existingRowRef.value = freshRow;
+	},
+	onBack: () => {
+		emit("back");
+	}
+});
+
 watch(
 	() => props.survey,
 	newVal => {
@@ -96,6 +115,12 @@ const {
 	isNew: props.isNew,
 	onRowRefreshed: freshRow => {
 		existingRowRef.value = freshRow;
+	},
+	onSaved: () => {
+		markLockReleased();
+	},
+	onDiscarded: () => {
+		releaseLock();
 	},
 	emit
 });

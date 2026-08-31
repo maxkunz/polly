@@ -17,6 +17,8 @@ export interface SurveySaveActionsOptions {
 	existingRow?: Ref<Record<string, any> | null>;
 	isNew?: boolean;
 	onRowRefreshed?: (freshRow: Record<string, any>) => void;
+	onSaved?: (updated: Survey, freshRow?: Record<string, any>) => void;
+	onDiscarded?: () => void;
 	onDeleted?: () => void;
 	emit: {
 		(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
@@ -90,6 +92,10 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				life: 3500
 			});
 
+			if (options.onSaved) {
+				options.onSaved(updated, freshRow);
+			}
+
 			options.emit("saved", updated, freshRow);
 		} catch (err: any) {
 			console.error("Save survey error:", err);
@@ -117,6 +123,9 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			accept: () => {
 				options.reset();
 				saveAttempted.value = false;
+				if (options.onDiscarded) {
+					options.onDiscarded();
+				}
 				toast.add({
 					severity: "info",
 					summary: "Zurückgesetzt",
