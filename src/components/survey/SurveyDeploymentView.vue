@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import Button from "primevue/button";
 import Message from "primevue/message";
 import type { Survey } from "@/domain/survey/surveyTypes";
@@ -16,7 +16,21 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	(e: "back"): void;
+	(e: "update:isDirty", isDirty: boolean): void;
 }>();
+
+const isQueueMappingDirty = ref<boolean>(false);
+watch(
+	isQueueMappingDirty,
+	(val) => {
+		emit("update:isDirty", val);
+	},
+	{ immediate: true }
+);
+
+onBeforeUnmount(() => {
+	emit("update:isDirty", false);
+});
 
 // Local ref so useSurveyDeployment can update it reactively after each deploy
 const localRow = ref<Record<string, any> | null>({ ...props.existingRow });
@@ -112,6 +126,7 @@ const {
 			<SurveyQueueMappingForm
 				:surveyId="surveyId"
 				:datatableId="datatableId"
+				v-model:isDirty="isQueueMappingDirty"
 			/>
 		</div>
 	</div>

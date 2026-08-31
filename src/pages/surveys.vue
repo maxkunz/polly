@@ -33,8 +33,9 @@ const rawRowData = ref<Record<string, any> | null>(null);
 const isDetailLoading = ref<boolean>(false);
 const detailError = ref<string | null>(null);
 const isCurrentSurveyDirty = ref<boolean>(false);
+const isQueueMappingDirty = ref<boolean>(false);
 
-function confirmLeave(): Promise<boolean> {
+function confirmLeave(message?: string): Promise<boolean> {
 	return new Promise<boolean>((resolve) => {
 		let resolved = false;
 		const finish = (result: boolean) => {
@@ -46,7 +47,7 @@ function confirmLeave(): Promise<boolean> {
 
 		confirm.require({
 			header: "Ungespeicherte Änderungen",
-			message: "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?",
+			message: message || "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?",
 			icon: "pi pi-exclamation-triangle",
 			acceptLabel: "Verlassen",
 			rejectLabel: "Bleiben",
@@ -59,18 +60,26 @@ function confirmLeave(): Promise<boolean> {
 	});
 }
 
+function getDirtyLeaveMessage(): string {
+	if (isQueueMappingDirty.value) {
+		return "Sie haben ungespeicherte Änderungen am Queue-Mapping. Möchten Sie die Seite wirklich verlassen?";
+	}
+	return "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?";
+}
+
 onBeforeRouteLeave(async () => {
-	if (!isCurrentSurveyDirty.value) return true;
-	const confirmed = await confirmLeave();
+	if (!isCurrentSurveyDirty.value && !isQueueMappingDirty.value) return true;
+	const confirmed = await confirmLeave(getDirtyLeaveMessage());
 	if (confirmed) {
 		isCurrentSurveyDirty.value = false;
+		isQueueMappingDirty.value = false;
 		return true;
 	}
 	return false;
 });
 
 onBeforeRouteUpdate(async (to, from) => {
-	if (!isCurrentSurveyDirty.value) return true;
+	if (!isCurrentSurveyDirty.value && !isQueueMappingDirty.value) return true;
 	if (
 		to.query.id === from.query.id &&
 		to.query.new === from.query.new &&
@@ -79,16 +88,17 @@ onBeforeRouteUpdate(async (to, from) => {
 	) {
 		return true;
 	}
-	const confirmed = await confirmLeave();
+	const confirmed = await confirmLeave(getDirtyLeaveMessage());
 	if (confirmed) {
 		isCurrentSurveyDirty.value = false;
+		isQueueMappingDirty.value = false;
 		return true;
 	}
 	return false;
 });
 
 function handleBeforeUnload(e: BeforeUnloadEvent): void {
-	if (isCurrentSurveyDirty.value) {
+	if (isCurrentSurveyDirty.value || isQueueMappingDirty.value) {
 		e.preventDefault();
 		e.returnValue = "";
 	}
@@ -135,6 +145,7 @@ watch(
 
 async function handleNewSurveySaved(updated: Survey): Promise<void> {
 	isCurrentSurveyDirty.value = false;
+	isQueueMappingDirty.value = false;
 	await loadSurveysList();
 	newSurveyDraft.value = null;
 	router.push({ name: "surveys", query: { id: updated.id } });
@@ -142,6 +153,7 @@ async function handleNewSurveySaved(updated: Survey): Promise<void> {
 
 async function handleCloneSurveySaved(updated: Survey): Promise<void> {
 	isCurrentSurveyDirty.value = false;
+	isQueueMappingDirty.value = false;
 	await loadSurveysList();
 	cloneSurveyDraft.value = null;
 	router.push({ name: "surveys", query: { id: updated.id } });
@@ -194,15 +206,24 @@ function handleDeploy(): void {
 	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, deploy: "1" } });
 }
 
-async function handleDeployBack(): Promise<void> {
+function handleDeployBack(): void {
 	if (selectedSurveyId.value) {
-		await loadSurveyDetail(selectedSurveyId.value);
+		router.push({ name: "surveys", query: { id: selectedSurveyId.value } });
 	}
-	router.push({ name: "surveys", query: { id: selectedSurveyId.value! } });
 }
+
+watch(
+	isDeployView,
+	(isDeploy, wasDeploy) => {
+		if (!isDeploy && wasDeploy && selectedSurveyId.value) {
+			loadSurveyDetail(selectedSurveyId.value);
+		}
+	}
+);
 
 function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): void {
 	isCurrentSurveyDirty.value = false;
+	isQueueMappingDirty.value = false;
 	selectedSurveyDetail.value = updated;
 	if (freshRow) {
 		rawRowData.value = freshRow;
@@ -219,6 +240,7 @@ function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): voi
 
 async function handleSurveyDeleted(): Promise<void> {
 	isCurrentSurveyDirty.value = false;
+	isQueueMappingDirty.value = false;
 	await loadSurveysList();
 	handleBackToList();
 }
@@ -411,6 +433,7 @@ onBeforeUnmount(() => {
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId!"
 				:existingRow="rawRowData"
+				v-model:isDirty="isQueueMappingDirty"
 				@back="handleDeployBack"
 			/>
 

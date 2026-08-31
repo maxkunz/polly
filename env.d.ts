@@ -1,11 +1,11 @@
 /// <reference types="vite/client" />
 
 import { Component } from "vue";
-import { oraIconSet } from "@/components/icons/oraIconSet";
+import { appIconSet } from "@/components/icons/appIconSet";
 
 declare module "@vue/runtime-core" {
 	interface ComponentCustomProperties {
-		$oraIconSet: typeof oraIconSet;
+		$appIconSet: typeof appIconSet;
 	}
 }
 

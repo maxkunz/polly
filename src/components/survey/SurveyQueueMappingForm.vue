@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, onBeforeUnmount, watch } from "vue";
 import Card from "primevue/card";
 import Slider from "primevue/slider";
 import Textarea from "primevue/textarea";
@@ -14,6 +14,10 @@ import { useQueueMapping } from "@/composables/useQueueMapping";
 const props = defineProps<{
 	surveyId: string;
 	datatableId?: string;
+}>();
+
+const emit = defineEmits<{
+	(e: "update:isDirty", isDirty: boolean): void;
 }>();
 
 const confirm = useConfirm();
@@ -36,6 +40,18 @@ const {
 } = useQueueMapping({
 	datatableId: props.datatableId,
 	surveyId: props.surveyId
+});
+
+watch(
+	isDirty,
+	(dirty) => {
+		emit("update:isDirty", dirty);
+	},
+	{ immediate: true }
+);
+
+onBeforeUnmount(() => {
+	emit("update:isDirty", false);
 });
 
 onMounted(async () => {

@@ -5,7 +5,8 @@ import {
 	HomeIcon,
 	PlusIcon,
 	TrashIcon,
-	ArrowPathIcon
+	ArrowPathIcon,
+	ClipboardDocumentListIcon
 } from "@heroicons/vue/24/outline";
 
 /**
@@ -14,10 +15,11 @@ import {
  */
 function createHeroIconComponent(Icon: FunctionalComponent, size?: string | number): FunctionalComponent {
 	const dim = size === undefined ? undefined : typeof size === "number" ? `${size}rem` : size;
-	return () =>
+	return (props, context) =>
 		h(Icon, {
-			class: "app-icon",
-			style: dim ? { "--app-icon-size": dim } : undefined
+			...context?.attrs,
+			class: ["app-icon", context?.attrs?.class as string].filter(Boolean).join(" "),
+			style: [dim ? { "--app-icon-size": dim } : undefined, context?.attrs?.style as any].filter(Boolean)
 		});
 }
 
@@ -28,13 +30,17 @@ function createHeroIconComponent(Icon: FunctionalComponent, size?: string | numb
 function createPrimeIconComponent(piClass: string, size?: string | number): FunctionalComponent {
 	const fontSize = size === undefined ? undefined : typeof size === "number" ? `${size}rem` : size;
 
-	return () =>
+	return (props, context) =>
 		h("i", {
-			class: `pi ${piClass} app-icon`,
-			style: {
-				lineHeight: "1em",
-				...(fontSize ? { "--app-icon-size": fontSize, fontSize } : {})
-			},
+			...context?.attrs,
+			class: [`pi ${piClass} app-icon`, context?.attrs?.class as string].filter(Boolean).join(" "),
+			style: [
+				{
+					lineHeight: "1em",
+					...(fontSize ? { "--app-icon-size": fontSize, fontSize } : {})
+				},
+				context?.attrs?.style as any
+			].filter(Boolean),
 			"aria-hidden": "true"
 		});
 }
@@ -46,7 +52,7 @@ function createPrimeIconComponent(piClass: string, size?: string | number): Func
 export const appIconSet: Record<string, FunctionalComponent> = {
 	dashboard: createHeroIconComponent(HomeIcon),
 	questions: createPrimeIconComponent("pi-list-check"),
-	surveys: createPrimeIconComponent("pi-poll"),
+	surveys: createHeroIconComponent(ClipboardDocumentListIcon),
 	settings: createPrimeIconComponent("pi-cog"),
 	add: createHeroIconComponent(PlusIcon),
 	delete: createHeroIconComponent(TrashIcon),

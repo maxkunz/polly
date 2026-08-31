@@ -81,7 +81,7 @@ export function moduleRegistry() {
 		{
 			key: "surveys",
 			title: "Umfragen",
-			color: "#8B5CF6",
+			color: "#2563EB",
 			description: "Erstellung, Konfiguration und Auswertung von Umfragen.",
 			page: true,
 			dashboardColumn: 3,
