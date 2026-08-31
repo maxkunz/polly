@@ -119,7 +119,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			icon: "pi pi-exclamation-triangle",
 			acceptLabel: "Ja, verwerfen",
 			rejectLabel: "Abbrechen",
-			acceptClass: "p-button-warning",
+			acceptClass: "p-button-danger",
 			accept: () => {
 				options.reset();
 				saveAttempted.value = false;

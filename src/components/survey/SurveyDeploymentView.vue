@@ -80,7 +80,7 @@ const {
 			<Button
 				icon="pi pi-send"
 				label="Stage deployen"
-				severity="warn"
+				severity="primary"
 				:loading="isDeploying"
 				:disabled="isDeploying"
 				aria-label="Draft auf Stage deployen"
@@ -89,10 +89,10 @@ const {
 			<Button
 				icon="pi pi-cloud-upload"
 				label="Prod deployen"
-				severity="success"
+				severity="warn"
 				:loading="isDeploying"
 				:disabled="isDeploying"
-				aria-label="Draft auf Prod deployen (Prod wird in Backup gesichert)"
+				aria-label="Draft auf Prod deployen"
 				@click="deployToProd"
 			/>
 			<Button
@@ -102,7 +102,7 @@ const {
 				variant="outlined"
 				:loading="isDeploying"
 				:disabled="isDeploying || !backupSnapshot"
-				aria-label="Backup auf Prod zurückspielen"
+				aria-label="Letze Version auf Prod zurückspielen"
 				@click="rollback"
 			/>
 		</div>

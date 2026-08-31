@@ -66,7 +66,7 @@ function handleSave(): void {
 			icon: "pi pi-exclamation-triangle",
 			acceptLabel: "Ja, überschreiben",
 			rejectLabel: "Abbrechen",
-			acceptClass: "p-button-warning",
+			acceptClass: "p-button-danger",
 			accept: async () => {
 				await performSave();
 			}

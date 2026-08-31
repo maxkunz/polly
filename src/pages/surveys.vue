@@ -51,7 +51,7 @@ function confirmLeave(): Promise<boolean> {
 			acceptLabel: "Verlassen",
 			rejectLabel: "Bleiben",
 			acceptClass: "p-button-danger",
-			rejectClass: "p-button-secondary",
+			rejectClass: "p-button-success",
 			accept: () => finish(true),
 			reject: () => finish(false),
 			onHide: () => finish(false)

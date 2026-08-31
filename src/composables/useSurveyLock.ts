@@ -85,7 +85,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 					icon: "pi pi-exclamation-triangle",
 					acceptLabel: "Trotzdem bearbeiten",
 					rejectLabel: "Abbrechen",
-					acceptClass: "p-button-warning",
+					acceptClass: "p-button-danger",
 					rejectClass: "p-button-secondary",
 					accept: () => {
 						isConflictDismissed.value = true;
