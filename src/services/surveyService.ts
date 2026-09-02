@@ -4,6 +4,7 @@ import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/queueMappingTypes";
 import { useAppStore } from "@/stores/appStore";
 import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
+import { translateSurveyForFlow } from "./surveyFlowTranslator";
 
 async function resolveDataTableId(datatableId?: string): Promise<string> {
 	if (datatableId && datatableId.trim()) {
@@ -137,12 +138,14 @@ export async function deploySurvey(
 		lock: existingRow.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
 	};
 
+	const translatedPayload = translateSurveyForFlow(existingRow.Draft ?? "{}");
+
 	if (target === "Stage") {
-		rowPayload.Stage = existingRow.Draft ?? "{}";
+		rowPayload.Stage = translatedPayload;
 	} else {
-		// Prod deployen: erst Backup sichern, dann Prod überschreiben
+		// Prod deployen: erst Backup sichern (1:1 Rohkopie), dann Prod überschreiben
 		rowPayload.Backup = existingRow.Prod ?? "{}";
-		rowPayload.Prod = existingRow.Draft ?? "{}";
+		rowPayload.Prod = translatedPayload;
 	}
 
 	await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
