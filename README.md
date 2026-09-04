@@ -200,7 +200,14 @@ Backend:
 - `amplify/backend.ts`
 - `amplify/functions/onboarding/handler.ts`
 - `amplify/functions/question_answers/handler.ts`
+- `amplify/functions/survey_responses/handler.ts`
+- `amplify/functions/survey_cleanup/handler.ts`
 - `amplify/functions/shared/tenant_auth.ts`
+
+Documentation:
+
+- `documentation/survey_definition.md`
+- `documentation/survey_responses_api.md`
 
 ## Development
 
