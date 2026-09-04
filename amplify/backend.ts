@@ -7,10 +7,14 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Fn, RemovalPolicy, Stack } from "aws-cdk-lib";
 import { auth } from "./auth/resource";
 import { onboarding } from "./functions/onboarding/resource";
 import { questionAnswers } from "./functions/question_answers/resource";
+import { surveyResponses } from "./functions/survey_responses/resource";
+import { surveyCleanup } from "./functions/survey_cleanup/resource";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -36,6 +40,8 @@ const backend = defineBackend({
   auth,
   onboarding,
   questionAnswers,
+  surveyResponses,
+  surveyCleanup,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -71,6 +77,42 @@ const questionAnswersTable = new dynamodb.Table(stack, "QuestionAnswersTable", {
   sortKey: { name: "questionId", type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
   removalPolicy: RemovalPolicy.RETAIN,
+});
+
+const surveyResponsesTable = new dynamodb.Table(stack, "SurveyResponsesTable", {
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "responseId", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+surveyResponsesTable.addGlobalSecondaryIndex({
+  indexName: "byTenantSurvey",
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "surveyStartedAt", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.ALL,
+});
+
+surveyResponsesTable.addGlobalSecondaryIndex({
+  indexName: "byStatus",
+  partitionKey: { name: "status", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "updatedAt", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.INCLUDE,
+  nonKeyAttributes: ["tenantId", "surveyId", "surveyStartedAt"],
+});
+
+const surveyAggregatesTable = new dynamodb.Table(stack, "SurveyAggregatesTable", {
+  partitionKey: { name: "tenantSurveyId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "questionName", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+surveyAggregatesTable.addGlobalSecondaryIndex({
+  indexName: "byTenant",
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "surveyId", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.ALL,
 });
 
 const tenantAuthIssuer = `https://cognito-idp.${stack.region}.amazonaws.com/${backend.auth.resources.userPool.userPoolId}`;
@@ -215,6 +257,65 @@ httpApi.addRoutes({
     "QuestionAnswersInteg",
     questionAnswersLambda,
   ),
+});
+
+const surveyResponsesLambda = backend.surveyResponses.resources
+  .lambda as lambda.Function;
+
+surveyResponsesTable.grantReadWriteData(surveyResponsesLambda);
+surveyAggregatesTable.grantReadWriteData(surveyResponsesLambda);
+surveyResponsesLambda.addEnvironment(
+  "SURVEY_RESPONSES_TABLE_NAME",
+  surveyResponsesTable.tableName,
+);
+surveyResponsesLambda.addEnvironment(
+  "SURVEY_AGGREGATES_TABLE_NAME",
+  surveyAggregatesTable.tableName,
+);
+attachTenantAuth(surveyResponsesLambda);
+
+const surveyResponsesInteg = new integrations.HttpLambdaIntegration(
+  "SurveyResponsesInteg",
+  surveyResponsesLambda,
+);
+
+httpApi.addRoutes({
+  path: "/survey-responses",
+  methods: [apigw.HttpMethod.POST],
+  integration: surveyResponsesInteg,
+});
+
+httpApi.addRoutes({
+  path: "/survey-responses/aggregates",
+  methods: [apigw.HttpMethod.GET],
+  integration: surveyResponsesInteg,
+});
+
+httpApi.addRoutes({
+  path: "/survey-responses/raw",
+  methods: [apigw.HttpMethod.GET],
+  integration: surveyResponsesInteg,
+});
+
+httpApi.addRoutes({
+  path: "/survey-responses/session",
+  methods: [apigw.HttpMethod.GET],
+  integration: surveyResponsesInteg,
+});
+
+const surveyCleanupLambda = backend.surveyCleanup.resources
+  .lambda as lambda.Function;
+
+surveyResponsesTable.grantReadWriteData(surveyCleanupLambda);
+surveyCleanupLambda.addEnvironment(
+  "SURVEY_RESPONSES_TABLE_NAME",
+  surveyResponsesTable.tableName,
+);
+surveyCleanupLambda.addEnvironment("TIMEOUT_MINUTES", "30");
+
+new events.Rule(stack, "SurveyCleanupRule", {
+  schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+  targets: [new targets.LambdaFunction(surveyCleanupLambda)],
 });
 
 backend.addOutput({

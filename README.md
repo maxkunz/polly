@@ -71,15 +71,27 @@ The backend is implemented with Amplify Gen 2 and contains the components requir
   - accepts `questionId` and `value`
   - increments the matching counter atomically in DynamoDB
   - returns aggregated response totals
+- `survey_responses`
+  - processes step-by-step answers from Genesys call flows
+  - upserts session answers into `SurveyResponsesTable` (supports partial / completed states)
+  - incrementally updates live statistics in `SurveyAggregatesTable`
+  - exposes reporting endpoints for aggregates and raw session exports
+- `survey_cleanup`
+  - scheduled job (EventBridge, every 15 minutes)
+  - flags abandoned sessions older than 30 minutes as `timed_out`
 
 Additional infrastructure:
 
 - `TenantsTable`
   - stores tenant metadata for onboarding
 - `QuestionAnswersTable`
-  - stores response aggregates per tenant and question
+  - stores response aggregates per tenant and question (PoC)
+- `SurveyResponsesTable`
+  - stores raw call session responses and question answers per tenant
+- `SurveyAggregatesTable`
+  - stores real-time aggregated survey statistics per tenant and question
 - `HttpApi`
-  - exposes onboarding and response endpoints
+  - exposes onboarding, question answers, and survey responses endpoints
 
 ### Onboarding
 
