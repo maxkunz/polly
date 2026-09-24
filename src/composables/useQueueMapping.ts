@@ -38,10 +38,10 @@ export function useQueueMapping({
 	const saveError = ref<string | null>(null);
 
 	const queueNamesText = ref<string>("");
-	const deliveryRate = ref<number>(5);
+	const deliveryRate = ref<number>(25);
 
 	const initialQueueNamesText = ref<string>("");
-	const initialDeliveryRate = ref<number>(5);
+	const initialDeliveryRate = ref<number>(25);
 
 	const rawRow = ref<Record<string, any> | null>(null);
 	const allMappings = ref<QueueMappingData>([]);
@@ -102,10 +102,10 @@ export function useQueueMapping({
 			const forSurvey = res.mapping.filter(entry => entry.surveyId === surveyId);
 			if (forSurvey.length > 0) {
 				queueNamesText.value = forSurvey.map(e => e.queueName).join("\n");
-				deliveryRate.value = forSurvey[0]?.deliveryRate ?? 5;
+				deliveryRate.value = forSurvey[0]?.deliveryRate ?? 25;
 			} else {
 				queueNamesText.value = "";
-				deliveryRate.value = 5;
+				deliveryRate.value = 25;
 			}
 
 			initialQueueNamesText.value = queueNamesText.value;

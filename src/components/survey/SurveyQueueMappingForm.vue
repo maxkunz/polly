@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, watch } from "vue";
 import Card from "primevue/card";
-import Slider from "primevue/slider";
+import SelectButton from "primevue/selectbutton";
 import Textarea from "primevue/textarea";
 import Button from "primevue/button";
 import Message from "primevue/message";
@@ -22,6 +22,8 @@ const emit = defineEmits<{
 
 const confirm = useConfirm();
 const toast = useToast();
+
+const deliveryRateOptions = [25, 50, 75, 100];
 
 const {
 	isLoading,
@@ -157,10 +159,10 @@ function handleSave(): void {
 						{{ saveError }}
 					</Message>
 
-					<!-- Delivery Rate Slider -->
+					<!-- Delivery Rate Selection -->
 					<div class="space-y-2 bg-[var(--p-surface-50)] dark:bg-[var(--p-surface-800)] p-4 rounded-xl border border-[var(--p-content-border-color)]">
 						<div class="flex items-center justify-between">
-							<label for="queue-delivery-rate-slider" class="text-sm font-medium text-[var(--p-text-color)]">
+							<label for="queue-delivery-rate-select" class="text-sm font-medium text-[var(--p-text-color)]">
 								Auslieferungswahrscheinlichkeit (Delivery Rate)
 							</label>
 							<span class="text-sm font-semibold font-mono px-2.5 py-0.5 rounded bg-[var(--p-primary-color)] text-white">
@@ -168,23 +170,18 @@ function handleSave(): void {
 							</span>
 						</div>
 						<div class="pt-2 px-1">
-							<Slider
-								id="queue-delivery-rate-slider"
+							<SelectButton
+								id="queue-delivery-rate-select"
 								v-model="deliveryRate"
-								:min="1"
-								:max="100"
-								:step="1"
+								:options="deliveryRateOptions"
+								:allowEmpty="false"
 								class="w-full"
 								aria-label="Auslieferungswahrscheinlichkeit in Prozent"
-								:aria-valuenow="deliveryRate"
-								:aria-valuemin="1"
-								:aria-valuemax="100"
-							/>
-						</div>
-						<div class="flex justify-between text-xs text-[var(--p-text-muted-color)] pt-1">
-							<span>1% (Selten)</span>
-							<span>50%</span>
-							<span>100% (Immer)</span>
+							>
+								<template #option="{ option }">
+									{{ option }} %
+								</template>
+							</SelectButton>
 						</div>
 					</div>
 
