@@ -6,6 +6,7 @@
 * das erstellte json muss valide sein
 * das feld "name" bei der umfrage und den fragen wird ist eine unmutable bezeichner der nach dem erstellen nicht mehr geändert werden darf (fürs reporting)
 * als bedingungen (operator) für folgefragen sind nur "equals", "less_than" und "greater_than" erlaubt; bei "yes_no" und "choice" nur "equals"
+* bei den fragetypen "rating" und "nps" darf jeder operator ("equals", "less_than", "greater_than") pro frage nur einmal als Folgefragen-Bedingung verwendet werden
 
 ### beispiel json
 
