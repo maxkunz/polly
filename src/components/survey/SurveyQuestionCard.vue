@@ -93,7 +93,7 @@ const {
 				<QuestionTypeInfoHint v-else :type="question.type" />
 
 				<!-- Follow-Up Section -->
-				<div class="pt-4 border-t border-[var(--p-content-border-color)]">
+				<div class="pt-4 border-t border-[var(--p-content-border-color)]" v-if="question.type != 'comment'">
 					<div class="flex items-center justify-between mb-3">
 						<div>
 							<h4 class="text-xs font-bold uppercase tracking-wider text-[var(--p-text-muted-color)]">
