@@ -2,7 +2,8 @@ import type {
 	Survey,
 	SurveyQuestion,
 	RatingOptions,
-	ChoiceOptions
+	ChoiceOptions,
+	ConditionOperator
 } from "./surveyTypes";
 import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
 
@@ -30,6 +31,34 @@ export function findDuplicateChoiceLabels(
 			duplicates.set(idx, firstIdx);
 		} else {
 			seen.set(normalized, idx);
+		}
+	});
+	return duplicates;
+}
+
+/**
+ * Liefert für jeden Operator, der von mehr als einer Folgefrage verwendet wird,
+ * den Index der jeweils ersten Folgefrage mit diesem Operator.
+ * Gilt nur für Fragetypen mit mehreren wählbaren Operatoren (rating, nps) -
+ * bei yes_no und choice steht ohnehin nur "equals" zur Verfügung.
+ */
+export function findDuplicateFollowUpOperators(
+	parentType: SurveyQuestion["type"],
+	followUps: Array<{ condition?: { operator?: ConditionOperator } }>
+): Map<number, number> {
+	const duplicates = new Map<number, number>();
+	if (parentType === "yes_no" || parentType === "choice") {
+		return duplicates;
+	}
+	const seen = new Map<ConditionOperator, number>();
+	followUps.forEach((fu, idx) => {
+		const operator = fu.condition?.operator;
+		if (!operator) return;
+		const firstIdx = seen.get(operator);
+		if (firstIdx !== undefined) {
+			duplicates.set(idx, firstIdx);
+		} else {
+			seen.set(operator, idx);
 		}
 	});
 	return duplicates;
@@ -142,6 +171,8 @@ export function validateQuestion(
 	}
 
 	if (question.follow_ups && Array.isArray(question.follow_ups)) {
+		const duplicateOperators = findDuplicateFollowUpOperators(question.type, question.follow_ups);
+
 		question.follow_ups.forEach((fu, fuIdx) => {
 			if (!fu.question) {
 				errors.push({
@@ -150,6 +181,15 @@ export function validateQuestion(
 					questionId: question.id
 				});
 			} else {
+				const firstIdx = duplicateOperators.get(fuIdx);
+				if (firstIdx !== undefined) {
+					errors.push({
+						field: `${qField}.follow_ups[${fuIdx}].condition.operator`,
+						message: `Der Komparator "${fu.condition?.operator}" wird bereits von Folgefrage ${firstIdx + 1} verwendet. Jeder Komparator darf nur einmal verwendet werden.`,
+						questionId: question.id,
+						fieldId: `fu_cond_op_${question.id}_${fuIdx}`
+					});
+				}
 				errors.push(
 					...validateQuestion(
 						fu.question,

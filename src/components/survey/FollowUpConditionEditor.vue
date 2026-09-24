@@ -5,10 +5,12 @@ import InputNumber from "primevue/inputnumber";
 import type {
 	FollowUpRule,
 	SurveyQuestion,
-	ChoiceOptions
+	ChoiceOptions,
+	ConditionOperator
 } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions } from "@/domain/survey/surveyTypes";
 import { getOperatorOptions, booleanOptions } from "@/domain/survey/questionTypeCatalog";
+import { findDuplicateFollowUpOperators } from "@/domain/survey/surveyValidator";
 
 const props = withDefaults(
 	defineProps<{
@@ -16,13 +18,40 @@ const props = withDefaults(
 		followUp: FollowUpRule;
 		index: number;
 		disabled?: boolean;
+		showValidation?: boolean;
 	}>(),
 	{
-		disabled: false
+		disabled: false,
+		showValidation: false
 	}
 );
 
-const operatorOptions = computed(() => getOperatorOptions(props.parentQuestion.type));
+const usedOperatorsBySiblings = computed(() => {
+	const used = new Set<ConditionOperator>();
+	(props.parentQuestion.follow_ups || []).forEach((fu, idx) => {
+		if (idx !== props.index && fu.condition?.operator) {
+			used.add(fu.condition.operator);
+		}
+	});
+	return used;
+});
+
+const operatorOptions = computed(() =>
+	getOperatorOptions(props.parentQuestion.type).map(opt => ({
+		...opt,
+		disabled: usedOperatorsBySiblings.value.has(opt.value)
+	}))
+);
+
+const duplicateOperatorMessage = computed(() => {
+	const duplicates = findDuplicateFollowUpOperators(
+		props.parentQuestion.type,
+		props.parentQuestion.follow_ups || []
+	);
+	const firstIdx = duplicates.get(props.index);
+	if (firstIdx === undefined) return undefined;
+	return `Der Komparator wird bereits von Folgefrage ${firstIdx + 1} verwendet.`;
+});
 
 const choiceOptionsList = computed(() => {
 	if (props.parentQuestion.type === "choice" && isChoiceOptions(props.parentQuestion.options)) {
@@ -55,9 +84,20 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					:options="operatorOptions"
 					optionLabel="label"
 					optionValue="value"
+					optionDisabled="disabled"
 					class="w-full text-xs"
 					:disabled="disabled"
+					:invalid="showValidation && !!duplicateOperatorMessage"
+					:aria-invalid="showValidation && !!duplicateOperatorMessage"
+					:aria-describedby="showValidation && duplicateOperatorMessage ? `${conditionOpId}_dup` : undefined"
 				/>
+				<small
+					v-if="showValidation && duplicateOperatorMessage"
+					:id="`${conditionOpId}_dup`"
+					class="block mt-1 text-xs text-red-500"
+				>
+					{{ duplicateOperatorMessage }}
+				</small>
 			</div>
 
 			<div>

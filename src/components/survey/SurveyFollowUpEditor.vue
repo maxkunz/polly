@@ -95,6 +95,7 @@ function confirmDelete() {
 			:followUp="followUp"
 			:index="index"
 			:disabled="disabled"
+			:showValidation="showValidation"
 		/>
 
 		<!-- Question Details -->
