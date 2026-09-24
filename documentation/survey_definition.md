@@ -5,6 +5,7 @@
 * erstelle als ids immer valide und zufällige eindeutige UUIDs
 * das erstellte json muss valide sein
 * das feld "name" bei der umfrage und den fragen wird ist eine unmutable bezeichner der nach dem erstellen nicht mehr geändert werden darf (fürs reporting)
+* als bedingungen (operator) für folgefragen sind nur "equals", "less_than" und "greater_than" erlaubt; bei "yes_no" und "choice" nur "equals"
 
 ### beispiel json
 
@@ -122,8 +123,8 @@
             "follow_ups": [
                 {
                     "condition": {
-                        "operator": "greater_than_or_equal",
-                        "value": 9
+                        "operator": "greater_than",
+                        "value": 8
                     },
                     "question": {
                         "id": "ecb58dcf-336c-4f76-80db-0e693b827e8a",

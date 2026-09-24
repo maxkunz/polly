@@ -38,10 +38,13 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	async function handleSave() {
 		saveAttempted.value = true;
 		if (!options.isValid.value || !options.draftSurvey.value) {
+			const errors = options.validationErrors.value;
 			toast.add({
 				severity: "error",
 				summary: "Validierungsfehler",
-				detail: "Bitte beheben Sie die markierten Fehler vor dem Speichern.",
+				detail: errors.length === 1
+					? errors[0].message
+					: "Bitte beheben Sie die markierten Fehler vor dem Speichern.",
 				life: 5000
 			});
 

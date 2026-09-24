@@ -13,6 +13,28 @@ export interface ValidationError {
 	fieldId?: string;
 }
 
+/**
+ * Liefert für jede doppelte Option (Index) den Index ihres ersten Vorkommens.
+ * Vergleich erfolgt getrimmt und ohne Beachtung der Groß-/Kleinschreibung.
+ */
+export function findDuplicateChoiceLabels(
+	labels: Array<{ label: string }>
+): Map<number, number> {
+	const seen = new Map<string, number>();
+	const duplicates = new Map<number, number>();
+	labels.forEach((opt, idx) => {
+		const normalized = opt.label?.trim().toLowerCase();
+		if (!normalized) return;
+		const firstIdx = seen.get(normalized);
+		if (firstIdx !== undefined) {
+			duplicates.set(idx, firstIdx);
+		} else {
+			seen.set(normalized, idx);
+		}
+	});
+	return duplicates;
+}
+
 export function validateQuestion(
 	question: SurveyQuestion,
 	prefix = ""
@@ -95,11 +117,22 @@ export function validateQuestion(
 					questionId: question.id
 				});
 			}
+			const duplicates = findDuplicateChoiceLabels(labels);
 			labels.forEach((opt, idx) => {
 				if (!opt.label || !opt.label.trim()) {
 					errors.push({
 						field: `${qField}.options.labels[${idx}]`,
 						message: `Option ${idx + 1} darf nicht leer sein.`,
+						questionId: question.id,
+						fieldId: `opt_${question.id}_${idx}`
+					});
+					return;
+				}
+				const firstIdx = duplicates.get(idx);
+				if (firstIdx !== undefined) {
+					errors.push({
+						field: `${qField}.options.labels[${idx}]`,
+						message: `Option ${idx + 1} ist identisch mit Option ${firstIdx + 1}.`,
 						questionId: question.id,
 						fieldId: `opt_${question.id}_${idx}`
 					});

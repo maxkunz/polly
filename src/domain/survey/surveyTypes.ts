@@ -1,12 +1,6 @@
 export type QuestionType = "yes_no" | "choice" | "rating" | "nps" | "comment";
 
-export type ConditionOperator =
-	| "equals"
-	| "not_equals"
-	| "less_than"
-	| "greater_than"
-	| "less_than_or_equal"
-	| "greater_than_or_equal";
+export type ConditionOperator = "equals" | "less_than" | "greater_than";
 
 export interface ChoiceOptionLabel {
 	id: string;
@@ -124,8 +118,8 @@ export function createEmptyFollowUp(parentType: QuestionType = "yes_no"): Follow
 		operator = "less_than";
 		value = 3;
 	} else if (parentType === "nps") {
-		operator = "less_than_or_equal";
-		value = 6;
+		operator = "less_than";
+		value = 7;
 	} else if (parentType === "choice") {
 		operator = "equals";
 		value = "";
