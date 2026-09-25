@@ -72,6 +72,35 @@ export function findDuplicateFollowUpOperators(
 	return duplicates;
 }
 
+/**
+ * Liefert für jede Auswahloption, die von mehr als einer Folgefrage als
+ * Bedingung (equals) verwendet wird, den Index der jeweils ersten Folgefrage
+ * mit dieser Option. Gilt nur für choice - hier steht zwar nur der Operator
+ * "equals" zur Verfügung, jede Option darf aber trotzdem nur einmal als
+ * Folgefragen-Bedingung verwendet werden.
+ */
+export function findDuplicateChoiceFollowUpValues(
+	parentType: SurveyQuestion["type"],
+	followUps: Array<{ condition?: { value?: unknown } }>
+): Map<number, number> {
+	const duplicates = new Map<number, number>();
+	if (parentType !== "choice") {
+		return duplicates;
+	}
+	const seen = new Map<unknown, number>();
+	followUps.forEach((fu, idx) => {
+		const value = fu.condition?.value;
+		if (value === undefined || value === null || value === "") return;
+		const firstIdx = seen.get(value);
+		if (firstIdx !== undefined) {
+			duplicates.set(idx, firstIdx);
+		} else {
+			seen.set(value, idx);
+		}
+	});
+	return duplicates;
+}
+
 export function validateQuestion(
 	question: SurveyQuestion,
 	prefix = ""
@@ -180,6 +209,7 @@ export function validateQuestion(
 
 	if (question.follow_ups && Array.isArray(question.follow_ups)) {
 		const duplicateOperators = findDuplicateFollowUpOperators(question.type, question.follow_ups);
+		const duplicateChoiceValues = findDuplicateChoiceFollowUpValues(question.type, question.follow_ups);
 
 		question.follow_ups.forEach((fu, fuIdx) => {
 			if (!fu.question) {
@@ -196,6 +226,15 @@ export function validateQuestion(
 						message: `Der Komparator "${fu.condition?.operator}" wird bereits von Folgefrage ${firstIdx + 1} verwendet. Jeder Komparator darf nur einmal verwendet werden.`,
 						questionId: question.id,
 						fieldId: `fu_cond_op_${question.id}_${fuIdx}`
+					});
+				}
+				const firstValueIdx = duplicateChoiceValues.get(fuIdx);
+				if (firstValueIdx !== undefined) {
+					errors.push({
+						field: `${qField}.follow_ups[${fuIdx}].condition.value`,
+						message: `Diese Auswahloption wird bereits von Folgefrage ${firstValueIdx + 1} verwendet. Jede Option darf nur eine Folgefrage haben.`,
+						questionId: question.id,
+						fieldId: `fu_cond_val_${question.id}_${fuIdx}`
 					});
 				}
 				errors.push(

@@ -7,6 +7,7 @@
 * das feld "name" bei der umfrage und den fragen wird ist eine unmutable bezeichner der nach dem erstellen nicht mehr geändert werden darf (fürs reporting)
 * als bedingungen (operator) für folgefragen sind nur "equals", "less_than" und "greater_than" erlaubt; bei "yes_no" und "choice" nur "equals"
 * bei den fragetypen "rating" und "nps" darf jeder operator ("equals", "less_than", "greater_than") pro frage nur einmal als Folgefragen-Bedingung verwendet werden
+* beim fragetyp "choice" gibt es keine operator-auswahl (immer "equals") und es dürfen mehrere Folgefragen mit "equals" existieren, aber pro Auswahlmöglichkeit darf es maximal eine Folgefrage geben (jede Option darf also nur einmal als Bedingung verwendet werden)
 * bei den Auswahlmöglichkeiten des Fragetyps "choice" können optional Synonyme angegeben werden (z.B. damit im Voice Flow auch das Nennen eines Synonyms als gültige Antwort erkannt wird). Im Editor werden Label und Synonyme durch Komma getrennt in ein Feld eingegeben (z.B. "Orange, Apfelsine, Saftorange"); das erste Wort wird als "label" gespeichert, alle weiteren als "synonyms"
 * innerhalb einer "choice"-Frage darf ein Label oder Synonym nicht bei mehreren Auswahlmöglichkeiten vorkommen, da eine genannte Antwort sonst nicht mehr eindeutig einer Option zugeordnet werden kann
 

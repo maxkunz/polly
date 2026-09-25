@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import Select from "primevue/select";
 import InputNumber from "primevue/inputnumber";
 import type {
@@ -10,7 +10,10 @@ import type {
 } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions } from "@/domain/survey/surveyTypes";
 import { getOperatorOptions, booleanOptions } from "@/domain/survey/questionTypeCatalog";
-import { findDuplicateFollowUpOperators } from "@/domain/survey/surveyValidator";
+import {
+	findDuplicateFollowUpOperators,
+	findDuplicateChoiceFollowUpValues
+} from "@/domain/survey/surveyValidator";
 
 const props = withDefaults(
 	defineProps<{
@@ -26,8 +29,24 @@ const props = withDefaults(
 	}
 );
 
+const isChoiceParent = computed(() => props.parentQuestion.type === "choice");
+
+// Bei choice gibt es nur den Operator "equals" und dieser darf - anders als bei
+// rating/nps - mehrfach verwendet werden, da jede Folgefrage an eine andere
+// Auswahloption gebunden ist. Die Operator-Auswahl entfällt daher im UI.
+watch(
+	() => props.parentQuestion.type,
+	type => {
+		if (type === "choice" && props.followUp.condition.operator !== "equals") {
+			props.followUp.condition.operator = "equals";
+		}
+	},
+	{ immediate: true }
+);
+
 const usedOperatorsBySiblings = computed(() => {
 	const used = new Set<ConditionOperator>();
+	if (isChoiceParent.value) return used;
 	(props.parentQuestion.follow_ups || []).forEach((fu, idx) => {
 		if (idx !== props.index && fu.condition?.operator) {
 			used.add(fu.condition.operator);
@@ -53,14 +72,37 @@ const duplicateOperatorMessage = computed(() => {
 	return `Der Komparator wird bereits von Folgefrage ${firstIdx + 1} verwendet.`;
 });
 
+const usedChoiceValuesBySiblings = computed(() => {
+	const used = new Set<unknown>();
+	if (!isChoiceParent.value) return used;
+	(props.parentQuestion.follow_ups || []).forEach((fu, idx) => {
+		if (idx !== props.index && fu.condition?.value !== undefined && fu.condition?.value !== "") {
+			used.add(fu.condition.value);
+		}
+	});
+	return used;
+});
+
 const choiceOptionsList = computed(() => {
 	if (props.parentQuestion.type === "choice" && isChoiceOptions(props.parentQuestion.options)) {
 		return (props.parentQuestion.options as ChoiceOptions).labels.map(l => ({
 			label: l.label || `Option (${l.id.slice(0, 6)})`,
-			value: l.id
+			value: l.id,
+			disabled: usedChoiceValuesBySiblings.value.has(l.id)
 		}));
 	}
 	return [];
+});
+
+const duplicateChoiceValueMessage = computed(() => {
+	if (!isChoiceParent.value) return undefined;
+	const duplicates = findDuplicateChoiceFollowUpValues(
+		props.parentQuestion.type,
+		props.parentQuestion.follow_ups || []
+	);
+	const firstIdx = duplicates.get(props.index);
+	if (firstIdx === undefined) return undefined;
+	return `Diese Option wird bereits von Folgefrage ${firstIdx + 1} verwendet.`;
 });
 
 const conditionOpId = computed(() => `fu_cond_op_${props.parentQuestion.id}_${props.index}`);
@@ -73,8 +115,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 			Bedingung zur Anzeige:
 		</div>
 
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-			<div>
+		<div class="grid grid-cols-1 gap-3" :class="isChoiceParent ? '' : 'md:grid-cols-2'">
+			<div v-if="!isChoiceParent">
 				<label :for="conditionOpId" class="block text-xs font-medium mb-1">
 					Operator <span class="text-red-500" aria-hidden="true">*</span>
 				</label>
@@ -102,7 +144,9 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 
 			<div>
 				<label :for="conditionValueId" class="block text-xs font-medium mb-1">
-					Vergleichswert <span class="text-red-500" aria-hidden="true">*</span>
+					<template v-if="isChoiceParent">Antwort entspricht Option</template>
+					<template v-else>Vergleichswert</template>
+					<span class="text-red-500" aria-hidden="true">*</span>
 				</label>
 
 				<!-- Boolean for yes_no -->
@@ -118,17 +162,29 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 				/>
 
 				<!-- Options for choice -->
-				<Select
-					v-else-if="parentQuestion.type === 'choice'"
-					:inputId="conditionValueId"
-					v-model="followUp.condition.value"
-					:options="choiceOptionsList"
-					optionLabel="label"
-					optionValue="value"
-					placeholder="Wähle Option..."
-					class="w-full text-xs"
-					:disabled="disabled"
-				/>
+				<template v-else-if="parentQuestion.type === 'choice'">
+					<Select
+						:inputId="conditionValueId"
+						v-model="followUp.condition.value"
+						:options="choiceOptionsList"
+						optionLabel="label"
+						optionValue="value"
+						optionDisabled="disabled"
+						placeholder="Wähle Option..."
+						class="w-full text-xs"
+						:disabled="disabled"
+						:invalid="showValidation && !!duplicateChoiceValueMessage"
+						:aria-invalid="showValidation && !!duplicateChoiceValueMessage"
+						:aria-describedby="showValidation && duplicateChoiceValueMessage ? `${conditionValueId}_dup` : undefined"
+					/>
+					<small
+						v-if="showValidation && duplicateChoiceValueMessage"
+						:id="`${conditionValueId}_dup`"
+						class="block mt-1 text-xs text-red-500"
+					>
+						{{ duplicateChoiceValueMessage }}
+					</small>
+				</template>
 
 				<!-- Number for rating / nps -->
 				<InputNumber
