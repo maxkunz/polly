@@ -162,7 +162,7 @@ function handleSave(): void {
 					</Message>
 
 					<!-- Delivery Rate Selection -->
-					<div class="space-y-2 bg-[var(--p-surface-50)] dark:bg-[var(--p-surface-800)] p-4 rounded-xl border border-[var(--p-content-border-color)]">
+					<div class="space-y-2 bg-[var(--p-surface-50)] p-4 rounded-xl border border-[var(--p-content-border-color)]">
 						<div class="flex items-center justify-between">
 							<label for="queue-delivery-rate-select" class="text-sm font-medium text-[var(--p-text-color)]">
 								{{ t("queueMapping.deliveryRateLabel") }}
