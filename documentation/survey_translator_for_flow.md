@@ -72,6 +72,11 @@ Bei Typ Rating bitte beachten dass im Flow JSON Format alle möglichen Antworten
       "mandatory": false,
       "default_next_question_id": null,
       "labels": ["Inhalt", "Freundlichkeit", "beides"],
+      "synonyms": [
+        ["Content", "Inhaltlich", "Thema"],
+        ["Freundlichkeit", "Freundlich", "Unfreundlich", "Unfreundlich"],
+        []
+      ],
       "next_question_ids": ["06498151", "06498151", "06498151"]
     },
     {

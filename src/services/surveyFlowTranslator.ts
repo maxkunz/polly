@@ -54,6 +54,7 @@ export interface FlowYesNoQuestion extends FlowQuestionBase {
 export interface FlowChoiceQuestion extends FlowQuestionBase {
 	type: "choice";
 	labels: string[];
+	synonyms: string[][];
 	next_question_ids: (string | null)[];
 }
 
@@ -187,7 +188,7 @@ function buildYesNoOptions(
 function buildChoiceFields(
 	question: SurveyQuestion,
 	followUps: FollowUpRule[]
-): { labels: string[]; next_question_ids: (string | null)[] } {
+): { labels: string[]; synonyms: string[][]; next_question_ids: (string | null)[] } {
 	if (!isChoiceOptions(question.options)) {
 		throw new SurveyFlowTranslationError(
 			`Fragetyp choice benötigt options.labels`,
@@ -198,6 +199,7 @@ function buildChoiceFields(
 
 	const labelIds = question.options.labels.map(label => label.id);
 	const labels = question.options.labels.map(label => label.label);
+	const synonyms = question.options.labels.map(label => label.synonyms ?? []);
 	const nextQuestionIds: (string | null)[] = new Array(labelIds.length).fill(null);
 	const usedLabelIds = new Set<string>();
 
@@ -224,7 +226,7 @@ function buildChoiceFields(
 		nextQuestionIds[index] = followUp.question.id;
 	}
 
-	return { labels, next_question_ids: nextQuestionIds };
+	return { labels, synonyms, next_question_ids: nextQuestionIds };
 }
 
 function buildRatingOptions(question: SurveyQuestion): FlowRatingQuestion["options"] {
@@ -325,8 +327,8 @@ function flattenQuestion(
 			break;
 		}
 		case "choice": {
-			const { labels, next_question_ids } = buildChoiceFields(question, followUps);
-			out.push({ ...base, type: "choice", labels, next_question_ids });
+			const { labels, synonyms, next_question_ids } = buildChoiceFields(question, followUps);
+			out.push({ ...base, type: "choice", labels, synonyms, next_question_ids });
 			break;
 		}
 		case "rating": {
