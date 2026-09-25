@@ -75,7 +75,7 @@ function confirmDelete() {
 
 		<div class="flex items-center justify-between gap-2">
 			<div class="text-xs text-[var(--p-text-muted-color)]">
-				ID: <code class="font-mono">{{ followUp.question.id.slice(0, 8) }}...</code>
+				ID: <code class="font-mono">{{ followUp.question.name }}</code>
 			</div>
 			<Button
 				size="small"
@@ -103,7 +103,7 @@ function confirmDelete() {
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 				<div class="md:col-span-2">
 					<label :for="titleId" class="block text-xs font-medium mb-1">
-						Titel der Folgefrage <span class="text-red-500" aria-hidden="true">*</span>
+						Fragetext / Titel <span class="text-red-500" aria-hidden="true">*</span>
 					</label>
 					<InputText
 						:id="titleId"
@@ -136,7 +136,7 @@ function confirmDelete() {
 
 			<div>
 				<label :for="descId" class="block text-xs font-medium mb-1">
-					Beschreibung / Erläuterung
+					Beschreibung / Hilfetext
 				</label>
 				<Textarea
 					:id="descId"

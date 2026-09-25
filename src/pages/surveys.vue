@@ -507,7 +507,7 @@ onBeforeUnmount(() => {
 											{{ survey.title || survey.name || 'Unbenannte Umfrage' }}
 										</div>
 										<div class="text-xs text-[var(--p-text-muted-color)] flex items-center gap-3">
-											<span>ID: <code class="font-mono">{{ String(survey.id || survey.key || index).slice(0, 18) }}...</code></span>
+											<span>ID: <code class="font-mono">{{ String(survey.id || survey.key || index) }}</code></span>
 										</div>
 									</div>
 									<div class="flex items-center gap-2 text-[var(--p-text-muted-color)] shrink-0">
