@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, reactive } from "vue";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
-import type { ChoiceOptions } from "@/domain/survey/surveyTypes";
+import type { ChoiceOptionLabel, ChoiceOptions } from "@/domain/survey/surveyTypes";
 import { findDuplicateChoiceLabels } from "@/domain/survey/surveyValidator";
 
 const props = withDefaults(
@@ -28,6 +28,32 @@ const duplicates = computed(() => findDuplicateChoiceLabels(props.choiceOptions.
 function isOptionInvalid(label: string | undefined, idx: number): boolean {
 	return props.showValidation && (!label?.trim() || duplicates.value.has(idx));
 }
+
+// Rohtext je Option (nach id), damit während der Eingabe nichts (z. B. ein
+// trennendes Komma am Ende) durch das Neuformatieren aus opt.label/opt.synonyms
+// überschrieben wird.
+const rawInputByOptionId = reactive<Record<string, string>>({});
+
+function formatOptionInput(opt: ChoiceOptionLabel): string {
+	return [opt.label, ...(opt.synonyms ?? [])].join(", ");
+}
+
+function getOptionInput(opt: ChoiceOptionLabel): string {
+	return rawInputByOptionId[opt.id] ?? formatOptionInput(opt);
+}
+
+function updateOptionInput(opt: ChoiceOptionLabel, value: string | undefined): void {
+	const text = value ?? "";
+	rawInputByOptionId[opt.id] = text;
+	const parts = text.split(",").map(part => part.trim());
+	opt.label = parts[0] ?? "";
+	const synonyms = parts.slice(1).filter(part => part.length > 0);
+	if (synonyms.length > 0) {
+		opt.synonyms = synonyms;
+	} else {
+		delete opt.synonyms;
+	}
+}
 </script>
 
 <template>
@@ -45,6 +71,9 @@ function isOptionInvalid(label: string | undefined, idx: number): boolean {
 				@click="emit('add')"
 			/>
 		</div>
+		<p class="text-xs text-[var(--p-text-muted-color)]">
+			Optional Synonyme durch Komma getrennt angeben, z. B. „Orange, Apfelsine, Saftorange“. Das erste Wort ist die Option, alle weiteren sind Synonyme.
+		</p>
 
 		<ul class="space-y-2" role="list">
 			<li
@@ -61,9 +90,10 @@ function isOptionInvalid(label: string | undefined, idx: number): boolean {
 					</label>
 					<InputText
 						:id="`${idPrefix}_${optIdx}`"
-						v-model="opt.label"
+						:model-value="getOptionInput(opt)"
+						@update:model-value="value => updateOptionInput(opt, value)"
 						class="flex-1 text-sm"
-						:placeholder="`Option ${optIdx + 1}`"
+						:placeholder="`Option ${optIdx + 1}, Synonym 1, Synonym 2`"
 						:disabled="disabled"
 						:invalid="isOptionInvalid(opt.label, optIdx)"
 						:aria-invalid="isOptionInvalid(opt.label, optIdx)"
@@ -84,7 +114,7 @@ function isOptionInvalid(label: string | undefined, idx: number): boolean {
 					:id="`${idPrefix}_${optIdx}_dup`"
 					class="block ml-8 text-xs text-red-500"
 				>
-					Option {{ optIdx + 1 }} ist identisch mit Option {{ duplicates.get(optIdx)! + 1 }}.
+					Option {{ optIdx + 1 }} überschneidet sich mit Option {{ duplicates.get(optIdx)! + 1 }} (gleiches Label oder Synonym).
 				</small>
 			</li>
 		</ul>

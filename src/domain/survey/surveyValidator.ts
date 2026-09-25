@@ -15,22 +15,30 @@ export interface ValidationError {
 }
 
 /**
- * Liefert für jede doppelte Option (Index) den Index ihres ersten Vorkommens.
+ * Liefert für jede Option (Index), deren Label oder eines ihrer Synonyme bereits
+ * von einer vorherigen Option verwendet wird, den Index dieser ersten Option.
+ * So bleibt jede Bezeichnung (Label oder Synonym) über alle Optionen hinweg
+ * eindeutig - sonst wäre eine genannte Antwort nicht mehr eindeutig zuordenbar.
  * Vergleich erfolgt getrimmt und ohne Beachtung der Groß-/Kleinschreibung.
  */
 export function findDuplicateChoiceLabels(
-	labels: Array<{ label: string }>
+	labels: Array<{ label: string; synonyms?: string[] }>
 ): Map<number, number> {
 	const seen = new Map<string, number>();
 	const duplicates = new Map<number, number>();
 	labels.forEach((opt, idx) => {
-		const normalized = opt.label?.trim().toLowerCase();
-		if (!normalized) return;
-		const firstIdx = seen.get(normalized);
-		if (firstIdx !== undefined) {
-			duplicates.set(idx, firstIdx);
-		} else {
-			seen.set(normalized, idx);
+		const terms = [opt.label, ...(opt.synonyms ?? [])];
+		for (const term of terms) {
+			const normalized = term?.trim().toLowerCase();
+			if (!normalized) continue;
+			const firstIdx = seen.get(normalized);
+			if (firstIdx !== undefined) {
+				if (firstIdx !== idx && !duplicates.has(idx)) {
+					duplicates.set(idx, firstIdx);
+				}
+			} else {
+				seen.set(normalized, idx);
+			}
 		}
 	});
 	return duplicates;
@@ -161,7 +169,7 @@ export function validateQuestion(
 				if (firstIdx !== undefined) {
 					errors.push({
 						field: `${qField}.options.labels[${idx}]`,
-						message: `Option ${idx + 1} ist identisch mit Option ${firstIdx + 1}.`,
+						message: `Option ${idx + 1} überschneidet sich mit Option ${firstIdx + 1} (gleiches Label oder Synonym).`,
 						questionId: question.id,
 						fieldId: `opt_${question.id}_${idx}`
 					});

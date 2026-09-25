@@ -5,6 +5,7 @@ export type ConditionOperator = "equals" | "less_than" | "greater_than";
 export interface ChoiceOptionLabel {
 	id: string;
 	label: string;
+	synonyms?: string[];
 }
 
 export interface ChoiceOptions {
@@ -230,7 +231,8 @@ export function cloneSurveyQuestion(source: SurveyQuestion): SurveyQuestion {
 			clonedOptions = {
 				labels: source.options.labels.map(l => ({
 					id: crypto.randomUUID(),
-					label: l.label
+					label: l.label,
+					...(l.synonyms && l.synonyms.length > 0 ? { synonyms: [...l.synonyms] } : {})
 				}))
 			};
 		} else {
