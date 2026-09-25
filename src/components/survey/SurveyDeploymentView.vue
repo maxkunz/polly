@@ -122,7 +122,7 @@ const {
 		</div>
 
 		<!-- Queue Mapping (nur wenn Version in Prod deployt ist) -->
-		<div v-if="prodSnapshot !== null" class="pt-4 border-t border-[var(--p-content-border-color)]">
+		<div v-if="prodSnapshot !== null || stageSnapshot !== null" class="pt-4 border-t border-[var(--p-content-border-color)]">
 			<SurveyQueueMappingForm
 				:surveyId="surveyId"
 				:datatableId="datatableId"

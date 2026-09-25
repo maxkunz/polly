@@ -103,7 +103,7 @@ function handleSave(): void {
 					<div class="flex items-center gap-2">
 						<i class="pi pi-sliders-h text-[var(--p-primary-color)] text-lg" aria-hidden="true" />
 						<h3 id="queue-mapping-heading" class="text-base font-semibold text-[var(--p-text-color)]">
-							Queue Mapping (Prod)
+							Queue Mapping
 						</h3>
 					</div>
 					<div v-if="surveyMappings.length > 0" class="flex items-center gap-1.5">

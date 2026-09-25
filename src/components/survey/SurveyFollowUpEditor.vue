@@ -82,7 +82,7 @@ function confirmDelete() {
 				severity="danger"
 				variant="text"
 				icon="pi pi-trash"
-				label="Entfernen"
+				label="Löschen"
 				:aria-label="`Folgefrage ${index + 1} löschen`"
 				:disabled="disabled"
 				@click="confirmDelete"
