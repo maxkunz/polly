@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { toRef } from "vue";
+import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import Button from "primevue/button";
 import type { SurveyQuestion } from "@/domain/survey/surveyTypes";
@@ -45,6 +46,8 @@ const {
 	addChoiceOption,
 	removeChoiceOption
 } = useQuestionTypeOptions(toRef(() => props.question));
+
+const { t } = useI18n();
 </script>
 
 <template>
@@ -97,19 +100,19 @@ const {
 					<div class="flex items-center justify-between mb-3">
 						<div>
 							<h4 class="text-xs font-bold uppercase tracking-wider text-[var(--p-text-muted-color)]">
-								Bedingte Folgefragen ({{ question.follow_ups?.length ?? 0 }})
+								{{ t("surveyQuestion.followUps.title", { count: question.follow_ups?.length ?? 0 }) }}
 							</h4>
 							<span class="text-[11px] text-[var(--p-text-muted-color)]">
-								Wird nur angezeigt, wenn die definierte Antwortbedingung erfüllt ist.
+								{{ t("surveyQuestion.followUps.hint") }}
 							</span>
 						</div>
 						<Button
 							size="small"
 							severity="secondary"
 							icon="pi pi-plus"
-							label="Folgefrage hinzufügen"
+							:label="t('surveyQuestion.followUps.add')"
 							:disabled="disabled || !canAddQuestion"
-							:aria-label="`Folgefrage zu Frage ${index + 1} hinzufügen`"
+							:aria-label="t('surveyQuestion.followUps.addAriaLabel', { number: index + 1 })"
 							@click="emit('add-follow-up')"
 						/>
 					</div>

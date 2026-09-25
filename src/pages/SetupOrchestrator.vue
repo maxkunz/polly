@@ -3,13 +3,13 @@
     <div class="header-hero">
       <img src="@/assets/logo-icon.png" alt="Logo" class="hero-logo" />
       <div class="hero-content">
-        <h1>Setup</h1>
+        <h1>{{ t("setup.heroTitle") }}</h1>
       </div>
     </div>
 
     <div class="provisioning-container">
       <div v-if="showLogs" class="log-container shadow-soft">
-        <div class="log-header">Deployment Logs</div>
+        <div class="log-header">{{ t("setup.logHeader") }}</div>
 
         <div class="log-content">
           <div v-for="(log, i) in logs" :key="i" class="log-line" :class="{ 'err-text': log.toLowerCase().includes('error') }">
@@ -18,31 +18,31 @@
         </div>
 
         <div class="log-actions">
-          <Button v-if="setupComplete" label="App starten" @click="startApp" />
-          <Button v-if="hasError && !isWorking" label="Zurück zur Konfiguration" severity="secondary" @click="goBackToConfig" />
+          <Button v-if="setupComplete" :label="t('setup.startApp')" @click="startApp" />
+          <Button v-if="hasError && !isWorking" :label="t('setup.backToConfig')" severity="secondary" @click="goBackToConfig" />
         </div>
       </div>
 
       <div v-else class="input-card shadow-soft scroll-card">
         <Stepper v-model:value="activeStep" linear class="setup-stepper">
           <StepList class="setup-step-list">
-            <Step value="1">Installation</Step>
-            <Step value="2">Zusammenfassung</Step>
+            <Step value="1">{{ t("setup.steps.installation") }}</Step>
+            <Step value="2">{{ t("setup.steps.summary") }}</Step>
           </StepList>
 
           <StepPanels>
             <StepPanel v-slot="{ activateCallback }" value="1">
               <div class="step-header">
-                <h2 class="step-title">Installation</h2>
-                <p class="step-desc">Wähle App-Integration, Frontend-OAuth und die Ziel-Division für die Installation.</p>
+                <h2 class="step-title">{{ t("setup.step1.title") }}</h2>
+                <p class="step-desc">{{ t("setup.step1.description") }}</p>
               </div>
 
               <div class="form-grid">
                 <div class="form-section">
-                  <label class="section-label">Project Tag</label>
+                  <label class="section-label">{{ t("setup.step1.projectTag") }}</label>
                   <InputText
                     v-model="projectName"
-                    placeholder="e.g. survey_app"
+                    :placeholder="t('setup.step1.projectTagPlaceholder')"
                     :disabled="isWorking"
                     class="full-width-input"
                     @input="onProjectTagInput"
@@ -50,13 +50,13 @@
                 </div>
 
                 <div class="form-section">
-                  <label class="section-label">Integration</label>
+                  <label class="section-label">{{ t("setup.step1.integration") }}</label>
                   <Select
                     v-model="selectedIntegrationId"
                     :options="allIntegrations"
                     optionLabel="name"
                     optionValue="id"
-                    placeholder="Select an integration"
+                    :placeholder="t('setup.step1.integrationPlaceholder')"
                     :disabled="isWorking"
                     filter
                     class="full-width-input"
@@ -64,13 +64,13 @@
                 </div>
 
                 <div class="form-section">
-                  <label class="section-label">OAuth Client</label>
+                  <label class="section-label">{{ t("setup.step1.oauthClient") }}</label>
                   <Select
                     v-model="selectedOAuthId"
                     :options="allOAuths"
                     optionLabel="name"
                     optionValue="id"
-                    placeholder="Select an OAuth client"
+                    :placeholder="t('setup.step1.oauthClientPlaceholder')"
                     :disabled="isWorking"
                     filter
                     class="full-width-input"
@@ -78,11 +78,11 @@
                 </div>
 
                 <div class="form-section">
-                  <label class="section-label">Division</label>
+                  <label class="section-label">{{ t("setup.step1.division") }}</label>
                   <div class="toggle-row">
                     <ToggleSwitch v-model="useExistingDivision" @change="handleDivisionToggle" />
                     <span class="toggle-text">
-                      {{ useExistingDivision ? "Bestehende Division verwenden" : "Neue Division erzeugen" }}
+                      {{ useExistingDivision ? t("setup.step1.useExistingDivision") : t("setup.step1.createNewDivision") }}
                     </span>
                   </div>
 
@@ -92,7 +92,7 @@
                       :options="allDivisions"
                       optionLabel="name"
                       optionValue="id"
-                      placeholder="Select a division"
+                      :placeholder="t('setup.step1.divisionPlaceholder')"
                       :disabled="isWorking"
                       filter
                       class="full-width-input"
@@ -103,41 +103,41 @@
 
               <div class="step-actions">
                 <span />
-                <Button label="Weiter" :disabled="!canNext" @click="activateCallback('2')" />
+                <Button :label="t('setup.step1.next')" :disabled="!canNext" @click="activateCallback('2')" />
               </div>
             </StepPanel>
 
             <StepPanel v-slot="{ activateCallback }" value="2">
               <div class="step-header">
-                <h2 class="step-title">Zusammenfassung</h2>
-                <p class="step-desc">Es werden eine Data Table, ein Backend OAuth Client und eine Data Action für die Bewertungsantworten angelegt.</p>
+                <h2 class="step-title">{{ t("setup.step2.title") }}</h2>
+                <p class="step-desc">{{ t("setup.step2.description") }}</p>
               </div>
 
               <div class="summary-grid">
                 <div class="summary-card">
-                  <div class="summary-title">Project</div>
+                  <div class="summary-title">{{ t("setup.step2.project") }}</div>
                   <div class="summary-value">{{ projectName || "-" }}</div>
                 </div>
 
                 <div class="summary-card">
-                  <div class="summary-title">App Integration</div>
+                  <div class="summary-title">{{ t("setup.step2.appIntegration") }}</div>
                   <div class="summary-value">{{ selectedIntegrationName || "-" }}</div>
                 </div>
 
                 <div class="summary-card">
-                  <div class="summary-title">OAuth Client</div>
+                  <div class="summary-title">{{ t("setup.step2.oauthClient") }}</div>
                   <div class="summary-value">{{ selectedOAuthName || "-" }}</div>
                 </div>
 
                 <div class="summary-card">
-                  <div class="summary-title">Division</div>
+                  <div class="summary-title">{{ t("setup.step2.division") }}</div>
                   <div class="summary-value">{{ divisionSummary }}</div>
                 </div>
               </div>
 
               <div class="step-actions">
-                <Button label="Zurück" severity="secondary" @click="activateCallback('1')" />
-                <Button label="Installation starten" :disabled="isWorking || !canStart" @click="handleStart" />
+                <Button :label="t('setup.step2.back')" severity="secondary" @click="activateCallback('1')" />
+                <Button :label="t('setup.step2.start')" :disabled="isWorking || !canStart" @click="handleStart" />
               </div>
             </StepPanel>
           </StepPanels>
@@ -151,6 +151,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useToast } from "primevue/usetoast";
 import Stepper from "primevue/stepper";
 import StepList from "primevue/steplist";
@@ -170,6 +171,7 @@ import { useAppStore } from "@/stores/appStore";
 
 const app = useAppStore();
 const toast = useToast();
+const { t } = useI18n();
 
 const projectName = ref("");
 const isWorking = ref(false);
@@ -211,7 +213,7 @@ const selectedDivisionName = computed(() => {
 });
 
 const divisionSummary = computed(() => {
-  return useExistingDivision.value ? selectedDivisionName.value || "-" : `Neu: ${projectName.value || "-" }_division`;
+  return useExistingDivision.value ? selectedDivisionName.value || "-" : t("setup.step2.newDivision", { name: projectName.value || "-" });
 });
 
 function handleDivisionToggle() {
@@ -271,8 +273,8 @@ async function handleStart() {
 
     toast.add({
       severity: "success",
-      summary: "Erfolg",
-      detail: "Setup abgeschlossen.",
+      summary: t("setup.toast.successSummary"),
+      detail: t("setup.toast.successDetail"),
       life: 3000,
     });
   } catch (err) {
@@ -281,8 +283,8 @@ async function handleStart() {
     logs.value.push("--ERROR-- Setup failed.");
     toast.add({
       severity: "error",
-      summary: "Fehler",
-      detail: "Setup fehlgeschlagen. Bitte Logs prüfen.",
+      summary: t("setup.toast.errorSummary"),
+      detail: t("setup.toast.errorDetail"),
       life: 5000,
     });
   } finally {

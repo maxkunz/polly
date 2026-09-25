@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import Tag from "primevue/tag";
 import type { Survey } from "@/domain/survey/surveyTypes";
+import { currentLocaleTag } from "@/i18n";
 
 const props = withDefaults(
 	defineProps<{
@@ -11,9 +13,11 @@ const props = withDefaults(
 	{ severity: "secondary" }
 );
 
+const { t } = useI18n();
+
 function formatDate(iso?: string): string {
 	if (!iso) return "–";
-	return new Date(iso).toLocaleString("de-DE", {
+	return new Date(iso).toLocaleString(currentLocaleTag(), {
 		day: "2-digit",
 		month: "2-digit",
 		year: "numeric",
@@ -37,7 +41,7 @@ function formatDate(iso?: string): string {
 
 		<template v-if="props.survey">
 			<div class="font-semibold text-sm text-[var(--p-text-color)] truncate">
-				{{ survey!.title || survey!.name || "Unbenannte Umfrage" }}
+				{{ survey!.title || survey!.name || t("deployment.unnamedSurvey") }}
 			</div>
 			<div class="flex items-center gap-2 flex-wrap">
 				<Tag :value="`v${survey!.version ?? 1}`" severity="info" />

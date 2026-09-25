@@ -1,6 +1,7 @@
 import { ref, nextTick, type Ref } from "vue";
 import { useToast } from "primevue/usetoast";
 import { useConfirm } from "primevue/useconfirm";
+import { useI18n } from "vue-i18n";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey } from "@/services/surveyService";
@@ -30,6 +31,7 @@ export interface SurveySaveActionsOptions {
 export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const toast = useToast();
 	const confirm = useConfirm();
+	const { t } = useI18n();
 
 	const isSaving = ref<boolean>(false);
 	const isDeleting = ref<boolean>(false);
@@ -41,10 +43,10 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			const errors = options.validationErrors.value;
 			toast.add({
 				severity: "error",
-				summary: "Validierungsfehler",
+				summary: t("surveyEditor.save.validationErrorSummary"),
 				detail: errors.length === 1
 					? errors[0].message
-					: "Bitte beheben Sie die markierten Fehler vor dem Speichern.",
+					: t("surveyEditor.save.validationErrorFallback"),
 				life: 5000
 			});
 
@@ -90,8 +92,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 
 			toast.add({
 				severity: "success",
-				summary: "Erfolgreich gespeichert",
-				detail: `Umfrage „${updated.title}“ wurde in der Data Table aktualisiert.`,
+				summary: t("surveyEditor.save.successSummary"),
+				detail: t("surveyEditor.save.successDetail", { title: updated.title }),
 				life: 3500
 			});
 
@@ -104,8 +106,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			console.error("Save survey error:", err);
 			toast.add({
 				severity: "error",
-				summary: "Speicherfehler",
-				detail: err?.message || "Fehler beim Speichern der Umfrage in der Data Table.",
+				summary: t("surveyEditor.save.errorSummary"),
+				detail: err?.message || t("surveyEditor.save.errorFallback"),
 				life: 5000
 			});
 		} finally {
@@ -117,11 +119,11 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 		if (!options.isDirty.value) return;
 
 		confirm.require({
-			header: "Änderungen verwerfen",
-			message: "Möchten Sie alle nicht gespeicherten Änderungen wirklich verwerfen?",
+			header: t("surveyEditor.discardConfirm.header"),
+			message: t("surveyEditor.discardConfirm.message"),
 			icon: "pi pi-exclamation-triangle",
-			acceptLabel: "Ja, verwerfen",
-			rejectLabel: "Abbrechen",
+			acceptLabel: t("surveyEditor.discardConfirm.acceptLabel"),
+			rejectLabel: t("surveyEditor.discardConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
 			accept: () => {
 				options.reset();
@@ -131,8 +133,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				}
 				toast.add({
 					severity: "info",
-					summary: "Zurückgesetzt",
-					detail: "Änderungen wurden verworfen.",
+					summary: t("surveyEditor.discardConfirm.toastSummary"),
+					detail: t("surveyEditor.discardConfirm.toastDetail"),
 					life: 2500
 				});
 			}
@@ -142,11 +144,11 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	function handleDelete() {
 		const title = options.draftSurvey.value?.title || options.surveyId;
 		confirm.require({
-			header: "Umfrage löschen",
-			message: `Möchten Sie die Umfrage „${title}“ wirklich unwiderruflich löschen?`,
+			header: t("surveyEditor.deleteConfirm.header"),
+			message: t("surveyEditor.deleteConfirm.message", { title }),
 			icon: "pi pi-exclamation-triangle",
-			acceptLabel: "Ja, löschen",
-			rejectLabel: "Abbrechen",
+			acceptLabel: t("surveyEditor.deleteConfirm.acceptLabel"),
+			rejectLabel: t("surveyEditor.deleteConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
 			accept: async () => {
 				isDeleting.value = true;
@@ -154,8 +156,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 					await deleteSurvey(options.datatableId, options.surveyId);
 					toast.add({
 						severity: "success",
-						summary: "Umfrage gelöscht",
-						detail: `Die Umfrage „${title}“ wurde erfolgreich gelöscht.`,
+						summary: t("surveyEditor.deleteConfirm.successSummary"),
+						detail: t("surveyEditor.deleteConfirm.successDetail", { title }),
 						life: 3500
 					});
 					if (options.onDeleted) {
@@ -166,8 +168,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 					console.error("Delete survey error:", err);
 					toast.add({
 						severity: "error",
-						summary: "Fehler beim Löschen",
-						detail: err?.message || "Fehler beim Löschen der Umfrage aus der Data Table.",
+						summary: t("surveyEditor.deleteConfirm.errorSummary"),
+						detail: err?.message || t("surveyEditor.deleteConfirm.errorFallback"),
 						life: 5000
 					});
 				} finally {

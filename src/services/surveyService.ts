@@ -5,6 +5,7 @@ import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/
 import { useAppStore } from "@/stores/appStore";
 import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
+import { i18n } from "@/i18n";
 
 async function resolveDataTableId(datatableId?: string): Promise<string> {
 	if (datatableId && datatableId.trim()) {
@@ -33,7 +34,7 @@ export async function fetchSurveyDetail(
 	const row = await OneRowDataTable(resolvedTableId, rowKey);
 
 	if (!row) {
-		throw new Error(`Keine Zeile für '${rowKey}' in der Data Table gefunden.`);
+		throw new Error(i18n.global.t("surveys.detail.rowNotFound", { key: rowKey }));
 	}
 
 	const rawDraft = row.Draft ?? row.draft;

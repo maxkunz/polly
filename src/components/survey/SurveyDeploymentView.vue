@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import Message from "primevue/message";
 import type { Survey } from "@/domain/survey/surveyTypes";
@@ -18,6 +19,8 @@ const emit = defineEmits<{
 	(e: "back"): void;
 	(e: "update:isDirty", isDirty: boolean): void;
 }>();
+
+const { t } = useI18n();
 
 const isQueueMappingDirty = ref<boolean>(false);
 watch(
@@ -66,8 +69,8 @@ const {
 					severity="secondary"
 					variant="text"
 					icon="pi pi-arrow-left"
-					label="Zurück zum Editor"
-					aria-label="Zurück zum Editor"
+					:label="t('deployment.back')"
+					:aria-label="t('deployment.backAriaLabel')"
 					@click="emit('back')"
 				/>
 				<h2 class="text-base font-semibold text-[var(--p-text-color)]">
@@ -84,39 +87,39 @@ const {
 
 		<!-- Environment Status Grid -->
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-			<SurveyDeploymentStatus label="Stage" :survey="stageSnapshot" severity="warn" />
-			<SurveyDeploymentStatus label="Prod" :survey="prodSnapshot" severity="success" />
-			<SurveyDeploymentStatus label="Backup" :survey="backupSnapshot" severity="secondary" />
+			<SurveyDeploymentStatus :label="t('deployment.stage')" :survey="stageSnapshot" severity="warn" />
+			<SurveyDeploymentStatus :label="t('deployment.prod')" :survey="prodSnapshot" severity="success" />
+			<SurveyDeploymentStatus :label="t('deployment.backup')" :survey="backupSnapshot" severity="secondary" />
 		</div>
 
 		<!-- Actions -->
 		<div class="flex flex-wrap gap-3 pt-2">
 			<Button
 				icon="pi pi-send"
-				label="Stage deployen"
+				:label="t('deployment.deployStage')"
 				severity="primary"
 				:loading="isDeploying"
 				:disabled="isDeploying"
-				aria-label="Draft auf Stage deployen"
+				:aria-label="t('deployment.deployStageAriaLabel')"
 				@click="deployToStage"
 			/>
 			<Button
 				icon="pi pi-cloud-upload"
-				label="Prod deployen"
+				:label="t('deployment.deployProd')"
 				severity="warn"
 				:loading="isDeploying"
 				:disabled="isDeploying"
-				aria-label="Draft auf Prod deployen"
+				:aria-label="t('deployment.deployProdAriaLabel')"
 				@click="deployToProd"
 			/>
 			<Button
 				icon="pi pi-history"
-				label="Rollback"
+				:label="t('deployment.rollback')"
 				severity="danger"
 				variant="outlined"
 				:loading="isDeploying"
 				:disabled="isDeploying || !backupSnapshot"
-				aria-label="Letze Version auf Prod zurückspielen"
+				:aria-label="t('deployment.rollbackAriaLabel')"
 				@click="rollback"
 			/>
 		</div>

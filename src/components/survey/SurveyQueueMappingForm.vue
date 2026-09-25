@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import SelectButton from "primevue/selectbutton";
 import Textarea from "primevue/textarea";
@@ -22,6 +23,7 @@ const emit = defineEmits<{
 
 const confirm = useConfirm();
 const toast = useToast();
+const { t } = useI18n();
 
 const deliveryRateOptions = [25, 50, 75, 100];
 
@@ -65,8 +67,8 @@ async function performSave(): Promise<void> {
 	if (success) {
 		toast.add({
 			severity: "success",
-			summary: "Queue Mapping gespeichert",
-			detail: "Die Queue-Zuordnungen wurden erfolgreich in der Data Table aktualisiert.",
+			summary: t("queueMapping.toast.savedSummary"),
+			detail: t("queueMapping.toast.savedDetail"),
 			life: 3500
 		});
 	}
@@ -75,15 +77,15 @@ async function performSave(): Promise<void> {
 function handleSave(): void {
 	if (activeConflicts.value.length > 0) {
 		const conflictList = activeConflicts.value
-			.map(c => `• ${c.queueName} (Umfrage ID: ${c.surveyId})`)
+			.map(c => t("queueMapping.overwriteConfirm.listItem", { queueName: c.queueName, surveyId: c.surveyId }))
 			.join("\n");
 
 		confirm.require({
-			header: "Bestehende Zuordnungen überschreiben?",
-			message: `Die folgenden Queues sind aktuell bereits einer anderen Umfrage zugeordnet:\n\n${conflictList}\n\nMöchten Sie diese Zuordnungen wirklich auf die aktuelle Umfrage übertragen und die bestehenden überschreiben?`,
+			header: t("queueMapping.overwriteConfirm.header"),
+			message: t("queueMapping.overwriteConfirm.message", { list: conflictList }),
 			icon: "pi pi-exclamation-triangle",
-			acceptLabel: "Ja, überschreiben",
-			rejectLabel: "Abbrechen",
+			acceptLabel: t("queueMapping.overwriteConfirm.acceptLabel"),
+			rejectLabel: t("queueMapping.overwriteConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
 			accept: async () => {
 				await performSave();
@@ -103,17 +105,17 @@ function handleSave(): void {
 					<div class="flex items-center gap-2">
 						<i class="pi pi-sliders-h text-[var(--p-primary-color)] text-lg" aria-hidden="true" />
 						<h3 id="queue-mapping-heading" class="text-base font-semibold text-[var(--p-text-color)]">
-							Queue Mapping
+							{{ t("queueMapping.title") }}
 						</h3>
 					</div>
 					<div v-if="surveyMappings.length > 0" class="flex items-center gap-1.5">
 						<Tag
 							severity="info"
-							:value="`${surveyMappings.length} ${surveyMappings.length === 1 ? 'Queue' : 'Queues'} zugeordnet`"
+							:value="t('queueMapping.queueCount', surveyMappings.length)"
 						/>
 						<Tag
 							severity="secondary"
-							:value="`${surveyMappings[0]?.deliveryRate ?? deliveryRate}% Rate`"
+							:value="t('queueMapping.rate', { rate: surveyMappings[0]?.deliveryRate ?? deliveryRate })"
 						/>
 					</div>
 				</div>
@@ -129,7 +131,7 @@ function handleSave(): void {
 				>
 					<ProgressSpinner style="width: 32px; height: 32px" strokeWidth="4" />
 					<span class="text-sm font-medium text-[var(--p-text-muted-color)]">
-						Lade Queue-Mapping...
+						{{ t("queueMapping.loading") }}
 					</span>
 				</div>
 
@@ -142,7 +144,7 @@ function handleSave(): void {
 						size="small"
 						severity="secondary"
 						icon="pi pi-refresh"
-						label="Erneut versuchen"
+						:label="t('queueMapping.retry')"
 						@click="load"
 					/>
 				</div>
@@ -151,7 +153,7 @@ function handleSave(): void {
 				<form v-else class="space-y-6" @submit.prevent="handleSave">
 					<!-- Description / Intro -->
 					<p class="text-sm text-[var(--p-text-muted-color)] leading-relaxed">
-						Legen Sie fest, welchen Queues diese Umfrage nach Anrufende zugeordnet ist und mit welcher Wahrscheinlichkeit (Delivery Rate) sie ausgeliefert werden soll.
+						{{ t("queueMapping.intro") }}
 					</p>
 
 					<!-- Save Error -->
@@ -163,7 +165,7 @@ function handleSave(): void {
 					<div class="space-y-2 bg-[var(--p-surface-50)] dark:bg-[var(--p-surface-800)] p-4 rounded-xl border border-[var(--p-content-border-color)]">
 						<div class="flex items-center justify-between">
 							<label for="queue-delivery-rate-select" class="text-sm font-medium text-[var(--p-text-color)]">
-								Auslieferungswahrscheinlichkeit (Delivery Rate)
+								{{ t("queueMapping.deliveryRateLabel") }}
 							</label>
 							<span class="text-sm font-semibold font-mono px-2.5 py-0.5 rounded bg-[var(--p-primary-color)] text-white">
 								{{ deliveryRate }} %
@@ -176,7 +178,7 @@ function handleSave(): void {
 								:options="deliveryRateOptions"
 								:allowEmpty="false"
 								class="w-full"
-								aria-label="Auslieferungswahrscheinlichkeit in Prozent"
+								:aria-label="t('queueMapping.deliveryRateAriaLabel')"
 							>
 								<template #option="{ option }">
 									{{ option }} %
@@ -189,10 +191,10 @@ function handleSave(): void {
 					<div class="space-y-1.5">
 						<div class="flex items-center justify-between">
 							<label for="queue-names-input" class="text-sm font-medium text-[var(--p-text-color)]">
-								Queues (eine Queue pro Zeile)
+								{{ t("queueMapping.queuesLabel") }}
 							</label>
 							<span v-if="parsedQueues.length > 0" class="text-xs text-[var(--p-text-muted-color)] font-mono">
-								{{ parsedQueues.length }} {{ parsedQueues.length === 1 ? 'Eintrag' : 'Einträge' }}
+								{{ t("queueMapping.entriesCount", parsedQueues.length) }}
 							</span>
 						</div>
 						<Textarea
@@ -205,7 +207,7 @@ function handleSave(): void {
 							aria-describedby="queue-names-hint"
 						/>
 						<p id="queue-names-hint" class="text-xs text-[var(--p-text-muted-color)]">
-							Geben Sie die genauen Queue-Namen zeilenweise ein. Um das Mapping für diese Umfrage vollständig zu entfernen, leeren Sie das Textfeld und speichern Sie.
+							{{ t("queueMapping.queuesHint") }}
 						</p>
 					</div>
 
@@ -213,15 +215,15 @@ function handleSave(): void {
 					<Message v-if="activeConflicts.length > 0" severity="warn" :closable="false">
 						<div class="space-y-1">
 							<div class="font-medium text-sm">
-								Hinweis: {{ activeConflicts.length }} {{ activeConflicts.length === 1 ? 'Queue ist' : 'Queues sind' }} bereits einer anderen Umfrage zugeordnet:
+								{{ t("queueMapping.conflictHint", activeConflicts.length) }}
 							</div>
 							<ul class="text-xs list-disc list-inside space-y-0.5 opacity-90">
 								<li v-for="c in activeConflicts" :key="c.queueName">
-									<strong>{{ c.queueName }}</strong> (aktuelle Umfrage ID: <code class="font-mono">{{ c.surveyId }}</code>)
+									<strong>{{ c.queueName }}</strong> ({{ t("queueMapping.conflictSurveyId", { id: c.surveyId }) }})
 								</li>
 							</ul>
 							<div class="text-xs pt-1">
-								Beim Speichern werden Sie zur Bestätigung aufgefordert, bevor die bestehende Zuordnung überschrieben wird.
+								{{ t("queueMapping.conflictFooter") }}
 							</div>
 						</div>
 					</Message>
@@ -231,17 +233,17 @@ function handleSave(): void {
 						<Button
 							type="submit"
 							icon="pi pi-save"
-							label="Queue Mapping speichern"
+							:label="t('queueMapping.save')"
 							severity="primary"
 							:loading="isSaving"
 							:disabled="isSaving"
-							aria-label="Queue Mapping speichern"
+							:aria-label="t('queueMapping.save')"
 						/>
 						<Button
 							v-if="isDirty"
 							type="button"
 							icon="pi pi-undo"
-							label="Änderungen zurücksetzen"
+							:label="t('queueMapping.reset')"
 							severity="secondary"
 							variant="text"
 							size="small"

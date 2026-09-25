@@ -6,6 +6,7 @@ import type {
 	ConditionOperator
 } from "./surveyTypes";
 import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
+import { i18n } from "@/i18n";
 
 export interface ValidationError {
 	field: string;
@@ -105,13 +106,14 @@ export function validateQuestion(
 	question: SurveyQuestion,
 	prefix = ""
 ): ValidationError[] {
+	const { t } = i18n.global;
 	const errors: ValidationError[] = [];
 	const qField = prefix ? `${prefix}.${question.id}` : question.id;
 
 	if (!question.title || !question.title.trim()) {
 		errors.push({
 			field: `${qField}.title`,
-			message: "Fragetitel darf nicht leer sein.",
+			message: t("validation.questionTitleRequired"),
 			questionId: question.id,
 			fieldId: `q_title_${question.id}`
 		});
@@ -120,7 +122,7 @@ export function validateQuestion(
 	if (!question.name || !question.name.trim()) {
 		errors.push({
 			field: `${qField}.name`,
-			message: "Name der Frage darf nicht leer sein.",
+			message: t("validation.questionNameRequired"),
 			questionId: question.id,
 			fieldId: `q_name_${question.id}`
 		});
@@ -130,7 +132,7 @@ export function validateQuestion(
 		if (!isRatingOptions(question.options)) {
 			errors.push({
 				field: `${qField}.options`,
-				message: "Bewertungsoptionen sind ungültig.",
+				message: t("validation.ratingOptionsInvalid"),
 				questionId: question.id
 			});
 		} else {
@@ -138,7 +140,7 @@ export function validateQuestion(
 			if (min_value < 0 || min_value > 8) {
 				errors.push({
 					field: `${qField}.options.min_value`,
-					message: "Minimalwert muss zwischen 0 und 8 liegen.",
+					message: t("validation.ratingMinRange"),
 					questionId: question.id,
 					fieldId: `q_rating_min_${question.id}`
 				});
@@ -146,7 +148,7 @@ export function validateQuestion(
 			if (max_value < 0 || max_value > 8) {
 				errors.push({
 					field: `${qField}.options.max_value`,
-					message: "Maximalwert muss zwischen 0 und 8 liegen.",
+					message: t("validation.ratingMaxRange"),
 					questionId: question.id,
 					fieldId: `q_rating_max_${question.id}`
 				});
@@ -154,7 +156,7 @@ export function validateQuestion(
 			if (min_value >= max_value) {
 				errors.push({
 					field: `${qField}.options.range`,
-					message: "Minimalwert muss kleiner als der Maximalwert sein.",
+					message: t("validation.ratingMinLessThanMax"),
 					questionId: question.id,
 					fieldId: `q_rating_min_${question.id}`
 				});
@@ -164,7 +166,7 @@ export function validateQuestion(
 		if (!isChoiceOptions(question.options)) {
 			errors.push({
 				field: `${qField}.options`,
-				message: "Auswahloptionen sind ungültig.",
+				message: t("validation.choiceOptionsInvalid"),
 				questionId: question.id
 			});
 		} else {
@@ -172,14 +174,14 @@ export function validateQuestion(
 			if (labels.length < 2) {
 				errors.push({
 					field: `${qField}.options.labels`,
-					message: "Eine Auswahlabfrage benötigt mindestens 2 Optionen.",
+					message: t("validation.choiceMinOptions"),
 					questionId: question.id
 				});
 			}
 			if (labels.length > 5) {
 				errors.push({
 					field: `${qField}.options.labels`,
-					message: "Eine Auswahlabfrage darf maximal 5 Optionen haben.",
+					message: t("validation.choiceMaxOptions"),
 					questionId: question.id
 				});
 			}
@@ -188,7 +190,7 @@ export function validateQuestion(
 				if (!opt.label || !opt.label.trim()) {
 					errors.push({
 						field: `${qField}.options.labels[${idx}]`,
-						message: `Option ${idx + 1} darf nicht leer sein.`,
+						message: t("validation.choiceOptionEmpty", { number: idx + 1 }),
 						questionId: question.id,
 						fieldId: `opt_${question.id}_${idx}`
 					});
@@ -198,7 +200,7 @@ export function validateQuestion(
 				if (firstIdx !== undefined) {
 					errors.push({
 						field: `${qField}.options.labels[${idx}]`,
-						message: `Option ${idx + 1} überschneidet sich mit Option ${firstIdx + 1} (gleiches Label oder Synonym).`,
+						message: t("validation.choiceOptionDuplicate", { number: idx + 1, otherNumber: firstIdx + 1 }),
 						questionId: question.id,
 						fieldId: `opt_${question.id}_${idx}`
 					});
@@ -215,7 +217,7 @@ export function validateQuestion(
 			if (!fu.question) {
 				errors.push({
 					field: `${qField}.follow_ups[${fuIdx}]`,
-					message: "Folgefrage fehlt.",
+					message: t("validation.followUpMissing"),
 					questionId: question.id
 				});
 			} else {
@@ -223,7 +225,7 @@ export function validateQuestion(
 				if (firstIdx !== undefined) {
 					errors.push({
 						field: `${qField}.follow_ups[${fuIdx}].condition.operator`,
-						message: `Der Komparator "${fu.condition?.operator}" wird bereits von Folgefrage ${firstIdx + 1} verwendet. Jeder Komparator darf nur einmal verwendet werden.`,
+						message: t("validation.followUpOperatorDuplicate", { operator: fu.condition?.operator, number: firstIdx + 1 }),
 						questionId: question.id,
 						fieldId: `fu_cond_op_${question.id}_${fuIdx}`
 					});
@@ -232,7 +234,7 @@ export function validateQuestion(
 				if (firstValueIdx !== undefined) {
 					errors.push({
 						field: `${qField}.follow_ups[${fuIdx}].condition.value`,
-						message: `Diese Auswahloption wird bereits von Folgefrage ${firstValueIdx + 1} verwendet. Jede Option darf nur eine Folgefrage haben.`,
+						message: t("validation.followUpChoiceValueDuplicate", { number: firstValueIdx + 1 }),
 						questionId: question.id,
 						fieldId: `fu_cond_val_${question.id}_${fuIdx}`
 					});
@@ -251,12 +253,13 @@ export function validateQuestion(
 }
 
 export function validateSurvey(survey: Survey): ValidationError[] {
+	const { t } = i18n.global;
 	const errors: ValidationError[] = [];
 
 	if (!survey.title || !survey.title.trim()) {
 		errors.push({
 			field: "survey.title",
-			message: "Der Titel der Umfrage darf nicht leer sein.",
+			message: t("validation.surveyTitleRequired"),
 			fieldId: "survey_title_input"
 		});
 	}
@@ -264,7 +267,7 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 	if (!survey.name || !survey.name.trim()) {
 		errors.push({
 			field: "survey.name",
-			message: "Der Name der Umfrage darf nicht leer sein.",
+			message: t("validation.surveyNameRequired"),
 			fieldId: "survey_name_input"
 		});
 	}
@@ -274,14 +277,14 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 	if (totalQuestions < 1) {
 		errors.push({
 			field: "survey.questions",
-			message: "Eine Umfrage muss mindestens 1 Frage enthalten."
+			message: t("validation.surveyMinQuestions")
 		});
 	}
 
 	if (totalQuestions > 20) {
 		errors.push({
 			field: "survey.questions",
-			message: `Eine Umfrage darf maximal 20 Fragen enthalten (inkl. Folgefragen). Aktuell: ${totalQuestions}.`
+			message: t("validation.surveyMaxQuestions", { count: totalQuestions })
 		});
 	}
 

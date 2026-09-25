@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 
 import Card from "primevue/card";
 import Button from "primevue/button";
+import Select from "primevue/select";
 
 import PageHeader from "@/components/layout/PageHeader.vue";
 import { useAppStore } from "@/stores/appStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
+import { setLocale, type SupportedLocale } from "@/i18n";
 
 const app = useAppStore();
 const router = useRouter();
+const { t, locale } = useI18n();
 const { selectModules } = moduleRegistry();
 
 const moduleMeta = computed(() => selectModules({ keys: ["settings"] })[0]);
@@ -21,6 +25,16 @@ usePageControlBar("settings", () => ({
 	actions: []
 }));
 
+const languageOptions = computed(() => [
+	{ label: t("language.de"), value: "de" as SupportedLocale },
+	{ label: t("language.en"), value: "en" as SupportedLocale }
+]);
+
+const selectedLocale = computed<SupportedLocale>({
+	get: () => locale.value as SupportedLocale,
+	set: value => setLocale(value)
+});
+
 const setup = computed(() => app.domain.meta.setup ?? null);
 
 const setupRows = computed(() => {
@@ -28,20 +42,20 @@ const setupRows = computed(() => {
 	if (!currentSetup) return [];
 
 	return [
-		{ label: "Project Tag", value: currentSetup.projectTag ?? "—" },
-		{ label: "Domain", value: currentSetup.domainName ?? "—" },
-		{ label: "Launch URL", value: currentSetup.launchUrl ?? "—" },
-		{ label: "Frontend OAuth", value: formatResource(currentSetup.oauthFrontend) },
-		{ label: "App Integration", value: formatResource(currentSetup.integrationApp) },
-		{ label: "Division", value: formatResource(currentSetup.division) },
-		{ label: "Backend Group", value: formatResource(currentSetup.backendGroup) },
-		{ label: "Backend Role", value: formatResource(currentSetup.backendRole) },
-		{ label: "Backend Auth", value: formatBackendAuth(currentSetup.backendAuth) },
-		{ label: "Backend Client", value: formatResource(currentSetup.backendClient) },
-		{ label: "Data Table", value: formatResource(currentSetup.dataTable) },
-		{ label: "Data Action Integration", value: formatResource(currentSetup.dataActionIntegration) },
-		{ label: "Data Action", value: formatResource(currentSetup.dataAction) },
-		{ label: "Installed At", value: currentSetup.installedAt ?? "—" }
+		{ label: t("settings.setup.fields.projectTag"), value: currentSetup.projectTag ?? "—" },
+		{ label: t("settings.setup.fields.domain"), value: currentSetup.domainName ?? "—" },
+		{ label: t("settings.setup.fields.launchUrl"), value: currentSetup.launchUrl ?? "—" },
+		{ label: t("settings.setup.fields.oauthFrontend"), value: formatResource(currentSetup.oauthFrontend) },
+		{ label: t("settings.setup.fields.integrationApp"), value: formatResource(currentSetup.integrationApp) },
+		{ label: t("settings.setup.fields.division"), value: formatResource(currentSetup.division) },
+		{ label: t("settings.setup.fields.backendGroup"), value: formatResource(currentSetup.backendGroup) },
+		{ label: t("settings.setup.fields.backendRole"), value: formatResource(currentSetup.backendRole) },
+		{ label: t("settings.setup.fields.backendAuth"), value: formatBackendAuth(currentSetup.backendAuth) },
+		{ label: t("settings.setup.fields.backendClient"), value: formatResource(currentSetup.backendClient) },
+		{ label: t("settings.setup.fields.dataTable"), value: formatResource(currentSetup.dataTable) },
+		{ label: t("settings.setup.fields.dataActionIntegration"), value: formatResource(currentSetup.dataActionIntegration) },
+		{ label: t("settings.setup.fields.dataAction"), value: formatResource(currentSetup.dataAction) },
+		{ label: t("settings.setup.fields.installedAt"), value: currentSetup.installedAt ?? "—" }
 	];
 });
 
@@ -79,10 +93,29 @@ function startUninstall() {
 
 		<div class="max-w-5xl mx-auto space-y-4">
 			<Card>
-				<template #title>Setup</template>
+				<template #title>{{ t("language.title") }}</template>
+				<template #content>
+					<div class="max-w-xs">
+						<label for="app-language-select" class="block text-sm font-medium mb-1">
+							{{ t("language.label") }}
+						</label>
+						<Select
+							id="app-language-select"
+							v-model="selectedLocale"
+							:options="languageOptions"
+							optionLabel="label"
+							optionValue="value"
+							class="w-full"
+						/>
+					</div>
+				</template>
+			</Card>
+
+			<Card>
+				<template #title>{{ t("settings.setup.title") }}</template>
 				<template #content>
 					<div v-if="!setup" class="text-sm text-[var(--p-text-muted-color)]">
-						No setup metadata available.
+						{{ t("settings.setup.empty") }}
 					</div>
 
 					<div v-else class="space-y-4">
@@ -101,10 +134,10 @@ function startUninstall() {
 
 						<div class="flex items-center justify-between gap-4">
 							<div class="text-sm text-[var(--p-text-muted-color)]">
-								Uninstall removes the resources stored in the setup metadata.
+								{{ t("settings.setup.uninstallHint") }}
 							</div>
 							<Button
-								label="Uninstall"
+								:label="t('settings.setup.uninstall')"
 								icon="pi pi-trash"
 								severity="danger"
 								@click="startUninstall"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import Select from "primevue/select";
 import InputNumber from "primevue/inputnumber";
 import type {
@@ -9,11 +10,13 @@ import type {
 	ConditionOperator
 } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions } from "@/domain/survey/surveyTypes";
-import { getOperatorOptions, booleanOptions } from "@/domain/survey/questionTypeCatalog";
+import { getOperatorOptions, getBooleanOptions } from "@/domain/survey/questionTypeCatalog";
 import {
 	findDuplicateFollowUpOperators,
 	findDuplicateChoiceFollowUpValues
 } from "@/domain/survey/surveyValidator";
+
+const { t } = useI18n();
 
 const props = withDefaults(
 	defineProps<{
@@ -69,7 +72,7 @@ const duplicateOperatorMessage = computed(() => {
 	);
 	const firstIdx = duplicates.get(props.index);
 	if (firstIdx === undefined) return undefined;
-	return `Der Komparator wird bereits von Folgefrage ${firstIdx + 1} verwendet.`;
+	return t("surveyCondition.operatorDuplicate", { number: firstIdx + 1 });
 });
 
 const usedChoiceValuesBySiblings = computed(() => {
@@ -86,7 +89,7 @@ const usedChoiceValuesBySiblings = computed(() => {
 const choiceOptionsList = computed(() => {
 	if (props.parentQuestion.type === "choice" && isChoiceOptions(props.parentQuestion.options)) {
 		return (props.parentQuestion.options as ChoiceOptions).labels.map(l => ({
-			label: l.label || `Option (${l.id.slice(0, 6)})`,
+			label: l.label || t("surveyCondition.unnamedOption", { id: l.id.slice(0, 6) }),
 			value: l.id,
 			disabled: usedChoiceValuesBySiblings.value.has(l.id)
 		}));
@@ -102,8 +105,10 @@ const duplicateChoiceValueMessage = computed(() => {
 	);
 	const firstIdx = duplicates.get(props.index);
 	if (firstIdx === undefined) return undefined;
-	return `Diese Option wird bereits von Folgefrage ${firstIdx + 1} verwendet.`;
+	return t("surveyCondition.choiceDuplicate", { number: firstIdx + 1 });
 });
+
+const booleanOptions = computed(() => getBooleanOptions());
 
 const conditionOpId = computed(() => `fu_cond_op_${props.parentQuestion.id}_${props.index}`);
 const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_${props.index}`);
@@ -112,13 +117,13 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 <template>
 	<div class="p-3 bg-[var(--p-surface-50)] border border-[var(--p-content-border-color)] rounded-lg space-y-3">
 		<div class="text-xs font-medium text-[var(--p-text-color)]">
-			Bedingung zur Anzeige:
+			{{ t("surveyCondition.label") }}
 		</div>
 
 		<div class="grid grid-cols-1 gap-3" :class="isChoiceParent ? '' : 'md:grid-cols-2'">
 			<div v-if="!isChoiceParent">
 				<label :for="conditionOpId" class="block text-xs font-medium mb-1">
-					Operator <span class="text-red-500" aria-hidden="true">*</span>
+					{{ t("surveyCondition.operator") }} <span class="text-red-500" aria-hidden="true">*</span>
 				</label>
 				<Select
 					:inputId="conditionOpId"
@@ -144,8 +149,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 
 			<div>
 				<label :for="conditionValueId" class="block text-xs font-medium mb-1">
-					<template v-if="isChoiceParent">Antwort entspricht Option</template>
-					<template v-else>Vergleichswert</template>
+					<template v-if="isChoiceParent">{{ t("surveyCondition.valueChoice") }}</template>
+					<template v-else>{{ t("surveyCondition.valueOther") }}</template>
 					<span class="text-red-500" aria-hidden="true">*</span>
 				</label>
 
@@ -170,7 +175,7 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 						optionLabel="label"
 						optionValue="value"
 						optionDisabled="disabled"
-						placeholder="Wähle Option..."
+						:placeholder="t('surveyCondition.choicePlaceholder')"
 						class="w-full text-xs"
 						:disabled="disabled"
 						:invalid="showValidation && !!duplicateChoiceValueMessage"

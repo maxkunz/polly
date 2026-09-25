@@ -1,17 +1,20 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import Message from "primevue/message";
 
 defineProps<{
 	show: boolean;
 	errors: Array<{ message: string; fieldId?: string }>;
 }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
 	<div v-if="show && errors.length > 0" role="alert" aria-live="assertive">
 		<Message severity="error" :closable="false">
 			<div class="space-y-1">
-				<div class="font-bold text-sm">Bitte beheben Sie folgende Fehler:</div>
+				<div class="font-bold text-sm">{{ t("validation.summaryTitle") }}</div>
 				<ul class="list-disc list-inside text-xs space-y-0.5">
 					<li v-for="(err, i) in errors" :key="i">
 						{{ err.message }}

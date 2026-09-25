@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { i18n } from "@/i18n";
 import { useAppStore } from "@/stores/appStore";
 
 export type ModuleKey = "dashboard" | "questions" | "surveys" | "settings" | "page";
@@ -48,12 +49,14 @@ export function isModuleActive(_key: ModuleKey, _moduleMask: number): boolean {
 }
 
 export function moduleRegistry() {
+	const { t } = i18n.global;
+
 	const modules = computed<ModuleDefinition[]>(() => [
 		{
 			key: "dashboard",
-			title: "Dashboard",
+			title: t("modules.dashboard.title"),
 			color: "#6B7280",
-			description: "Übersicht über die verfügbaren Module im Template.",
+			description: t("modules.dashboard.description"),
 			page: true,
 			dashboardColumn: 0,
 			routeModule: false,
@@ -62,9 +65,9 @@ export function moduleRegistry() {
 		},
 		{
 			key: "questions",
-			title: "Questions",
+			title: t("modules.questions.title"),
 			color: "#14B8A6",
-			description: "Pflege der Bewertungsfragen mit Prompt, Reprompt und numerischer Skala.",
+			description: t("modules.questions.description"),
 			page: true,
 			dashboardColumn: 1,
 			routeModule: false,
@@ -73,16 +76,16 @@ export function moduleRegistry() {
 				Object.values(useAppStore().domain.questions.all() ?? {}).map((question: any) => ({
 					key: question.id,
 					value: { type: "questions", id: question.id },
-					label: question.name?.trim() ? question.name : "Unbenannte Frage",
+					label: question.name?.trim() ? question.name : t("modules.questions.unnamedQuestion"),
 					title: question.name,
 					text: question.prompt
 				}))
 		},
 		{
 			key: "surveys",
-			title: "Umfragen",
+			title: t("modules.surveys.title"),
 			color: "#2563EB",
-			description: "Erstellung, Konfiguration und Auswertung von Umfragen.",
+			description: t("modules.surveys.description"),
 			page: true,
 			dashboardColumn: 3,
 			routeModule: false,
@@ -90,7 +93,7 @@ export function moduleRegistry() {
 			getChildren: () =>
 				(useAppStore().surveys ?? []).map((survey: any, index: number) => {
 					const surveyId = String(survey.id ?? survey.key ?? index);
-					const label = survey.title?.trim() ? survey.title : (survey.name?.trim() ? survey.name : (survey.Name?.trim() ? survey.Name : `Umfrage ${index + 1}`));
+					const label = survey.title?.trim() ? survey.title : (survey.name?.trim() ? survey.name : (survey.Name?.trim() ? survey.Name : t("modules.surveys.unnamedSurvey", { index: index + 1 })));
 					return {
 						key: surveyId,
 						value: { type: "surveys", id: surveyId },
@@ -101,9 +104,9 @@ export function moduleRegistry() {
 		},
 		{
 			key: "settings",
-			title: "Settings",
+			title: t("modules.settings.title"),
 			color: "#64748B",
-			description: "Globale Einstellungen und Setup-Metadaten.",
+			description: t("modules.settings.description"),
 			page: true,
 			dashboardColumn: 2,
 			routeModule: false,

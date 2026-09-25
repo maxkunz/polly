@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import InputText from "primevue/inputtext";
 import Textarea from "primevue/textarea";
@@ -27,6 +28,7 @@ const surveyNameId = "survey_name_input";
 const surveyDescId = "survey_desc_input";
 const surveyGreetingId = "survey_greeting_input";
 const surveyClosingId = "survey_closing_input";
+const { t } = useI18n();
 
 const computedTechnicalName = computed(() => {
 	return ensureTechnicalName(props.survey.name, props.survey.title, props.survey.id, "umfrage");
@@ -45,13 +47,13 @@ const computedTechnicalName = computed(() => {
 				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					<div class="md:col-span-8">
 						<label :for="surveyTitleId" class="block text-sm font-medium mb-1">
-							Titel der Umfrage <span class="text-red-500" aria-hidden="true">*</span>
+							{{ t("surveyEditor.meta.surveyTitle") }} <span class="text-red-500" aria-hidden="true">*</span>
 						</label>
 						<InputText
 							:id="surveyTitleId"
 							v-model="survey.title"
 							class="w-full"
-							placeholder="z. B. Kundenzufriedenheit 2026"
+							:placeholder="t('surveyEditor.meta.placeholders.title')"
 							:disabled="disabled"
 							:invalid="saveAttempted && !survey.title?.trim()"
 							:aria-invalid="saveAttempted && !survey.title?.trim()"
@@ -60,7 +62,7 @@ const computedTechnicalName = computed(() => {
 
 					<div class="md:col-span-4">
 						<label :for="surveyNameId" class="block text-xs font-medium text-[var(--p-text-muted-color)] mb-1">
-							Technischer Name (Automatisch aus Titel & ID)
+							{{ t("surveyEditor.meta.technicalName") }}
 						</label>
 						<InputText
 							:id="surveyNameId"
@@ -74,7 +76,7 @@ const computedTechnicalName = computed(() => {
 
 				<div>
 					<label :for="surveyDescId" class="block text-sm font-medium mb-1">
-						Beschreibung
+						{{ t("surveyEditor.meta.description") }}
 					</label>
 					<Textarea
 						:id="surveyDescId"
@@ -82,7 +84,7 @@ const computedTechnicalName = computed(() => {
 						class="w-full text-sm"
 						rows="2"
 						autoResize
-						placeholder="Interne Beschreibung oder Kontext zur Umfrage..."
+						:placeholder="t('surveyEditor.meta.placeholders.description')"
 						:disabled="disabled"
 					/>
 				</div>
@@ -90,7 +92,7 @@ const computedTechnicalName = computed(() => {
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<div>
 						<label :for="surveyGreetingId" class="block text-sm font-medium mb-1">
-							Begrüßungsnachricht (Greeting)
+							{{ t("surveyEditor.meta.greeting") }}
 						</label>
 						<Textarea
 							:id="surveyGreetingId"
@@ -98,14 +100,14 @@ const computedTechnicalName = computed(() => {
 							class="w-full text-sm"
 							rows="2"
 							autoResize
-							placeholder="Vielen Dank, dass Sie sich kurz Zeit nehmen..."
+							:placeholder="t('surveyEditor.meta.placeholders.greeting')"
 							:disabled="disabled"
 						/>
 					</div>
 
 					<div>
 						<label :for="surveyClosingId" class="block text-sm font-medium mb-1">
-							Verabschiedungsnachricht (Closing)
+							{{ t("surveyEditor.meta.closing") }}
 						</label>
 						<Textarea
 							:id="surveyClosingId"
@@ -113,7 +115,7 @@ const computedTechnicalName = computed(() => {
 							class="w-full text-sm"
 							rows="2"
 							autoResize
-							placeholder="Vielen Dank für Ihr wertvolles Feedback!"
+							:placeholder="t('surveyEditor.meta.placeholders.closing')"
 							:disabled="disabled"
 						/>
 					</div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import { useToast } from "primevue/usetoast";
 import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
@@ -28,13 +29,14 @@ const emit = defineEmits<{
 }>();
 
 const toast = useToast();
+const { t } = useI18n();
 
 function handleAddNewQuestion(type: QuestionType = "yes_no") {
 	if (!props.canAddQuestion) {
 		toast.add({
 			severity: "warn",
-			summary: "Limit erreicht",
-			detail: "Eine Umfrage darf maximal 20 Fragen (inkl. Folgefragen) enthalten.",
+			summary: t("surveyQuestions.limitToast.summary"),
+			detail: t("surveyQuestions.limitToast.detail"),
 			life: 4000
 		});
 		return;
@@ -48,7 +50,7 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 		<div class="flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h3 id="questions-heading" class="text-base font-semibold text-[var(--p-text-color)]">
-					Fragenkatalog
+					{{ t("surveyQuestions.title") }}
 				</h3>
 				<div
 					role="status"
@@ -56,9 +58,9 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 					class="text-xs flex items-center gap-2 mt-0.5"
 					:class="totalQuestionsCount >= 20 ? 'text-red-500 font-bold' : 'text-[var(--p-text-muted-color)]'"
 				>
-					<span>{{ totalQuestionsCount }} von maximal 20 Fragen belegt (inkl. Folgefragen)</span>
+					<span>{{ t("surveyQuestions.countStatus", { count: totalQuestionsCount }) }}</span>
 					<span v-if="totalQuestionsCount >= 20" class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
-						Maximum erreicht
+						{{ t("surveyQuestions.maxReached") }}
 					</span>
 				</div>
 			</div>
@@ -68,9 +70,9 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 					size="small"
 					severity="primary"
 					icon="pi pi-plus"
-					label="Frage hinzufügen"
+					:label="t('surveyQuestions.addQuestion')"
 					:disabled="disabled || !canAddQuestion"
-					aria-label="Neue Frage zur Umfrage hinzufügen"
+					:aria-label="t('surveyQuestions.addQuestionAriaLabel')"
 					@click="handleAddNewQuestion()"
 				/>
 			</div>
@@ -83,16 +85,16 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 		>
 			<i class="pi pi-question-circle text-3xl text-[var(--p-text-muted-color)]" aria-hidden="true" />
 			<div class="text-sm font-medium text-[var(--p-text-color)]">
-				Diese Umfrage enthält noch keine Fragen.
+				{{ t("surveyQuestions.empty.title") }}
 			</div>
 			<p class="text-xs text-[var(--p-text-muted-color)] max-w-sm mx-auto">
-				Erstellen Sie Ihre erste Frage, um mit der Umfragekonfiguration zu beginnen.
+				{{ t("surveyQuestions.empty.description") }}
 			</p>
 			<Button
 				size="small"
 				severity="primary"
 				icon="pi pi-plus"
-				label="Erste Frage erstellen"
+				:label="t('surveyQuestions.empty.cta')"
 				:disabled="disabled"
 				@click="handleAddNewQuestion()"
 			/>
@@ -123,9 +125,9 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 					size="small"
 					severity="primary"
 					icon="pi pi-plus"
-					label="Frage hinzufügen"
+					:label="t('surveyQuestions.addQuestion')"
 					:disabled="disabled || !canAddQuestion"
-					aria-label="Weitere Frage zur Umfrage hinzufügen"
+					:aria-label="t('surveyQuestions.addAnotherAriaLabel')"
 					@click="handleAddNewQuestion()"
 				/>
 			</div>

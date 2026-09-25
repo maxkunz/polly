@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import InputNumber from "primevue/inputnumber";
 import type { RatingOptions } from "@/domain/survey/surveyTypes";
+
+const { t } = useI18n();
 
 const props = withDefaults(
 	defineProps<{
@@ -31,14 +34,14 @@ const ratingScaleArray = computed<number[]>(() => {
 	<div class="p-4 bg-[var(--p-surface-50)] rounded-xl border border-[var(--p-content-border-color)] space-y-3">
 		<div class="flex items-center justify-between">
 			<span class="text-xs font-semibold text-[var(--p-text-color)]">
-				Bewertungsskala konfigurieren (0 bis max. 8):
+				{{ t("ratingOptions.scaleLabel") }}
 			</span>
 		</div>
 
 		<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
 			<div>
 				<label :for="ratingMinId" class="block text-xs font-medium mb-1">
-					Minimalwert (0 bis 7)
+					{{ t("ratingOptions.min") }}
 				</label>
 				<InputNumber
 					:inputId="ratingMinId"
@@ -53,7 +56,7 @@ const ratingScaleArray = computed<number[]>(() => {
 
 			<div>
 				<label :for="ratingMaxId" class="block text-xs font-medium mb-1">
-					Maximalwert (1 bis 8)
+					{{ t("ratingOptions.max") }}
 				</label>
 				<InputNumber
 					:inputId="ratingMaxId"
@@ -68,7 +71,7 @@ const ratingScaleArray = computed<number[]>(() => {
 		</div>
 
 		<div class="pt-2">
-			<span class="text-xs text-[var(--p-text-muted-color)] block mb-1">Vorschau der Skala:</span>
+			<span class="text-xs text-[var(--p-text-muted-color)] block mb-1">{{ t("ratingOptions.previewLabel") }}</span>
 			<div class="flex flex-wrap gap-2">
 				<span
 					v-for="val in ratingScaleArray"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import Tooltip from "primevue/tooltip";
 import InputText from "primevue/inputtext";
@@ -26,6 +27,7 @@ const controlBar = useControlBarStore();
 const app = useAppStore();
 const toast = useToast();
 const confirm = useConfirm();
+const { t } = useI18n();
 
 defineOptions({
 	directives: {
@@ -54,11 +56,11 @@ async function ensureLockForSave(): Promise<boolean> {
 		const accepted = await new Promise<boolean>(resolve => {
 			confirm.require({
 				group: "global",
-				header: "Session abgelaufen",
-				message: "Session abgelaufen, reaktivieren?",
+				header: t("controlToolbar.sessionExpired.header"),
+				message: t("controlToolbar.sessionExpired.message"),
 				icon: "pi pi-exclamation-triangle",
-				acceptLabel: "Ja",
-				rejectLabel: "Nein",
+				acceptLabel: t("controlToolbar.sessionExpired.acceptLabel"),
+				rejectLabel: t("controlToolbar.sessionExpired.rejectLabel"),
 				accept: () => resolve(true),
 				reject: () => resolve(false)
 			});
@@ -78,13 +80,13 @@ async function ensureLockForSave(): Promise<boolean> {
 		});
 
 		if (!reacquire.ok) {
-			const name = reacquire.conflicts[0]?.lock?.userName?.trim() || "ein anderer User";
+			const name = reacquire.conflicts[0]?.lock?.userName?.trim() || t("common.otherUser");
 			app.editMode = false;
 			stopLockActivityTracking();
 			toast.add({
 				severity: "warn",
-				summary: "Locked",
-				detail: `Die Konfiguration ist grad in Bearbeitung von: ${name}`,
+				summary: t("controlToolbar.toast.lockedSummary"),
+				detail: t("controlToolbar.toast.lockedDetail", { name }),
 				life: 5000
 			});
 			return false;
@@ -98,13 +100,13 @@ async function ensureLockForSave(): Promise<boolean> {
 		return true;
 	}
 
-	const name = lockCheck.lock?.userName?.trim() || "ein anderer User";
+	const name = lockCheck.lock?.userName?.trim() || t("common.otherUser");
 	app.editMode = false;
 	stopLockActivityTracking();
 	toast.add({
 		severity: "warn",
-		summary: "Lock",
-		detail: `Lock ist nicht mehr aktiv (${name}).`,
+		summary: t("controlToolbar.toast.lockSummary"),
+		detail: t("controlToolbar.toast.lockDetail", { name }),
 		life: 4000
 	});
 	return false;
@@ -115,19 +117,19 @@ async function handleSaveClick(): Promise<void> {
 		const ok = await ensureLockForSave();
 		if (!ok) return;
 		const v = await app.save();
-		const suffix = v ? ` (Draft v${v})` : "";
+		const suffix = v ? t("controlToolbar.toast.savedSuffix", { version: v }) : "";
 		toast.add({
 			severity: "success",
-			summary: "Saved",
-			detail: `Konfiguration gespeichert${suffix}.`,
+			summary: t("controlToolbar.toast.savedSummary"),
+			detail: t("controlToolbar.toast.savedDetail", { suffix }),
 			life: 3000
 		});
 	} catch (err) {
 		console.error("Save error:", err);
 		toast.add({
 			severity: "error",
-			summary: "Error",
-			detail: "Speichern fehlgeschlagen.",
+			summary: t("controlToolbar.toast.errorSummary"),
+			detail: t("controlToolbar.toast.errorDetail"),
 			life: 4000
 		});
 	}
@@ -138,11 +140,11 @@ async function handleSaveAndClose(): Promise<void> {
 		const ok = await ensureLockForSave();
 		if (!ok) return;
 		const v = await app.save();
-		const suffix = v ? ` (Draft v${v})` : "";
+		const suffix = v ? t("controlToolbar.toast.savedSuffix", { version: v }) : "";
 		toast.add({
 			severity: "success",
-			summary: "Saved",
-			detail: `Konfiguration gespeichert${suffix}.`,
+			summary: t("controlToolbar.toast.savedSummary"),
+			detail: t("controlToolbar.toast.savedDetail", { suffix }),
 			life: 3000
 		});
 		await handleCloseClick();
@@ -150,8 +152,8 @@ async function handleSaveAndClose(): Promise<void> {
 		console.error("Save error:", err);
 		toast.add({
 			severity: "error",
-			summary: "Error",
-			detail: "Speichern fehlgeschlagen.",
+			summary: t("controlToolbar.toast.errorSummary"),
+			detail: t("controlToolbar.toast.errorDetail"),
 			life: 4000
 		});
 	}
@@ -166,11 +168,11 @@ async function handleEditClick(): Promise<void> {
 			status: "editing"
 		});
 		if (!result.ok) {
-			const name = result.conflicts[0]?.lock?.userName?.trim() || "ein anderer User";
+			const name = result.conflicts[0]?.lock?.userName?.trim() || t("common.otherUser");
 			toast.add({
 				severity: "warn",
-				summary: "Locked",
-				detail: `Die Konfiguration ist grad in Bearbeitung von: ${name}`,
+				summary: t("controlToolbar.toast.lockedSummary"),
+				detail: t("controlToolbar.toast.lockedDetail", { name }),
 				life: 5000
 			});
 			return;
@@ -198,22 +200,22 @@ async function handleCloseClick(): Promise<void> {
 	}
 }
 
-const saveMenuItems = [
+const saveMenuItems = computed(() => [
 	{
-		label: "Speichern & schließen",
+		label: t("controlToolbar.saveAndClose"),
 		icon: "pi pi-save",
 		command: () => {
 			void handleSaveAndClose();
 		}
 	},
 	{
-		label: "Schließen",
+		label: t("controlToolbar.close"),
 		icon: "pi pi-times",
 		command: () => {
 			void handleCloseClick();
 		}
 	}
-];
+]);
 
 const pageSearchQuery = computed({
 	get: () => controlBar.pageSearch?.query ?? "",
@@ -281,7 +283,7 @@ const hasLeftContent = computed(() => {
 					<InputText
 						v-model="pageSearchQuery"
 						type="search"
-						:placeholder="controlBar.pageSearch?.placeholder ?? 'Search...'"
+						:placeholder="controlBar.pageSearch?.placeholder ?? t('controlToolbar.searchPlaceholder')"
 						:disabled="controlBar.pageSearch?.disabled ?? false"
 						class="text-sm w-56 p-inputtext-sm h-8"
 					/>
@@ -300,7 +302,7 @@ const hasLeftContent = computed(() => {
 					size="small"
 					severity="success"
 					icon="pi pi-save"
-					label="Save"
+					:label="t('controlToolbar.save')"
 					@click="handleSaveClick"
 					:model="saveMenuItems"
 				/>
@@ -310,7 +312,7 @@ const hasLeftContent = computed(() => {
 					size="small"
 					severity="primary"
 					icon="pi pi-pencil"
-					label="Bearbeiten"
+					:label="t('controlToolbar.edit')"
 					@click="handleEditClick"
 				/>
 

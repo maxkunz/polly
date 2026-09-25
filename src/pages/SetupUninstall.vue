@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/appStore";
 import { runFullDelete } from '@/services/SetupUninstall';
 import { useToast } from "primevue/usetoast";
@@ -10,6 +11,7 @@ import Toast from 'primevue/toast';
 const app = useAppStore();
 const toast = useToast();
 const router = useRouter();
+const { t } = useI18n();
 const logs = ref<string[]>([]);
 const isProcessing = ref(false);
 const isFinished = ref(false);
@@ -33,10 +35,10 @@ const startAutomaticUninstallation = async () => {
         isFinished.value = true;
         logs.value.push(" ***** SUCCESS: Cleanup complete.");
 
-        toast.add({ 
-            severity: 'success', 
-            summary: 'Installation entfernt', 
-            detail: 'Die installierten App-Ressourcen wurden entfernt.', 
+        toast.add({
+            severity: 'success',
+            summary: t('uninstall.toast.removedSummary'),
+            detail: t('uninstall.toast.removedDetail'),
             life: 3000 // 3 Sek.
         });
     } catch (e: any) {
@@ -45,10 +47,10 @@ const startAutomaticUninstallation = async () => {
         } else {
             logs.value.push(`--ERROR-- FATAL: ${e.message}`);
 
-            toast.add({ 
-            severity: 'error', 
-            summary: 'Löschen fehlgeschlagen', 
-            detail: e.message, 
+            toast.add({
+            severity: 'error',
+            summary: t('uninstall.toast.failedSummary'),
+            detail: e.message,
             life: 6000 // 6 Sek.
         });
         }
@@ -90,7 +92,7 @@ const hasError = computed(() => {
     <div class="header-hero">
     <img src="@/assets/logo-icon.png" alt="Logo" class="hero-logo" />
       <div class="hero-content">
-        <h1>Uninstall Project</h1>
+        <h1>{{ t("uninstall.heroTitle") }}</h1>
       </div>
     </div>
 
@@ -99,24 +101,23 @@ const hasError = computed(() => {
 
     <div class="provisioning-container">
       <div class="input-card shadow-soft">
-        
+
         <div class="step-header">
-          <h2 class="step-title">Installierte Ressourcen entfernen</h2>
+          <h2 class="step-title">{{ t("uninstall.stepTitle") }}</h2>
           <p class="step-desc">
-            Installation: <span style="color: #111827; font-weight: 700;">{{ app.domain?.meta?.setup?.projectTag }}</span>
+            {{ t("uninstall.installationLabel") }} <span style="color: #111827; font-weight: 700;">{{ app.domain?.meta?.setup?.projectTag }}</span>
           </p>
         </div>
 
         <div v-if="!isStarted" class="warning-box">
             <div class="warning-icon">⚠️</div>
             <div class="warning-message">
-                Diese Aktion entfernt die durch das Setup erzeugten Ressourcen aus Genesys Cloud. <br />
-                Dazu gehören Data Table, Backend OAuth Client und Data Action Integration. Möchtest du fortfahren?
+                {{ t("uninstall.warning") }}
             </div>
         </div>
 
         <div v-if="isStarted" class="log-container">
-          <div class="log-header">SYSTEM TERMINAL - UNINSTALL_LOG</div>
+          <div class="log-header">{{ t("uninstall.logHeader") }}</div>
           <div id="log-content" class="log-content">
             <div v-for="(log, i) in logs" :key="i" class="log-line" :class="{'err-text': log.includes('--ERROR--')}">
               <span class="log-time">[{{ new Date().toLocaleTimeString() }}]</span>
@@ -127,29 +128,29 @@ const hasError = computed(() => {
         </div>
 
         <div class="step-actions">
-            <button 
-                v-if="!isStarted" 
-                @click="exitUninstall" 
+            <button
+                v-if="!isStarted"
+                @click="exitUninstall"
                 class="btn-secondary"
             >
-                Cancel
+                {{ t("uninstall.cancel") }}
             </button>
 
-            <button 
-                v-if="!isStarted" 
-                @click="handleStart" 
+            <button
+                v-if="!isStarted"
+                @click="handleStart"
                 class="btn-danger"
             >
-                Installation entfernen
+                {{ t("uninstall.remove") }}
             </button>
 
-            <button 
-                v-if="isFinished" 
-                @click="exitUninstall" 
+            <button
+                v-if="isFinished"
+                @click="exitUninstall"
                 class="btn-primary"
                 style="width: 100%;"
             >
-                {{ hasError ? 'Back to Menu' : 'Finish' }}
+                {{ hasError ? t("uninstall.back") : t("uninstall.finish") }}
             </button>
         </div>
 

@@ -21,11 +21,13 @@
     "primevue": "^4.5.4",
     "purecloud-platform-client-v2": "^221.0.0",
     "vue": "^3.5.0",
+    "vue-i18n": "^10.0.8",
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.2.1",
     "@aws-amplify/backend-cli": "^1.2.2",
+    "@intlify/devtools-types": "^10.0.8",
     "@tailwindcss/vite": "^4.1.17",
     "@types/node": "^20.12.5",
     "@vitejs/plugin-vue": "^6.0.2",

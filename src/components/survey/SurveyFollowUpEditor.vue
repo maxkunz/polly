@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, toRef } from "vue";
+import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import Textarea from "primevue/textarea";
 import Select from "primevue/select";
 import { useConfirm } from "primevue/useconfirm";
 import type { FollowUpRule, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
-import { followUpQuestionTypes } from "@/domain/survey/questionTypeCatalog";
+import { getFollowUpQuestionTypes } from "@/domain/survey/questionTypeCatalog";
 import { useQuestionTypeOptions } from "@/composables/useQuestionTypeOptions";
 
 import FollowUpConditionEditor from "./FollowUpConditionEditor.vue";
@@ -35,6 +36,7 @@ const emit = defineEmits<{
 }>();
 
 const confirm = useConfirm();
+const { t } = useI18n();
 
 const {
 	handleTypeChange,
@@ -44,6 +46,8 @@ const {
 	removeChoiceOption
 } = useQuestionTypeOptions(toRef(() => props.followUp.question));
 
+const followUpQuestionTypeOptions = computed(() => getFollowUpQuestionTypes());
+
 const titleId = computed(() => `q_title_${props.followUp.question.id}`);
 const descId = computed(() => `fu_desc_${props.followUp.question.id}`);
 const repromptId = computed(() => `fu_reprompt_${props.followUp.question.id}`);
@@ -51,11 +55,11 @@ const typeId = computed(() => `fu_type_${props.followUp.question.id}`);
 
 function confirmDelete() {
 	confirm.require({
-		header: "Folgefrage löschen",
-		message: "Möchten Sie diese Folgefrage wirklich entfernen?",
+		header: t("surveyFollowUp.deleteConfirm.header"),
+		message: t("surveyFollowUp.deleteConfirm.message"),
 		icon: "pi pi-exclamation-triangle",
-		acceptLabel: "Löschen",
-		rejectLabel: "Abbrechen",
+		acceptLabel: t("surveyFollowUp.deleteConfirm.acceptLabel"),
+		rejectLabel: t("surveyFollowUp.deleteConfirm.rejectLabel"),
 		acceptClass: "p-button-danger",
 		accept: () => {
 			emit("remove");
@@ -67,11 +71,11 @@ function confirmDelete() {
 <template>
 	<fieldset
 		class="border border-[var(--p-primary-200)] bg-[var(--p-surface-0)] rounded-xl p-4 shadow-sm relative space-y-4"
-		:aria-label="`Folgefrage ${index + 1}`"
+		:aria-label="t('surveyFollowUp.fieldsetAriaLabel', { number: index + 1 })"
 	>
 		<legend class="text-xs font-semibold px-2 py-0.5 rounded-md bg-[var(--p-primary-50)] text-[var(--p-primary-700)] border border-[var(--p-primary-200)]">
 			<i class="pi pi-arrow-elbow-down-right mr-1 text-[10px]" aria-hidden="true" />
-			Folgefrage #{{ index + 1 }}
+			{{ t("surveyFollowUp.legend", { number: index + 1 }) }}
 		</legend>
 
 		<div class="flex items-center justify-between gap-2">
@@ -83,8 +87,8 @@ function confirmDelete() {
 				severity="danger"
 				variant="text"
 				icon="pi pi-trash"
-				label="Löschen"
-				:aria-label="`Folgefrage ${index + 1} löschen`"
+				:label="t('surveyFollowUp.delete')"
+				:aria-label="t('surveyFollowUp.deleteAriaLabel', { number: index + 1 })"
 				:disabled="disabled"
 				@click="confirmDelete"
 			/>
@@ -104,13 +108,13 @@ function confirmDelete() {
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 				<div class="md:col-span-2">
 					<label :for="titleId" class="block text-xs font-medium mb-1">
-						Titel / Prompt <span class="text-red-500" aria-hidden="true">*</span>
+						{{ t("surveyFollowUp.title") }} <span class="text-red-500" aria-hidden="true">*</span>
 					</label>
 					<InputText
 						:id="titleId"
 						v-model="followUp.question.title"
 						class="w-full text-sm"
-						placeholder="z. B. Was war der Grund für Ihre Bewertung?"
+						:placeholder="t('surveyFollowUp.titlePlaceholder')"
 						:disabled="disabled"
 						:invalid="showValidation && !followUp.question.title?.trim()"
 						:aria-invalid="showValidation && !followUp.question.title?.trim()"
@@ -119,13 +123,13 @@ function confirmDelete() {
 
 				<div>
 					<label :for="typeId" class="block text-xs font-medium mb-1">
-						Fragetyp <span class="text-red-500" aria-hidden="true">*</span>
-						<span v-if="isSaved" class="text-[10px] text-amber-600 block">(Gespeichert - Typ unveränderbar)</span>
+						{{ t("surveyFollowUp.type") }} <span class="text-red-500" aria-hidden="true">*</span>
+						<span v-if="isSaved" class="text-[10px] text-amber-600 block">{{ t("surveyFollowUp.typeSavedHint") }}</span>
 					</label>
 					<Select
 						:inputId="typeId"
 						:modelValue="followUp.question.type"
-						:options="followUpQuestionTypes"
+						:options="followUpQuestionTypeOptions"
 						optionLabel="label"
 						optionValue="value"
 						class="w-full text-sm"
@@ -138,7 +142,7 @@ function confirmDelete() {
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 				<div>
 					<label :for="repromptId" class="block text-xs font-medium mb-1">
-						Wiederholungsaufforderung (Reprompt)
+						{{ t("surveyFollowUp.reprompt") }}
 					</label>
 					<Textarea
 						:id="repromptId"
@@ -146,14 +150,14 @@ function confirmDelete() {
 						class="w-full text-sm"
 						rows="2"
 						autoResize
-						placeholder="Zweite Aufforderung zur Beantwortung der Frage (optional)."
+						:placeholder="t('surveyFollowUp.repromptPlaceholder')"
 						:disabled="disabled"
 					/>
 				</div>
-				
+
 				<div>
 					<label :for="descId" class="block text-xs font-medium mb-1">
-						Beschreibung / Hilfetext
+						{{ t("surveyFollowUp.description") }}
 					</label>
 					<Textarea
 						:id="descId"
@@ -161,7 +165,7 @@ function confirmDelete() {
 						class="w-full text-sm"
 						rows="2"
 						autoResize
-						placeholder="Zusätzliche Erklärung für den Teilnehmer..."
+						:placeholder="t('surveyFollowUp.descriptionPlaceholder')"
 						:disabled="disabled"
 					/>
 				</div>

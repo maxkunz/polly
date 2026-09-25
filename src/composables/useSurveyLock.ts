@@ -1,6 +1,8 @@
 import { ref, watch, onMounted, onBeforeUnmount, type Ref } from "vue";
 import { useConfirm } from "primevue/useconfirm";
+import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/appStore";
+import { currentLocaleTag } from "@/i18n";
 import {
 	parseSurveyLock,
 	checkSurveyLockConflict,
@@ -22,6 +24,7 @@ export interface UseSurveyLockOptions {
 export function useSurveyLock(options: UseSurveyLockOptions) {
 	const confirm = useConfirm();
 	const appStore = useAppStore();
+	const { t } = useI18n();
 
 	const isLockedByMe = ref<boolean>(false);
 	const isConflictDismissed = ref<boolean>(false);
@@ -39,7 +42,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 				if (me) {
 					appStore.currentUser = {
 						id: String(me.id ?? ""),
-						name: String(me.name ?? me.username ?? "Unknown User"),
+						name: String(me.name ?? me.username ?? t("surveyLock.unknownUser")),
 						email: me.email
 					};
 					return appStore.currentUser.name;
@@ -48,7 +51,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 				console.warn("Could not fetch current user from Genesys API:", err);
 			}
 		}
-		return "Unknown User";
+		return t("surveyLock.unknownUser");
 	}
 
 	function formatLockDate(dateStr?: string): string {
@@ -56,7 +59,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		try {
 			const d = new Date(dateStr);
 			if (Number.isNaN(d.getTime())) return dateStr;
-			return new Intl.DateTimeFormat("de-DE", {
+			return new Intl.DateTimeFormat(currentLocaleTag(), {
 				dateStyle: "medium",
 				timeStyle: "short"
 			}).format(d);
@@ -80,11 +83,11 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 			if (conflict.hasConflict && !isConflictDismissed.value) {
 				const formattedDate = formatLockDate(lock.locked_since);
 				confirm.require({
-					header: "Umfrage wird bereits bearbeitet",
-					message: `Diese Umfrage wird seit ${formattedDate} von „${lock.locked_by}“ bearbeitet. Möchten Sie die Sperre ignorieren oder abbrechen?`,
+					header: t("surveyLock.conflict.header"),
+					message: t("surveyLock.conflict.message", { date: formattedDate, user: lock.locked_by }),
 					icon: "pi pi-exclamation-triangle",
-					acceptLabel: "Trotzdem bearbeiten",
-					rejectLabel: "Abbrechen",
+					acceptLabel: t("surveyLock.conflict.acceptLabel"),
+					rejectLabel: t("surveyLock.conflict.rejectLabel"),
 					acceptClass: "p-button-danger",
 					rejectClass: "p-button-secondary",
 					accept: () => {

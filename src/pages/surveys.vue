@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
+import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import Button from "primevue/button";
 import ProgressSpinner from "primevue/progressspinner";
@@ -21,6 +22,7 @@ const route = useRoute();
 const router = useRouter();
 const confirm = useConfirm();
 const controlBar = useControlBarStore();
+const { t, locale } = useI18n();
 
 const { selectModules } = moduleRegistry();
 const moduleMeta = computed(() => selectModules({ keys: ["surveys"] })[0]);
@@ -46,11 +48,11 @@ function confirmLeave(message?: string): Promise<boolean> {
 		};
 
 		confirm.require({
-			header: "Ungespeicherte Änderungen",
-			message: message || "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?",
+			header: t("surveys.leaveConfirm.header"),
+			message: message || t("surveys.leaveConfirm.message"),
 			icon: "pi pi-exclamation-triangle",
-			acceptLabel: "Verlassen",
-			rejectLabel: "Bleiben",
+			acceptLabel: t("surveys.leaveConfirm.acceptLabel"),
+			rejectLabel: t("surveys.leaveConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
 			rejectClass: "p-button-primary",
 			accept: () => finish(true),
@@ -62,9 +64,9 @@ function confirmLeave(message?: string): Promise<boolean> {
 
 function getDirtyLeaveMessage(): string {
 	if (isQueueMappingDirty.value) {
-		return "Sie haben ungespeicherte Änderungen am Queue-Mapping. Möchten Sie die Seite wirklich verlassen?";
+		return t("surveys.leaveConfirm.queueMappingMessage");
 	}
-	return "Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?";
+	return t("surveys.leaveConfirm.message");
 }
 
 onBeforeRouteLeave(async () => {
@@ -263,7 +265,7 @@ async function loadSurveyDetail(surveyId: string): Promise<void> {
 		rawRowData.value = res.rawRow;
 	} catch (e: any) {
 		console.error(`Failed to load detail for survey_${surveyId}:`, e);
-		detailError.value = e?.message || `Fehler beim Laden der Umfrage '${surveyId}'`;
+		detailError.value = e?.message || t("surveys.detail.loadErrorFallback", { id: surveyId });
 	} finally {
 		isDetailLoading.value = false;
 	}
@@ -288,14 +290,14 @@ usePageControlBar(
 	() => ({
 		search: {
 			enabled: !selectedSurveyId.value && !isNewSurvey.value && !isCloneSurvey.value,
-			placeholder: "Umfrage suchen...",
+			placeholder: t("surveys.searchPlaceholder"),
 			query: ""
 		},
 		actions: (selectedSurveyId.value || isNewSurvey.value || isCloneSurvey.value)
 			? [
 					{
 						id: "surveys.back",
-						label: "Zurück zur Übersicht",
+						label: t("surveys.actions.back"),
 						iconKey: "back",
 						severity: "secondary",
 						handler: handleBackToList
@@ -304,21 +306,21 @@ usePageControlBar(
 			: [
 					{
 						id: "surveys.new",
-						label: "Neue Umfrage",
+						label: t("surveys.actions.new"),
 						iconKey: "add",
 						severity: "primary",
 						handler: handleCreateNew
 					},
 					{
 						id: "surveys.reload",
-						label: "Umfragen neu laden",
+						label: t("surveys.actions.reload"),
 						iconKey: "reload",
 						severity: "secondary",
 						handler: () => loadSurveysList()
 					}
 			  ]
 	}),
-	[() => selectedSurveyId.value, () => isNewSurvey.value, () => isCloneSurvey.value]
+	[() => selectedSurveyId.value, () => isNewSurvey.value, () => isCloneSurvey.value, () => locale.value]
 );
 
 async function loadSurveysList(): Promise<void> {
@@ -329,7 +331,7 @@ async function loadSurveysList(): Promise<void> {
 		await app.loadSurveys();
 	} catch (e: any) {
 		console.error("Failed to load survey_list row from data table:", e);
-		error.value = e?.message || "Fehler beim Laden der Umfragedaten";
+		error.value = e?.message || t("surveys.list.loadErrorFallback");
 	} finally {
 		isLoading.value = false;
 	}
@@ -350,7 +352,7 @@ onBeforeUnmount(() => {
 		<div class="mb-6">
 			<PageHeader
 				v-if="moduleMeta"
-				:title="isNewSurvey ? 'Neue Umfrage' : (isCloneSurvey ? 'Umfrage klonen' : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title)))"
+				:title="isNewSurvey ? t('surveys.newSurveyTitle') : (isCloneSurvey ? t('surveys.cloneSurveyTitle') : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title)))"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
 			/>
@@ -393,7 +395,7 @@ onBeforeUnmount(() => {
 			>
 				<ProgressSpinner style="width: 44px; height: 44px" strokeWidth="4" />
 				<span class="text-sm font-medium text-[var(--p-text-muted-color)]">
-					Lade Umfragedetails...
+					{{ t("surveys.detail.loading") }}
 				</span>
 			</div>
 
@@ -401,13 +403,13 @@ onBeforeUnmount(() => {
 			<div v-else-if="detailError" role="alert" class="p-6 bg-red-50 border border-red-200 rounded-2xl text-red-800 space-y-3">
 				<div class="flex items-center gap-2 font-semibold text-base">
 					<i class="pi pi-exclamation-triangle" aria-hidden="true" />
-					<span>Fehler beim Laden der Umfrage</span>
+					<span>{{ t("surveys.detail.errorTitle") }}</span>
 				</div>
 				<p class="text-sm">{{ detailError }}</p>
 				<Button
 					size="small"
 					severity="danger"
-					label="Zurück zur Übersicht"
+					:label="t('surveys.actions.back')"
 					icon="pi pi-arrow-left"
 					@click="handleBackToList"
 				/>
@@ -441,12 +443,12 @@ onBeforeUnmount(() => {
 			<Card v-else class="text-center py-8">
 				<template #content>
 					<div class="text-sm text-[var(--p-text-muted-color)] mb-4">
-						Keine Umfragedaten für diese ID vorhanden.
+						{{ t("surveys.detail.emptyDraft") }}
 					</div>
 					<Button
 						size="small"
 						severity="secondary"
-						label="Zurück zur Übersicht"
+						:label="t('surveys.actions.back')"
 						icon="pi pi-arrow-left"
 						@click="handleBackToList"
 					/>
@@ -460,12 +462,12 @@ onBeforeUnmount(() => {
 				<template #title>
 					<div class="flex items-center justify-between">
 						<h2 class="text-base font-semibold text-[var(--p-text-color)]">
-							Verfügbare Umfragen ({{ filteredSurveys.length }})
+							{{ t("surveys.list.availableCount", { count: filteredSurveys.length }) }}
 						</h2>
 						<Button
 							size="small"
 							severity="primary"
-							label="Neue Umfrage"
+							:label="t('surveys.actions.new')"
 							icon="pi pi-plus"
 							@click="handleCreateNew"
 						/>
@@ -480,7 +482,7 @@ onBeforeUnmount(() => {
 						aria-live="polite"
 					>
 						<ProgressSpinner style="width: 24px; height: 24px" strokeWidth="4" />
-						<span>Lade Umfragedaten...</span>
+						<span>{{ t("surveys.list.loading") }}</span>
 					</div>
 
 					<!-- Error -->
@@ -499,19 +501,19 @@ onBeforeUnmount(() => {
 								<button
 									type="button"
 									class="w-full text-left py-4 px-4 flex items-center justify-between gap-4 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--p-primary-color)] rounded-xl"
-									:aria-label="`Umfrage öffnen: ${survey.title || survey.name || 'Unbenannte Umfrage'}`"
+									:aria-label="t('surveys.list.openAriaLabel', { title: survey.title || survey.name || t('surveys.list.unnamedSurvey') })"
 									@click="selectSurvey(survey, index)"
 								>
 									<div class="space-y-1 min-w-0">
 										<div class="font-semibold text-sm text-[var(--p-text-color)] truncate">
-											{{ survey.title || survey.name || 'Unbenannte Umfrage' }}
+											{{ survey.title || survey.name || t('surveys.list.unnamedSurvey') }}
 										</div>
 										<div class="text-xs text-[var(--p-text-muted-color)] flex items-center gap-3">
 											<span>ID: <code class="font-mono">{{ String(survey.id || survey.key || index) }}</code></span>
 										</div>
 									</div>
 									<div class="flex items-center gap-2 text-[var(--p-text-muted-color)] shrink-0">
-										<span class="text-xs hidden sm:inline">Bearbeiten</span>
+										<span class="text-xs hidden sm:inline">{{ t("surveys.list.edit") }}</span>
 										<i class="pi pi-chevron-right text-xs" aria-hidden="true" />
 									</div>
 								</button>
@@ -521,7 +523,7 @@ onBeforeUnmount(() => {
 
 					<!-- Empty List -->
 					<div v-else class="text-center py-10 text-sm text-[var(--p-text-muted-color)]">
-						{{ searchQuery ? 'Keine Umfragen für die Suchanfrage gefunden.' : 'Keine Umfragen vorhanden.' }}
+						{{ searchQuery ? t("surveys.list.emptySearch") : t("surveys.list.empty") }}
 					</div>
 				</template>
 			</Card>

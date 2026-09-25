@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 
 import Card from "primevue/card";
 import InputText from "primevue/inputtext";
@@ -23,6 +24,7 @@ const router = useRouter();
 const confirm = useConfirm();
 const toast = useToast();
 const controlBar = useControlBarStore();
+const { t, locale } = useI18n();
 
 const { selectModules } = moduleRegistry();
 const moduleMeta = computed(() => selectModules({ keys: ["questions"] })[0]);
@@ -32,39 +34,43 @@ const selectedQuestionId = computed((): string | null => {
   return typeof raw === "string" && raw.length ? raw : null;
 });
 
-usePageControlBar("questions", () => ({
-  search: {
-    enabled: true,
-    placeholder: "Fragen, Prompt oder Reprompt suchen...",
-    query: "",
-  },
-  actions: [
-    {
-      id: "questions.new",
-      label: "Neue Frage",
-      iconKey: "add",
-      severity: "secondary",
-      disabled: () => !app.editMode,
-      handler: createQuestion,
+usePageControlBar(
+  "questions",
+  () => ({
+    search: {
+      enabled: true,
+      placeholder: t("questions.searchPlaceholder"),
+      query: "",
     },
-    {
-      id: "questions.delete",
-      label: "Frage löschen",
-      iconKey: "delete",
-      severity: "danger",
-      disabled: () => !selectedQuestionId.value || !app.editMode,
-      handler: deleteSelectedQuestion,
-    },
-    {
-      id: "questions.reloadAnswers",
-      label: "Antworten neu laden",
-      iconKey: "reload",
-      severity: "secondary",
-      disabled: () => !app.editMode,
-      handler: () => reloadAnswers(),
-    },
-  ],
-}));
+    actions: [
+      {
+        id: "questions.new",
+        label: t("questions.actions.new"),
+        iconKey: "add",
+        severity: "secondary",
+        disabled: () => !app.editMode,
+        handler: createQuestion,
+      },
+      {
+        id: "questions.delete",
+        label: t("questions.actions.delete"),
+        iconKey: "delete",
+        severity: "danger",
+        disabled: () => !selectedQuestionId.value || !app.editMode,
+        handler: deleteSelectedQuestion,
+      },
+      {
+        id: "questions.reloadAnswers",
+        label: t("questions.actions.reloadAnswers"),
+        iconKey: "reload",
+        severity: "secondary",
+        disabled: () => !app.editMode,
+        handler: () => reloadAnswers(),
+      },
+    ],
+  }),
+  [() => locale.value]
+);
 
 const searchQuery = computed(() =>
   (controlBar.pageSearch?.query ?? "").trim().toLowerCase(),
@@ -132,7 +138,7 @@ watch([filteredQuestions, selectedQuestionId], ensureSelectionFromRoute, {
 
 function createQuestion(): void {
   if (controlBar.pageSearch) controlBar.pageSearch.query = "";
-  const question = app.domain.questions.create("*Neue Frage");
+  const question = app.domain.questions.create(t("questions.newQuestionName"));
   router.replace({ name: "questions", query: { id: question.id } });
 }
 
@@ -141,14 +147,14 @@ function deleteSelectedQuestion(): void {
   if (!id) return;
 
   const question = app.domain.questions.get(id);
-  const title = question?.name?.trim() ? question.name.trim() : "diese Frage";
+  const title = question?.name?.trim() ? question.name.trim() : t("questions.deleteConfirm.fallbackTitle");
 
   confirm.require({
-    header: "Frage löschen",
-    message: `„${title}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+    header: t("questions.deleteConfirm.header"),
+    message: t("questions.deleteConfirm.message", { title }),
     icon: "pi pi-exclamation-triangle",
-    acceptLabel: "Löschen",
-    rejectLabel: "Abbrechen",
+    acceptLabel: t("questions.deleteConfirm.acceptLabel"),
+    rejectLabel: t("questions.deleteConfirm.rejectLabel"),
     accept: () => {
       app.domain.questions.remove(id);
 
@@ -170,16 +176,16 @@ async function reloadAnswers(): Promise<void> {
 
     toast.add({
       severity: "success",
-      summary: "Antworten neu geladen",
-      detail: `Antworten wurden erfolgreich neu geladen.`,
+      summary: t("questions.toast.reloadSuccessSummary"),
+      detail: t("questions.toast.reloadSuccessDetail"),
       life: 3000,
     });
   } catch (err) {
     console.error("Reloading Answers error:", err);
     toast.add({
       severity: "error",
-      summary: "Error",
-      detail: "Neu laden fehlgeschlagen.",
+      summary: t("questions.toast.reloadErrorSummary"),
+      detail: t("questions.toast.reloadErrorDetail"),
       life: 4000,
     });
   }
@@ -227,7 +233,7 @@ function getScaleValues(questionId: string): number[] {
 
 		<div class="max-w-6xl mx-auto">
 			<div v-if="!filteredQuestions.length" class="text-sm text-[var(--p-text-muted-color)] text-center py-10">
-				Keine Fragen gefunden.
+				{{ t("questions.empty") }}
 			</div>
 
 			<div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -243,18 +249,18 @@ function getScaleValues(questionId: string): number[] {
 						<div class="space-y-4">
 							<div class="flex items-center justify-between gap-4">
 								<div class="flex-1">
-									<label class="block text-sm font-medium mb-1">Name</label>
+									<label class="block text-sm font-medium mb-1">{{ t("questions.fields.name") }}</label>
 									<InputText
 										v-model="question.name"
 										class="w-full"
-										placeholder="z. B. Servicebewertung"
+										:placeholder="t('questions.placeholders.name')"
 										:disabled="!app.editMode"
 										@click.stop
 									/>
 								</div>
 
 								<div class="flex items-center gap-2 pt-6 shrink-0">
-									<label class="text-sm text-[var(--p-text-muted-color)]">Aktiv</label>
+									<label class="text-sm text-[var(--p-text-muted-color)]">{{ t("questions.fields.active") }}</label>
 									<ToggleSwitch
 										v-model="question.enabled"
 										:disabled="!app.editMode"
@@ -264,26 +270,26 @@ function getScaleValues(questionId: string): number[] {
 							</div>
 
 							<div>
-								<label class="block text-sm font-medium mb-1">Prompt</label>
+								<label class="block text-sm font-medium mb-1">{{ t("questions.fields.prompt") }}</label>
 								<Textarea
 									v-model="question.prompt"
 									class="w-full"
 									rows="3"
 									autoResize
-									placeholder="Bewerten Sie den Service auf einer Skala von 1 bis 5."
+									:placeholder="t('questions.placeholders.prompt')"
 									:disabled="!app.editMode"
 									@click.stop
 								/>
 							</div>
 
 							<div>
-								<label class="block text-sm font-medium mb-1">Reprompt</label>
+								<label class="block text-sm font-medium mb-1">{{ t("questions.fields.reprompt") }}</label>
 								<Textarea
 									v-model="question.reprompt"
 									class="w-full"
 									rows="2"
 									autoResize
-									placeholder="Bitte nennen Sie eine Zahl innerhalb des Bereichs."
+									:placeholder="t('questions.placeholders.reprompt')"
 									:disabled="!app.editMode"
 									@click.stop
 								/>
@@ -291,7 +297,7 @@ function getScaleValues(questionId: string): number[] {
 
 							<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
 								<div>
-									<label class="block text-sm font-medium mb-1">Min</label>
+									<label class="block text-sm font-medium mb-1">{{ t("questions.fields.min") }}</label>
 									<InputNumber
 										v-model="question.minValue"
 										inputClass="w-full"
@@ -305,7 +311,7 @@ function getScaleValues(questionId: string): number[] {
 								</div>
 
 								<div>
-									<label class="block text-sm font-medium mb-1">Max</label>
+									<label class="block text-sm font-medium mb-1">{{ t("questions.fields.max") }}</label>
 									<InputNumber
 										v-model="question.maxValue"
 										inputClass="w-full"
@@ -319,15 +325,15 @@ function getScaleValues(questionId: string): number[] {
 								</div>
 
 								<div class="text-sm text-[var(--p-text-muted-color)]">
-									Skala: {{ question.minValue }} bis {{ question.maxValue }}
+									{{ t("questions.fields.scale", { min: question.minValue, max: question.maxValue }) }}
 								</div>
 							</div>
 
 							<div class="p-1">
 								<div class="flex items-center justify-between gap-4 mb-3">
-									<div class="text-sm font-medium">Aktuelle Antworten</div>
+									<div class="text-sm font-medium">{{ t("questions.answers.title") }}</div>
 									<div class="text-sm text-[var(--p-text-muted-color)]">
-										Gesamt: {{ app.questionAnswers[question.id]?.totalResponses ?? 0 }}
+										{{ t("questions.answers.total", { count: app.questionAnswers[question.id]?.totalResponses ?? 0 }) }}
 									</div>
 								</div>
 
@@ -354,7 +360,7 @@ function getScaleValues(questionId: string): number[] {
 								</div>
 
 								<div v-if="app.questionAnswers[question.id]?.updatedAt" class="mt-3 text-xs text-[var(--p-text-muted-color)]">
-									Zuletzt aktualisiert: {{ app.questionAnswers[question.id]?.updatedAt }}
+									{{ t("questions.answers.updatedAt", { date: app.questionAnswers[question.id]?.updatedAt }) }}
 								</div>
 							</div>
 						</div>

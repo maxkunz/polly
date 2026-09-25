@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { usePrimeVue } from "primevue/config";
 import { useAppStore } from "@/stores/appStore";
 import ConfirmDialog from "primevue/confirmdialog";
 import Toast from "primevue/toast";
@@ -9,12 +11,23 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
 import ControlToolbar from "@/components/layout/ControlToolbar.vue";
 import { useControlBarStore } from "@/stores/controlBarStore";
+import { primevueLocaleFor, type SupportedLocale } from "@/i18n";
 
 const app = useAppStore();
 const toast = useToast();
 const route = useRoute();
 const router = useRouter();
 const controlBar = useControlBarStore();
+const { t, locale } = useI18n();
+const primevue = usePrimeVue();
+
+watch(
+	locale,
+	newLocale => {
+		primevue.config.locale = primevueLocaleFor(newLocale as SupportedLocale);
+	},
+	{ immediate: true }
+);
 
 function handleKeydown(e: KeyboardEvent): void {
 	const ctrlOrCmd = e.ctrlKey || e.metaKey;
@@ -64,11 +77,11 @@ onMounted(async () => {
     const detail =
       typeof e?.message === "string" && e.message.length
         ? e.message
-        : "Initialisierung fehlgeschlagen.";
+        : t("app.initErrorFallback");
 
     toast.add({
       severity: "error",
-      summary: "Error",
+      summary: t("app.initErrorSummary"),
       detail,
       life: 5000
     });

@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import type { Ref, ComputedRef } from "vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
+import { i18n } from "@/i18n";
 import {
 	deploySurvey,
 	rollbackSurvey,
@@ -59,7 +60,7 @@ export function useSurveyDeployment({
 			await action();
 			await refresh();
 		} catch (e: any) {
-			deployError.value = e?.message ?? "Unbekannter Fehler beim Deployment";
+			deployError.value = e?.message ?? i18n.global.t("deployment.unknownError");
 		} finally {
 			isDeploying.value = false;
 		}

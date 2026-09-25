@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import PageHeader from "@/components/layout/PageHeader.vue";
 import { moduleRegistry } from "@/app/modules";
 
 const router = useRouter();
+const { t } = useI18n();
 const { selectModules } = moduleRegistry();
 
 function navigateTo(moduleKey: string): void {
@@ -27,7 +29,7 @@ const columnModules = (column: number) =>
 <template>
 	<section class="min-h-full">
 		<h1 class="w-full max-w-6xl mx-auto px-4 py-10 text-3xl font-semibold text-gray-700">
-			Dashboard
+			{{ t("dashboard.title") }}
 		</h1>
 		<div
 			class="w-full max-w-6xl mx-auto px-4 py-6

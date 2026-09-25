@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import Menu from "primevue/menu";
 import type { MenuItem } from "primevue/menuitem";
 import type { ControlBarSelectOption } from "@/stores/controlBarStore";
+
+const { t } = useI18n();
 
 const props = defineProps<{
 	options: ControlBarSelectOption[];
@@ -21,7 +24,7 @@ const menuRef = ref<InstanceType<typeof Menu> | null>(null);
 
 const label = computed(() => {
 	const selected = props.options.find(option => option.value === props.modelValue);
-	return selected?.label ?? props.placeholder ?? "Auswahl";
+	return selected?.label ?? props.placeholder ?? t("common.selection");
 });
 
 const menuItems = computed<MenuItem[]>(() =>

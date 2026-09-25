@@ -1,4 +1,5 @@
 import platformClient from "purecloud-platform-client-v2";
+import { i18n } from "@/i18n";
 import { deleteDivision } from "@/services/genesys/division";
 import { deleteDataTable } from "@/services/genesys/dataTable";
 import { deleteIntegration } from "@/services/genesys/integration";
@@ -127,8 +128,8 @@ export async function runFullDelete(
         onProgress(`Division ${divisionId} could not be deleted automatically.`);
         toast.add({
           severity: "info",
-          summary: "Division bleibt erhalten",
-          detail: "Die erzeugte Division konnte nicht gelöscht werden und bleibt bestehen.",
+          summary: i18n.global.t("uninstall.toast.divisionKeptSummary"),
+          detail: i18n.global.t("uninstall.toast.divisionKeptDetail"),
           life: 5000,
         });
       }

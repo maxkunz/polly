@@ -10,10 +10,16 @@ import ConfirmationService from "primevue/confirmationservice";
 import "primeicons/primeicons.css";
 import "./assets/main.css";
 import ToastService from "primevue/toastservice";
+import { i18n, initialLocale, primevueLocaleFor } from "@/i18n";
+
+if (typeof document !== "undefined") {
+	document.documentElement.lang = initialLocale;
+}
 
 const app = createApp(App);
 app.config.globalProperties.$appIconSet = appIconSet;
 app.use(createPinia());
+app.use(i18n);
 import router from "./router";
 
 import IconField from 'primevue/iconfield';
@@ -39,7 +45,8 @@ app.use(PrimeVue, {
 		sets: {
 			app: appIconSet
 		}
-	}
+	},
+	locale: primevueLocaleFor(initialLocale)
 });
 
 app.mount("#app");

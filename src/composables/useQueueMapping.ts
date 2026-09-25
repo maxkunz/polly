@@ -2,6 +2,7 @@ import { ref, computed } from "vue";
 import type { Ref, ComputedRef } from "vue";
 import type { QueueMappingData, QueueMappingEntry, QueueConflict } from "@/domain/queueMapping/queueMappingTypes";
 import { fetchQueueMapping, saveQueueMapping } from "@/services/surveyService";
+import { i18n } from "@/i18n";
 
 export interface UseQueueMappingOptions {
 	datatableId?: string;
@@ -112,7 +113,7 @@ export function useQueueMapping({
 			initialDeliveryRate.value = deliveryRate.value;
 		} catch (e: any) {
 			console.error("Failed to load queue mapping:", e);
-			loadError.value = e?.message || "Fehler beim Laden des Queue-Mappings";
+			loadError.value = e?.message || i18n.global.t("queueMapping.loadErrorFallback");
 		} finally {
 			isLoading.value = false;
 		}
@@ -149,7 +150,7 @@ export function useQueueMapping({
 			return true;
 		} catch (e: any) {
 			console.error("Failed to save queue mapping:", e);
-			saveError.value = e?.message || "Fehler beim Speichern des Queue-Mappings in der Data Table";
+			saveError.value = e?.message || i18n.global.t("queueMapping.saveErrorFallback");
 			return false;
 		} finally {
 			isSaving.value = false;

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import InputText from "primevue/inputtext";
 import Textarea from "primevue/textarea";
 import ToggleSwitch from "primevue/toggleswitch";
 import Select from "primevue/select";
 import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
 import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
-import { questionTypes } from "@/domain/survey/questionTypeCatalog";
+import { getQuestionTypes } from "@/domain/survey/questionTypeCatalog";
+
+const { t } = useI18n();
+const questionTypeOptions = computed(() => getQuestionTypes());
 
 const props = withDefaults(
 	defineProps<{
@@ -45,8 +49,8 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 		<div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
 			<div class="md:col-span-4">
 				<label :for="nameId" class="block text-xs font-medium text-[var(--p-text-muted-color)] mb-1">
-					Technischer Bezeichner (Name)
-					<span class="text-[10px] text-amber-600 block">(Unveränderbar für Reporting)</span>
+					{{ t("surveyQuestionFields.technicalName") }}
+					<span class="text-[10px] text-amber-600 block">{{ t("surveyQuestionFields.technicalNameHintShort") }}</span>
 				</label>
 				<InputText
 					:id="nameId"
@@ -56,18 +60,18 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 					readonly
 					:aria-describedby="`${nameId}_hint`"
 				/>
-				<span :id="`${nameId}_hint`" class="sr-only">Der Bezeichner wird für Reporting-Zwecke verwendet und kann nicht geändert werden.</span>
+				<span :id="`${nameId}_hint`" class="sr-only">{{ t("surveyQuestionFields.technicalNameHint") }}</span>
 			</div>
 
 			<div class="md:col-span-5">
 				<label :for="typeId" class="block text-xs font-medium mb-1">
-					Fragetyp <span class="text-red-500" aria-hidden="true">*</span>
-					<span v-if="isSaved" class="text-[10px] text-amber-600 block">(Gespeichert - Typ unveränderbar)</span>
+					{{ t("surveyQuestionFields.type") }} <span class="text-red-500" aria-hidden="true">*</span>
+					<span v-if="isSaved" class="text-[10px] text-amber-600 block">{{ t("surveyQuestionFields.typeSavedHint") }}</span>
 				</label>
 				<Select
 					:inputId="typeId"
 					:modelValue="question.type"
-					:options="questionTypes"
+					:options="questionTypeOptions"
 					optionLabel="label"
 					optionValue="value"
 					class="w-full"
@@ -84,7 +88,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 						:disabled="disabled"
 					/>
 					<label :for="mandatoryId" class="text-sm font-medium cursor-pointer">
-						Pflichtfrage
+						{{ t("surveyQuestionFields.mandatory") }}
 					</label>
 				</div>
 			</div>
@@ -93,13 +97,13 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 		<!-- Question Title -->
 		<div>
 			<label :for="titleId" class="block text-sm font-medium mb-1">
-				Titel / Prompt <span class="text-red-500" aria-hidden="true">*</span>
+				{{ t("surveyQuestionFields.title") }} <span class="text-red-500" aria-hidden="true">*</span>
 			</label>
 			<InputText
 				:id="titleId"
 				v-model="question.title"
 				class="w-full"
-				placeholder="z. B. Wie zufrieden sind Sie mit unserem Service?"
+				:placeholder="t('surveyQuestionFields.titlePlaceholder')"
 				:disabled="disabled"
 				:invalid="showValidation && !question.title?.trim()"
 				:aria-invalid="showValidation && !question.title?.trim()"
@@ -110,7 +114,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			<div>
 				<label :for="repromptId" class="block text-xs font-medium mb-1">
-					Wiederholungsaufforderung (Reprompt)
+					{{ t("surveyQuestionFields.reprompt") }}
 				</label>
 				<Textarea
 					:id="repromptId"
@@ -118,14 +122,14 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 					class="w-full text-sm"
 					rows="2"
 					autoResize
-					placeholder="Zweite Aufforderung zur Beantwortung der Frage (optional)."
+					:placeholder="t('surveyQuestionFields.repromptPlaceholder')"
 					:disabled="disabled"
 				/>
 			</div>
 
 			<div>
 				<label :for="descId" class="block text-xs font-medium mb-1">
-					Beschreibung / Hilfetext
+					{{ t("surveyQuestionFields.description") }}
 				</label>
 				<Textarea
 					:id="descId"
@@ -133,7 +137,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 					class="w-full text-sm"
 					rows="2"
 					autoResize
-					placeholder="Ergänzende Hinweise für den Befragten..."
+					:placeholder="t('surveyQuestionFields.descriptionPlaceholder')"
 					:disabled="disabled"
 				/>
 			</div>
