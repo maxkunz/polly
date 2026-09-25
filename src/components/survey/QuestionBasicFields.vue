@@ -93,7 +93,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 		<!-- Question Title -->
 		<div>
 			<label :for="titleId" class="block text-sm font-medium mb-1">
-				Fragetext / Titel <span class="text-red-500" aria-hidden="true">*</span>
+				Titel / Prompt <span class="text-red-500" aria-hidden="true">*</span>
 			</label>
 			<InputText
 				:id="titleId"
@@ -109,21 +109,6 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 		<!-- Description & Reprompt -->
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			<div>
-				<label :for="descId" class="block text-xs font-medium mb-1">
-					Beschreibung / Hilfetext
-				</label>
-				<Textarea
-					:id="descId"
-					v-model="question.description"
-					class="w-full text-sm"
-					rows="2"
-					autoResize
-					placeholder="Ergänzende Hinweise für den Befragten..."
-					:disabled="disabled"
-				/>
-			</div>
-
-			<div>
 				<label :for="repromptId" class="block text-xs font-medium mb-1">
 					Wiederholungsaufforderung (Reprompt)
 				</label>
@@ -134,6 +119,21 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 					rows="2"
 					autoResize
 					placeholder="Zweite Aufforderung zur Beantwortung der Frage (optional)."
+					:disabled="disabled"
+				/>
+			</div>
+
+			<div>
+				<label :for="descId" class="block text-xs font-medium mb-1">
+					Beschreibung / Hilfetext
+				</label>
+				<Textarea
+					:id="descId"
+					v-model="question.description"
+					class="w-full text-sm"
+					rows="2"
+					autoResize
+					placeholder="Ergänzende Hinweise für den Befragten..."
 					:disabled="disabled"
 				/>
 			</div>

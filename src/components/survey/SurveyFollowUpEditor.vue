@@ -46,6 +46,7 @@ const {
 
 const titleId = computed(() => `q_title_${props.followUp.question.id}`);
 const descId = computed(() => `fu_desc_${props.followUp.question.id}`);
+const repromptId = computed(() => `fu_reprompt_${props.followUp.question.id}`);
 const typeId = computed(() => `fu_type_${props.followUp.question.id}`);
 
 function confirmDelete() {
@@ -103,7 +104,7 @@ function confirmDelete() {
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 				<div class="md:col-span-2">
 					<label :for="titleId" class="block text-xs font-medium mb-1">
-						Fragetext / Titel <span class="text-red-500" aria-hidden="true">*</span>
+						Titel / Prompt <span class="text-red-500" aria-hidden="true">*</span>
 					</label>
 					<InputText
 						:id="titleId"
@@ -134,19 +135,36 @@ function confirmDelete() {
 				</div>
 			</div>
 
-			<div>
-				<label :for="descId" class="block text-xs font-medium mb-1">
-					Beschreibung / Hilfetext
-				</label>
-				<Textarea
-					:id="descId"
-					v-model="followUp.question.description"
-					class="w-full text-sm"
-					rows="2"
-					autoResize
-					placeholder="Zusätzliche Erklärung für den Teilnehmer..."
-					:disabled="disabled"
-				/>
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+				<div>
+					<label :for="repromptId" class="block text-xs font-medium mb-1">
+						Wiederholungsaufforderung (Reprompt)
+					</label>
+					<Textarea
+						:id="repromptId"
+						v-model="followUp.question.reprompt_message"
+						class="w-full text-sm"
+						rows="2"
+						autoResize
+						placeholder="Zweite Aufforderung zur Beantwortung der Frage (optional)."
+						:disabled="disabled"
+					/>
+				</div>
+				
+				<div>
+					<label :for="descId" class="block text-xs font-medium mb-1">
+						Beschreibung / Hilfetext
+					</label>
+					<Textarea
+						:id="descId"
+						v-model="followUp.question.description"
+						class="w-full text-sm"
+						rows="2"
+						autoResize
+						placeholder="Zusätzliche Erklärung für den Teilnehmer..."
+						:disabled="disabled"
+					/>
+				</div>
 			</div>
 		</div>
 
