@@ -39,7 +39,7 @@ const computedTechnicalName = computed(() => {
 	<Card class="border border-[var(--p-content-border-color)] shadow-sm rounded-2xl">
 		<template #title>
 			<h2 class="text-lg font-semibold text-[var(--p-text-color)]">
-				Allgemeine Umfrageeinstellungen
+				{{ t("surveyEditor.meta.title") }}
 			</h2>
 		</template>
 		<template #content>
