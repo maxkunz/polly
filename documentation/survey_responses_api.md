@@ -40,6 +40,8 @@ Status: completed                       Status: timed_out
 - **`completed`**: Der Flow hat die Umfrage regulär mit `isCompleted: true` beendet.
 - **`timed_out`**: Die Session verblieb länger als 30 Minuten im Zustand `partial` und wurde durch die periodische Cleanup-Lambda (alle 15 Minuten) als abgebrochen markiert.
 
+> **Hinweis:** Trifft nach einem `timed_out` noch eine weitere Antwort (`questionName` + `value`, ohne `isCompleted: true`) für dieselbe `conversationId` ein, wird diese trotzdem in `answers` gespeichert; der Status bleibt aber auf `timed_out` stehen (kein automatischer Rücksprung zu `partial`). Ein späterer Aufruf mit `isCompleted: true` setzt den Status dagegen immer auf `completed`, auch wenn die Session zuvor bereits `timed_out` war.
+
 ---
 
 ## 2. Authentifizierung & Mandantentrennung
@@ -51,7 +53,9 @@ Jeder Request muss authentifiziert sein. Die Tenant-Zuordnung (`tenantId`) erfol
    - Header: `Authorization: Bearer <GENESYS_BEARER_TOKEN>`
    - Header: `x-genesys-region: <REGION>` (z. B. `mypurecloud.de` oder `mypurecloud.com`, Standard: `mypurecloud.de`)
 2. **Cognito User Pool (Admin/Web-UI):**
-   - Header: `Authorization: Bearer <COGNITO_ID_OR_ACCESS_TOKEN>`
+   - Header: `Authorization: Bearer <COGNITO_ACCESS_TOKEN>`
+   - Es wird ausschließlich ein **Access Token** akzeptiert (`token_use: "access"`); ein Cognito **ID Token** (`token_use: "id"`) wird abgelehnt.
+   - Anhand des JWT-Issuers (`iss`-Claim) wird automatisch erkannt, ob es sich um ein Cognito- oder ein Genesys-Token handelt; `x-genesys-region` ist für den Cognito-Pfad nicht erforderlich.
 
 ### Basis-URL
 ```text
@@ -69,8 +73,10 @@ Das Feld `questionName` ist der unveränderliche technische Bezeichner der Frage
 | `yes_no` | `boolean` | `true` / `false` | `counts.true`, `counts.false`, `totalResponses` |
 | `nps` | `number` (0–10 Ganzzahl) | `9` | `counts["9"]`, `sum`, `totalResponses` |
 | `rating` | `number` (Ganzzahl, z. B. 0–5 oder 0–8) | `4` | `counts["4"]`, `sum`, `totalResponses` |
-| `choice` | `string` (Option-ID oder Label) | `"option_a"` | `counts["option_a"]`, `totalResponses` |
+| `choice` | `string` (Label der gewählten Option) | `"Dashboard-Analysen"` | `counts["Dashboard-Analysen"]`, `totalResponses` |
 | `comment` | `string` (transkribierter Text) | `"Sehr freundlich"` | Nur `totalResponses` (keine Häufigkeitsverteilung) |
+
+> Bei `choice` kennt das flow-optimierte JSON (siehe @survey_translator_for_flow.md) keine Options-IDs mehr, sondern nur noch die Labels der Auswahlmöglichkeiten - der Flow kann daher nur das Label als `value` senden, keine ID.
 
 ---
 
@@ -99,6 +105,8 @@ interface SubmitSurveyAnswerBody {
   isCompleted?: boolean;     // true bei der letzten Frage oder Abschluss-Aufruf
 }
 ```
+
+> **Hinweis:** `surveyName` und `surveyVersion` werden bei **jedem** Aufruf neu geschrieben, nicht nur beim ersten. Wird `surveyName` bei einem späteren Aufruf für dieselbe `conversationId` weggelassen, wird der zuvor gespeicherte Name mit `""` überschrieben; wird `surveyVersion` weggelassen, fällt sie auf den Standardwert `1` zurück und überschreibt damit einen zuvor gespeicherten anderen Wert. Es empfiehlt sich daher, beide Felder bei jedem Aufruf innerhalb derselben Session konsistent mitzuschicken.
 
 > **Hinweis:** Mindestens `questionName` (mit `value`) **oder** `isCompleted: true` muss übergeben werden.
 
@@ -239,6 +247,8 @@ x-genesys-region: mypurecloud.de
 > - **Durchschnitt (Rating/NPS):** `avg = item.sum / item.totalResponses`
 > - **NPS-Score (% Promotoren - % Detektoren):** Kann anhand von `item.counts` (Promotoren: 9–10, Passive: 7–8, Detektoren: 0–6) errechnet werden.
 
+> **Hinweis zur Zählung:** Jeder POST-Aufruf mit `questionName` + `value` erhöht `totalResponses` (und ggf. `sum`/`counts`) für diese Frage um 1, unabhängig davon, ob für diese `conversationId` bereits einmal eine Antwort auf dieselbe Frage gesendet wurde. Ein erneutes Senden (z. B. bei einem Retry oder wenn eine Frage im Flow wiederholt wird) führt also zu einer doppelten Zählung in den Aggregaten - in den Rohdaten (`SurveyResponsesTable`) wird die Antwort pro `questionName` dagegen überschrieben; dort bleibt nur der letzte Wert erhalten.
+
 ---
 
 ### 4.3 GET `/survey-responses/raw`
@@ -289,6 +299,8 @@ x-genesys-region: mypurecloud.de
 
 > **Paginierungs-Workflow:**
 > Wenn `nextCursor` nicht `null` ist, kann der Wert im nächsten Request als `&cursor=<nextCursor>` übergeben werden, um die nächste Seite abzurufen.
+
+> **Hinweis zum `status`-Filter:** `limit` begrenzt die Anzahl der aus der Tabelle gelesenen Einträge, bevor der optionale `status`-Filter angewendet wird. Eine Seite kann dadurch weniger Einträge enthalten als `limit` (oder sogar leer sein), obwohl `nextCursor` weiterhin gesetzt ist - es lohnt sich also, bei aktivem Filter so lange nachzublättern, bis `nextCursor` `null` ist, auch wenn eine Seite leer war.
 
 ---
 
@@ -356,19 +368,22 @@ Alle Fehler werden als einheitliches JSON-Objekt mit dem Feld `message` zurückg
 
 | HTTP Status | Ursache / Bedeutung |
 | :--- | :--- |
-| **`400 Bad Request`** | Fehlende Pflichtfelder (`conversationId`, `surveyId`), ungültiges JSON oder weder `questionName` noch `isCompleted: true` übergeben. |
+| **`400 Bad Request`** | Fehlende Pflichtfelder (`conversationId`, `surveyId`), ungültiges JSON, weder `questionName` noch `isCompleted: true` übergeben, oder ungültiger `cursor` bei `/survey-responses/raw`. |
 | **`401 Unauthorized`** | Fehlendes oder ungültiges Token (Genesys oder Cognito) bzw. Mandant nicht freigeschaltet. |
-| **`404 Not Found`** | Session mit angegebener `conversationId` existiert nicht oder falsche Route/Methode. |
+| **`404 Not Found`** | Session mit angegebener `conversationId` existiert nicht, oder falsche Route/Methode (Antwort enthält dann zusätzlich `method` und `path`). |
 | **`500 Internal Server Error`** | Unerwarteter Serverfehler oder fehlende Tabellenkonfiguration in Lambda Environment. |
+
+> Ein `OPTIONS`-Preflight-Request wird immer mit `204 No Content` (leerer Body) beantwortet.
 
 ---
 
 ## 6. Automatisches Cleanup (Timeout von Abbrüchen)
 
 - **Lambda:** `survey_cleanup`
-- **Auslöser:** Amazon EventBridge Rule alle 15 Minuten (`cron(0/15 * * * ? *)`)
+- **Auslöser:** Amazon EventBridge Rule mit festem Intervall alle 15 Minuten (rate-basiert, nicht an feste Uhrzeiten wie `:00`/`:15`/`:30`/`:45` gebunden, sondern relativ zum Deployment-Zeitpunkt der Regel)
 - **Ablauf:**
-  1. Sucht per GSI `byStatus` alle Einträge mit `status = 'partial'`.
-  2. Prüft, ob `updatedAt` älter als **30 Minuten** ist.
-  3. Aktualisiert den Status auf `timed_out` und setzt `timedOutAt = now`.
+  1. Sucht per GSI `byStatus` alle Einträge mit `status = 'partial'` und `updatedAt` älter als der Timeout (Query direkt mit Cutoff-Zeitstempel, in Seiten à max. 100 Einträgen).
+  2. Aktualisiert pro gefundenem Eintrag den Status auf `timed_out` und setzt `timedOutAt = now` (nur, falls der Eintrag zwischenzeitlich nicht bereits verändert wurde).
+  3. Pro Lauf werden maximal ca. 500 Einträge geprüft; verbleibende Einträge werden beim nächsten Lauf (15 Minuten später) weiterverarbeitet.
+- Der Timeout ist über die Umgebungsvariable `TIMEOUT_MINUTES` konfigurierbar und steht aktuell auf **30 Minuten**.
 - Dadurch fließen abgebrochene Sessions nicht dauerhaft als aktive Sessions durchs System und können im Reporting separat gefiltert werden.

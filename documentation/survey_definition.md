@@ -1,21 +1,25 @@
-## constraints
-* eine umfrage darf 1 bis maximal 20 Fragen haben (folgefragen zählen zu den 20)
-* der fragetyp "rating" kann von 0 bis maximal 8 frei konfiguriert werden, es ist also auch möglich rating 0 bis 3 oder 0 bis 4, etc zu definieren
-* der fragetyp "choice" darf maximal 5 auswahlmöglichkeiten haben und muss mindestens zwei auswahlmöglichkeiten haben
-* erstelle als ids immer valide und zufällige eindeutige UUIDs
-* das erstellte json muss valide sein
-* das feld "name" bei der umfrage und den fragen wird ist eine unmutable bezeichner der nach dem erstellen nicht mehr geändert werden darf (fürs reporting)
-* als bedingungen (operator) für folgefragen sind nur "equals", "less_than" und "greater_than" erlaubt; bei "yes_no" und "choice" nur "equals"
-* bei den fragetypen "rating" und "nps" darf jeder operator ("equals", "less_than", "greater_than") pro frage nur einmal als Folgefragen-Bedingung verwendet werden
-* beim fragetyp "choice" gibt es keine operator-auswahl (immer "equals") und es dürfen mehrere Folgefragen mit "equals" existieren, aber pro Auswahlmöglichkeit darf es maximal eine Folgefrage geben (jede Option darf also nur einmal als Bedingung verwendet werden)
-* bei den Auswahlmöglichkeiten des Fragetyps "choice" können optional Synonyme angegeben werden (z.B. damit im Voice Flow auch das Nennen eines Synonyms als gültige Antwort erkannt wird). Im Editor werden Label und Synonyme durch Komma getrennt in ein Feld eingegeben (z.B. "Orange, Apfelsine, Saftorange"); das erste Wort wird als "label" gespeichert, alle weiteren als "synonyms"
-* innerhalb einer "choice"-Frage darf ein Label oder Synonym nicht bei mehreren Auswahlmöglichkeiten vorkommen, da eine genannte Antwort sonst nicht mehr eindeutig einer Option zugeordnet werden kann
+## Constraints
+* Eine Umfrage darf 1 bis maximal 20 Fragen haben (Folgefragen zählen zu den 20).
+* Der Titel der Umfrage sowie der Titel jeder Frage (auch Folgefragen) dürfen nicht leer sein.
+* Der Fragetyp "rating" kann von 0 bis maximal 8 frei konfiguriert werden; es ist also auch möglich, Rating 0 bis 3 oder 0 bis 4 usw. zu definieren. Der Minimalwert muss dabei kleiner als der Maximalwert sein.
+* Der Fragetyp "choice" darf maximal 5 Auswahlmöglichkeiten haben und muss mindestens zwei Auswahlmöglichkeiten haben.
+* Der Fragetyp "comment" darf keine Folgefragen haben.
+* Folgefragen dürfen selbst wieder Folgefragen haben (beliebig tief verschachtelt), zählen aber weiterhin zu den maximal 20 Fragen der Umfrage.
+* Erstelle als IDs immer valide, zufällige und eindeutige UUIDs.
+* Das erstellte JSON muss valide sein.
+* Das Feld "name" bei der Umfrage und den Fragen ist ein technischer Bezeichner fürs Reporting und wird nicht frei vergeben, sondern beim Speichern automatisch aus dem Titel und den ersten 8 Zeichen der ID erzeugt (z. B. "kundenzufriedenheit_2026_a0eebc99"; Umlaute werden dabei transliteriert, Sonderzeichen durch "_" ersetzt). Ist der Titel beim Erzeugen noch leer, wird zunächst ein Platzhalter ("umfrage_<id>" bzw. "frage_<id>") verwendet. Sobald einmal ein aus dem Titel abgeleiteter Name gespeichert wurde, bleibt dieser auch bei späteren Titeländerungen unverändert erhalten (daher "unmutable"). Der Name ist im Editor nicht direkt editierbar.
+* Als Bedingungen (Operator) für Folgefragen sind nur "equals", "less_than" und "greater_than" erlaubt; bei "yes_no" und "choice" nur "equals".
+* Bei den Fragetypen "rating" und "nps" darf jeder Operator ("equals", "less_than", "greater_than") pro Frage nur einmal als Folgefragen-Bedingung verwendet werden.
+* Beim Fragetyp "choice" gibt es keine Operator-Auswahl (immer "equals") und es dürfen mehrere Folgefragen mit "equals" existieren, aber pro Auswahlmöglichkeit darf es maximal eine Folgefrage geben (jede Option darf also nur einmal als Bedingung verwendet werden).
+* Bei den Auswahlmöglichkeiten des Fragetyps "choice" können optional Synonyme angegeben werden (z. B. damit im Voice Flow auch das Nennen eines Synonyms als gültige Antwort erkannt wird). Im Editor werden Label und Synonyme durch Komma getrennt in ein Feld eingegeben (z. B. "Orange, Apfelsine, Saftorange"); der erste kommagetrennte Eintrag wird als "label" gespeichert, alle weiteren als "synonyms".
+* Innerhalb einer "choice"-Frage darf ein Label oder Synonym nicht bei mehreren Auswahlmöglichkeiten vorkommen, da eine genannte Antwort sonst nicht mehr eindeutig einer Option zugeordnet werden kann (der Vergleich erfolgt getrimmt und ohne Beachtung der Groß-/Kleinschreibung).
+* Bei jedem Speichern des Drafts wird "updated_at" auf den aktuellen Zeitpunkt gesetzt und "version" um 1 erhöht (neue Umfragen starten bei version 0); "created_at" wird nur einmal bei der Erstellung gesetzt und danach nicht mehr verändert.
 
-### beispiel json
+### Beispiel JSON
 
 {
     "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-    "name": "Kundenzufriedenheit 2026",
+    "name": "kundenzufriedenheit_2026_a0eebc99",
     "title": "Kundenzufriedenheit 2026",
     "description": "Jährliche Umfrage zur Nutzerzufriedenheit.",
     "greeting_message": "Vielen Dank, dass Sie sich 3 Minuten Zeit nehmen, um Ihre Gedanken mit uns zu teilen.",
