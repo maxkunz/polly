@@ -282,7 +282,7 @@ export const en: MessageSchema = {
 		valueChoice: "Answer matches option",
 		valueOther: "Comparison value",
 		choicePlaceholder: "Select option...",
-		choiceDuplicate: "This option is already used by follow-up question {number}.",
+		valueDuplicate: "This value is already used by follow-up question {number}.",
 		unnamedOption: "Option ({id})"
 	},
 
@@ -324,7 +324,7 @@ export const en: MessageSchema = {
 		choiceOptionDuplicate: "Option {number} overlaps with option {otherNumber} (same label or synonym).",
 		followUpMissing: "Follow-up question is missing.",
 		followUpOperatorDuplicate: "The comparator \"{operator}\" is already used by follow-up question {number}. Each comparator may only be used once.",
-		followUpChoiceValueDuplicate: "This answer option is already used by follow-up question {number}. Each option may only have one follow-up question.",
+		followUpValueDuplicate: "This value is already used by follow-up question {number}. Each possible answer value may only have one follow-up question.",
 		surveyTitleRequired: "The survey title must not be empty.",
 		surveyNameRequired: "The survey name must not be empty.",
 		surveyMinQuestions: "A survey must contain at least 1 question.",

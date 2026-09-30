@@ -13,7 +13,7 @@ import { isChoiceOptions } from "@/domain/survey/surveyTypes";
 import { getOperatorOptions, getBooleanOptions } from "@/domain/survey/questionTypeCatalog";
 import {
 	findDuplicateFollowUpOperators,
-	findDuplicateChoiceFollowUpValues
+	findDuplicateFollowUpValues
 } from "@/domain/survey/surveyValidator";
 
 const { t } = useI18n();
@@ -34,14 +34,18 @@ const props = withDefaults(
 
 const isChoiceParent = computed(() => props.parentQuestion.type === "choice");
 
-// Bei choice gibt es nur den Operator "equals" und dieser darf - anders als bei
-// rating/nps - mehrfach verwendet werden, da jede Folgefrage an eine andere
-// Auswahloption gebunden ist. Die Operator-Auswahl entfällt daher im UI.
+// Bei choice und yes_no gibt es nur den Operator "equals" und dieser darf - anders
+// als bei rating/nps - mehrfach verwendet werden, da jede Folgefrage an einen
+// anderen möglichen Antwortwert (Auswahloption bzw. ja/nein) gebunden ist. Die
+// Operator-Auswahl entfällt daher im UI.
+const hasSingleOperator = computed(() => getOperatorOptions(props.parentQuestion.type).length === 1);
+
 watch(
 	() => props.parentQuestion.type,
 	type => {
-		if (type === "choice" && props.followUp.condition.operator !== "equals") {
-			props.followUp.condition.operator = "equals";
+		const options = getOperatorOptions(type);
+		if (options.length === 1 && props.followUp.condition.operator !== options[0].value) {
+			props.followUp.condition.operator = options[0].value;
 		}
 	},
 	{ immediate: true }
@@ -49,7 +53,7 @@ watch(
 
 const usedOperatorsBySiblings = computed(() => {
 	const used = new Set<ConditionOperator>();
-	if (isChoiceParent.value) return used;
+	if (hasSingleOperator.value) return used;
 	(props.parentQuestion.follow_ups || []).forEach((fu, idx) => {
 		if (idx !== props.index && fu.condition?.operator) {
 			used.add(fu.condition.operator);
@@ -75,9 +79,11 @@ const duplicateOperatorMessage = computed(() => {
 	return t("surveyCondition.operatorDuplicate", { number: firstIdx + 1 });
 });
 
-const usedChoiceValuesBySiblings = computed(() => {
+// Bei choice und yes_no darf jeder mögliche Antwortwert (Auswahloption bzw.
+// ja/nein) nur einmal als Folgefragen-Bedingung verwendet werden.
+const usedValuesBySiblings = computed(() => {
 	const used = new Set<unknown>();
-	if (!isChoiceParent.value) return used;
+	if (!hasSingleOperator.value) return used;
 	(props.parentQuestion.follow_ups || []).forEach((fu, idx) => {
 		if (idx !== props.index && fu.condition?.value !== undefined && fu.condition?.value !== "") {
 			used.add(fu.condition.value);
@@ -91,24 +97,29 @@ const choiceOptionsList = computed(() => {
 		return (props.parentQuestion.options as ChoiceOptions).labels.map(l => ({
 			label: l.label || t("surveyCondition.unnamedOption", { id: l.id.slice(0, 6) }),
 			value: l.id,
-			disabled: usedChoiceValuesBySiblings.value.has(l.id)
+			disabled: usedValuesBySiblings.value.has(l.id)
 		}));
 	}
 	return [];
 });
 
-const duplicateChoiceValueMessage = computed(() => {
-	if (!isChoiceParent.value) return undefined;
-	const duplicates = findDuplicateChoiceFollowUpValues(
+const booleanOptions = computed(() =>
+	getBooleanOptions().map(opt => ({
+		...opt,
+		disabled: usedValuesBySiblings.value.has(opt.value)
+	}))
+);
+
+const duplicateValueMessage = computed(() => {
+	if (!hasSingleOperator.value) return undefined;
+	const duplicates = findDuplicateFollowUpValues(
 		props.parentQuestion.type,
 		props.parentQuestion.follow_ups || []
 	);
 	const firstIdx = duplicates.get(props.index);
 	if (firstIdx === undefined) return undefined;
-	return t("surveyCondition.choiceDuplicate", { number: firstIdx + 1 });
+	return t("surveyCondition.valueDuplicate", { number: firstIdx + 1 });
 });
-
-const booleanOptions = computed(() => getBooleanOptions());
 
 const conditionOpId = computed(() => `fu_cond_op_${props.parentQuestion.id}_${props.index}`);
 const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_${props.index}`);
@@ -120,8 +131,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 			{{ t("surveyCondition.label") }}
 		</div>
 
-		<div class="grid grid-cols-1 gap-3" :class="isChoiceParent ? '' : 'md:grid-cols-2'">
-			<div v-if="!isChoiceParent">
+		<div class="grid grid-cols-1 gap-3" :class="hasSingleOperator ? '' : 'md:grid-cols-2'">
+			<div v-if="!hasSingleOperator">
 				<label :for="conditionOpId" class="block text-xs font-medium mb-1">
 					{{ t("surveyCondition.operator") }} <span class="text-red-500" aria-hidden="true">*</span>
 				</label>
@@ -155,16 +166,28 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 				</label>
 
 				<!-- Boolean for yes_no -->
-				<Select
-					v-if="parentQuestion.type === 'yes_no'"
-					:inputId="conditionValueId"
-					v-model="followUp.condition.value"
-					:options="booleanOptions"
-					optionLabel="label"
-					optionValue="value"
-					class="w-full text-xs"
-					:disabled="disabled"
-				/>
+				<template v-if="parentQuestion.type === 'yes_no'">
+					<Select
+						:inputId="conditionValueId"
+						v-model="followUp.condition.value"
+						:options="booleanOptions"
+						optionLabel="label"
+						optionValue="value"
+						optionDisabled="disabled"
+						class="w-full text-xs"
+						:disabled="disabled"
+						:invalid="showValidation && !!duplicateValueMessage"
+						:aria-invalid="showValidation && !!duplicateValueMessage"
+						:aria-describedby="showValidation && duplicateValueMessage ? `${conditionValueId}_dup` : undefined"
+					/>
+					<small
+						v-if="showValidation && duplicateValueMessage"
+						:id="`${conditionValueId}_dup`"
+						class="block mt-1 text-xs text-red-500"
+					>
+						{{ duplicateValueMessage }}
+					</small>
+				</template>
 
 				<!-- Options for choice -->
 				<template v-else-if="parentQuestion.type === 'choice'">
@@ -178,16 +201,16 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 						:placeholder="t('surveyCondition.choicePlaceholder')"
 						class="w-full text-xs"
 						:disabled="disabled"
-						:invalid="showValidation && !!duplicateChoiceValueMessage"
-						:aria-invalid="showValidation && !!duplicateChoiceValueMessage"
-						:aria-describedby="showValidation && duplicateChoiceValueMessage ? `${conditionValueId}_dup` : undefined"
+						:invalid="showValidation && !!duplicateValueMessage"
+						:aria-invalid="showValidation && !!duplicateValueMessage"
+						:aria-describedby="showValidation && duplicateValueMessage ? `${conditionValueId}_dup` : undefined"
 					/>
 					<small
-						v-if="showValidation && duplicateChoiceValueMessage"
+						v-if="showValidation && duplicateValueMessage"
 						:id="`${conditionValueId}_dup`"
 						class="block mt-1 text-xs text-red-500"
 					>
-						{{ duplicateChoiceValueMessage }}
+						{{ duplicateValueMessage }}
 					</small>
 				</template>
 

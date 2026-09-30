@@ -280,7 +280,7 @@ export const de = {
 		valueChoice: "Antwort entspricht Option",
 		valueOther: "Vergleichswert",
 		choicePlaceholder: "Wähle Option...",
-		choiceDuplicate: "Diese Option wird bereits von Folgefrage {number} verwendet.",
+		valueDuplicate: "Dieser Wert wird bereits von Folgefrage {number} verwendet.",
 		unnamedOption: "Option ({id})"
 	},
 
@@ -322,7 +322,7 @@ export const de = {
 		choiceOptionDuplicate: "Option {number} überschneidet sich mit Option {otherNumber} (gleiches Label oder Synonym).",
 		followUpMissing: "Folgefrage fehlt.",
 		followUpOperatorDuplicate: "Der Komparator \"{operator}\" wird bereits von Folgefrage {number} verwendet. Jeder Komparator darf nur einmal verwendet werden.",
-		followUpChoiceValueDuplicate: "Diese Auswahloption wird bereits von Folgefrage {number} verwendet. Jede Option darf nur eine Folgefrage haben.",
+		followUpValueDuplicate: "Dieser Wert wird bereits von Folgefrage {number} verwendet. Jeder mögliche Antwortwert darf nur eine Folgefrage haben.",
 		surveyTitleRequired: "Der Titel der Umfrage darf nicht leer sein.",
 		surveyNameRequired: "Der Name der Umfrage darf nicht leer sein.",
 		surveyMinQuestions: "Eine Umfrage muss mindestens 1 Frage enthalten.",
