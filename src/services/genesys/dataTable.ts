@@ -108,6 +108,30 @@ export async function listDataTableRows(datatableId: string, pageSize: number = 
 
     return []; // Fallback
 }
+// ALL ROWS (paginiert, für Tabellen mit potenziell > 500 Zeilen wie das Queue-Mapping)
+export async function listAllDataTableRows(datatableId: string, pageSize: number = 500) {
+    const { architectApi } = useAppStore().genesys;
+
+    const allRows: any[] = [];
+    let pageNumber = 1;
+    let pageCount = 1;
+
+    do {
+        const res = await architectApi.getFlowsDatatableRows(datatableId, {
+            pageNumber,
+            pageSize,
+            showbrief: false
+        });
+
+        const entities = res?.entities ?? res?.data?.entities ?? [];
+        allRows.push(...entities);
+
+        pageCount = res?.pageCount ?? res?.data?.pageCount ?? 1;
+        pageNumber++;
+    } while (pageNumber <= pageCount);
+
+    return allRows;
+}
 // ONE ROW
 export async function OneRowDataTable(datatableId: string, rowId: string) {
     const { architectApi } = useAppStore().genesys;

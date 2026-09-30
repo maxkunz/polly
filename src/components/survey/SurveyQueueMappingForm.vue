@@ -14,7 +14,6 @@ import { useQueueMapping } from "@/composables/useQueueMapping";
 
 const props = defineProps<{
 	surveyId: string;
-	datatableId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -42,7 +41,6 @@ const {
 	executeSave,
 	resetForm
 } = useQueueMapping({
-	datatableId: props.datatableId,
 	surveyId: props.surveyId
 });
 

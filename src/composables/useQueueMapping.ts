@@ -5,7 +5,6 @@ import { fetchQueueMapping, saveQueueMapping } from "@/services/surveyService";
 import { i18n } from "@/i18n";
 
 export interface UseQueueMappingOptions {
-	datatableId?: string;
 	surveyId: string;
 }
 
@@ -30,7 +29,6 @@ export interface UseQueueMappingReturn {
 }
 
 export function useQueueMapping({
-	datatableId,
 	surveyId
 }: UseQueueMappingOptions): UseQueueMappingReturn {
 	const isLoading = ref<boolean>(false);
@@ -44,7 +42,6 @@ export function useQueueMapping({
 	const initialQueueNamesText = ref<string>("");
 	const initialDeliveryRate = ref<number>(25);
 
-	const rawRow = ref<Record<string, any> | null>(null);
 	const allMappings = ref<QueueMappingData>([]);
 
 	const surveyMappings = computed<QueueMappingEntry[]>(() => {
@@ -96,11 +93,10 @@ export function useQueueMapping({
 		saveError.value = null;
 
 		try {
-			const res = await fetchQueueMapping(datatableId);
-			rawRow.value = res.rawRow;
-			allMappings.value = res.mapping;
+			const mapping = await fetchQueueMapping();
+			allMappings.value = mapping;
 
-			const forSurvey = res.mapping.filter(entry => entry.surveyId === surveyId);
+			const forSurvey = mapping.filter(entry => entry.surveyId === surveyId);
 			if (forSurvey.length > 0) {
 				queueNamesText.value = forSurvey.map(e => e.queueName).join("\n");
 				deliveryRate.value = forSurvey[0]?.deliveryRate ?? 25;
@@ -125,20 +121,14 @@ export function useQueueMapping({
 
 		try {
 			const updated = await saveQueueMapping(
-				datatableId,
 				surveyId,
 				parsedQueues.value,
-				deliveryRate.value,
-				rawRow.value
+				deliveryRate.value
 			);
 
 			allMappings.value = updated;
-			// Refresh raw row to ensure latest metadata
-			const refreshed = await fetchQueueMapping(datatableId);
-			rawRow.value = refreshed.rawRow;
-			allMappings.value = refreshed.mapping;
 
-			const forSurvey = refreshed.mapping.filter(entry => entry.surveyId === surveyId);
+			const forSurvey = updated.filter(entry => entry.surveyId === surveyId);
 			queueNamesText.value = forSurvey.map(e => e.queueName).join("\n");
 			if (forSurvey.length > 0) {
 				deliveryRate.value = forSurvey[0]?.deliveryRate ?? deliveryRate.value;

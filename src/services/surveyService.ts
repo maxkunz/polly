@@ -1,4 +1,4 @@
-import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
+import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow, listAllDataTableRows } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/queueMappingTypes";
@@ -12,6 +12,10 @@ async function resolveDataTableId(datatableId?: string): Promise<string> {
 		return datatableId;
 	}
 	return await useAppStore().ensureDataTableId();
+}
+
+async function resolveMappingDataTableId(): Promise<string> {
+	return await useAppStore().ensureMappingDataTableId();
 }
 
 export interface LoadSurveyResult {
@@ -268,71 +272,36 @@ export async function deleteSurvey(
 	}
 }
 
-export interface FetchQueueMappingResult {
-	mapping: QueueMappingData;
-	rawRow: Record<string, any> | null;
-}
-
-export async function fetchQueueMapping(
-	datatableId?: string
-): Promise<FetchQueueMappingResult> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
-	const rowKey = "queue_mapping";
-	let rawRow: Record<string, any> | null = null;
-	let mapping: QueueMappingData = [];
-
-	try {
-		rawRow = await OneRowDataTable(resolvedTableId, rowKey);
-		if (rawRow) {
-			const rawProd = rawRow.Prod ?? rawRow.prod;
-			if (rawProd) {
-				const parsed = typeof rawProd === "string" ? JSON.parse(rawProd) : rawProd;
-				if (Array.isArray(parsed)) {
-					mapping = parsed;
-				}
-			}
-		}
-	} catch (e) {
-		console.warn("Could not load queue_mapping row from data table:", e);
-	}
-
+/**
+ * Wandelt eine rohe Zeile der Mapping-Tabelle (Bund_KSC_Atip_Polly_Mapping) in einen
+ * QueueMappingEntry um. Die Key-Spalte trägt zwar den Titel "QueueName", ihr JSON-Property-
+ * Name ist aber wie bei jeder Data-Table-Zeile schlicht "key".
+ */
+function rowToQueueMappingEntry(row: Record<string, any>): QueueMappingEntry {
 	return {
-		mapping,
-		rawRow
+		queueName: String(row.key ?? row.queueName ?? ""),
+		surveyId: String(row.SurveyId ?? row.surveyId ?? ""),
+		deliveryRate: Number(row.DeliveryRate ?? row.deliveryRate ?? 0)
 	};
 }
 
+export async function fetchQueueMapping(): Promise<QueueMappingData> {
+	const resolvedTableId = await resolveMappingDataTableId();
+	try {
+		const rows = await listAllDataTableRows(resolvedTableId);
+		return rows.map(rowToQueueMappingEntry);
+	} catch (e) {
+		console.warn("Could not load queue mapping rows from data table:", e);
+		return [];
+	}
+}
+
 export async function saveQueueMapping(
-	datatableId: string | undefined,
 	surveyId: string,
 	queues: string[],
-	deliveryRate: number,
-	existingRawRow?: Record<string, any> | null
+	deliveryRate: number
 ): Promise<QueueMappingData> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
-	const rowKey = "queue_mapping";
-
-	let currentRow = existingRawRow;
-	if (!currentRow) {
-		try {
-			currentRow = await OneRowDataTable(resolvedTableId, rowKey);
-		} catch {
-			currentRow = null;
-		}
-	}
-
-	let currentMapping: QueueMappingData = [];
-	const rawProd = currentRow?.Prod ?? currentRow?.prod;
-	if (rawProd) {
-		try {
-			const parsed = typeof rawProd === "string" ? JSON.parse(rawProd) : rawProd;
-			if (Array.isArray(parsed)) {
-				currentMapping = parsed;
-			}
-		} catch {
-			currentMapping = [];
-		}
-	}
+	const resolvedTableId = await resolveMappingDataTableId();
 
 	// Clean inputs: unique, trimmed non-empty queues
 	const cleanedQueues = Array.from(
@@ -342,47 +311,53 @@ export async function saveQueueMapping(
 				.filter(q => q.length > 0)
 		)
 	);
+	const cleanedQueuesLower = new Set(cleanedQueues.map(q => q.toLowerCase()));
 
-	// Ensure each queue only exists once:
-	// 1. Remove all previous entries belonging to this surveyId
-	// 2. Also remove any entry whose queueName matches one of the new cleanedQueues (case-insensitive)
-	const remainingEntries = currentMapping.filter(
-		entry =>
-			entry.surveyId !== surveyId &&
-			!cleanedQueues.some(q => q.toLowerCase() === (entry.queueName ?? "").toLowerCase())
-	);
-
-	// Create new entries for this survey
 	const safeDeliveryRate = Math.max(1, Math.min(100, Math.round(deliveryRate)));
-	const newEntries: QueueMappingEntry[] = cleanedQueues.map(queueName => ({
-		queueName,
-		surveyId,
-		deliveryRate: safeDeliveryRate
-	}));
 
-	const updatedMapping: QueueMappingData = [...remainingEntries, ...newEntries];
-	const serializedProd = JSON.stringify(updatedMapping);
+	const currentRows = await listAllDataTableRows(resolvedTableId);
 
-	const rowPayload: Record<string, any> = {
-		key: rowKey,
-		Draft: currentRow?.Draft ?? "[]",
-		Stage: currentRow?.Stage ?? "[]",
-		Prod: serializedProd,
-		Backup: currentRow?.Backup ?? "[]",
-		lock: currentRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
-	};
-
-	if (!currentRow) {
-		try {
-			await addDataTableRow(resolvedTableId, rowPayload);
-		} catch {
-			await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
+	// 1. Zeilen dieser Umfrage löschen, deren Queue nicht mehr in der neuen Liste steht
+	for (const row of currentRows) {
+		const entry = rowToQueueMappingEntry(row);
+		if (entry.surveyId === surveyId && !cleanedQueuesLower.has(entry.queueName.toLowerCase())) {
+			await deleteDataTableRow(resolvedTableId, entry.queueName);
 		}
-	} else {
-		await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
 	}
 
-	return updatedMapping;
+	// 2. Für jede gewünschte Queue: bestehende Zeile übernehmen (ggf. mit korrigierter
+	//    Schreibweise neu anlegen) oder neu erzeugen
+	for (const queueName of cleanedQueues) {
+		const existingRow = currentRows.find(
+			row => rowToQueueMappingEntry(row).queueName.toLowerCase() === queueName.toLowerCase()
+		);
+
+		if (existingRow) {
+			const existingKey = String(existingRow.key ?? existingRow.queueName ?? "");
+			if (existingKey === queueName) {
+				await updateDataTableRow(resolvedTableId, queueName, {
+					SurveyId: surveyId,
+					DeliveryRate: safeDeliveryRate
+				});
+			} else {
+				// Schreibweise unterscheidet sich vom Key: alte Zeile ersetzen statt umbenennen
+				await deleteDataTableRow(resolvedTableId, existingKey);
+				await addDataTableRow(resolvedTableId, {
+					key: queueName,
+					SurveyId: surveyId,
+					DeliveryRate: safeDeliveryRate
+				});
+			}
+		} else {
+			await addDataTableRow(resolvedTableId, {
+				key: queueName,
+				SurveyId: surveyId,
+				DeliveryRate: safeDeliveryRate
+			});
+		}
+	}
+
+	return await fetchQueueMapping();
 }
 
 export interface SurveyLockData {

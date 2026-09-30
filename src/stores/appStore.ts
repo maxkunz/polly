@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
-import { POLLY_DATA_TABLE_NAME } from "@/constants/surveyConstants";
+import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
@@ -53,6 +53,7 @@ export const useAppStore = defineStore("app", {
 		clientId: null as string | null,
 		datatableId: null as string | null,
 		dataTableId: null as string | null,
+		mappingDataTableId: null as string | null,
 		devView: false,
 
 	}),
@@ -87,20 +88,32 @@ export const useAppStore = defineStore("app", {
 			}
 		},
 
+		async findDataTableIdByName(name: string): Promise<string> {
+			this.initGenesysClients();
+			const res = await listDataTables(name);
+			const entities = res?.entities || res || [];
+			console.log("datatables found: ", entities);
+			const targetTable = entities.find((t: any) => t.name === name);
+			if (!targetTable || !targetTable.id) {
+				throw new Error(`Data table '${name}' not found.`);
+			}
+			return targetTable.id;
+		},
+
 		async ensureDataTableId(): Promise<string> {
 			if (this.dataTableId) {
 				return this.dataTableId;
 			}
-			this.initGenesysClients();
-			const res = await listDataTables(POLLY_DATA_TABLE_NAME);
-			const entities = res?.entities || res || [];
-			console.log("datatables found: ", entities);
-			const targetTable = entities.find((t: any) => t.name === POLLY_DATA_TABLE_NAME);
-			if (!targetTable || !targetTable.id) {
-				throw new Error(`Data table '${POLLY_DATA_TABLE_NAME}' not found.`);
+			this.dataTableId = await this.findDataTableIdByName(POLLY_DATA_TABLE_NAME);
+			return this.dataTableId;
+		},
+
+		async ensureMappingDataTableId(): Promise<string> {
+			if (this.mappingDataTableId) {
+				return this.mappingDataTableId;
 			}
-			this.dataTableId = targetTable.id;
-			return targetTable.id;
+			this.mappingDataTableId = await this.findDataTableIdByName(POLLY_MAPPING_DATA_TABLE_NAME);
+			return this.mappingDataTableId;
 		},
 
 		async save(): Promise<string> {
