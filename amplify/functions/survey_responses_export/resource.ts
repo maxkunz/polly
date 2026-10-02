@@ -4,6 +4,6 @@ export const surveyResponsesExport = defineFunction({
   runtime: 20,
   // Die HTTP API bricht nach 30 s ab, die Lambda muss davor antworten.
   timeoutSeconds: 29,
-  memoryMB: 2048,
+  memoryMB: 1024,
   resourceGroupName: "AppInfrastructure",
 });
