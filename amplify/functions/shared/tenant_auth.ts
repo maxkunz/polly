@@ -1,7 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
-import { createPublicKey, verify } from "crypto";
+import { createHash, createPublicKey, verify } from "crypto";
 
 type AnyApiGwEvent = any;
 
@@ -24,9 +24,13 @@ const USER_POOL_ID = (process.env.USER_POOL_ID ?? "").trim();
 
 const JWKS_TTL_MS = 10 * 60 * 1000;
 const SECRET_TTL_MS = 5 * 60 * 1000;
+const GENESYS_TOKEN_TTL_MS = 5 * 60 * 1000;
+const GENESYS_TOKEN_CACHE_MAX = 500;
 
 const jwksCache = new Map<string, { expiresAt: number; jwks: any }>();
 const secretCache = new Map<string, { expiresAt: number; value: any }>();
+// Erfolgreich validierte Genesys-Tokens (Schlüssel = Hash aus Region + Token), schont das Genesys-Rate-Limit
+const genesysTokenCache = new Map<string, { expiresAt: number; clientId: string }>();
 
 function jsonParseSafe(raw: string): any | null {
   try {
@@ -189,6 +193,10 @@ async function validateGenesysToken(
   region: string,
   token: string
 ): Promise<{ clientId?: string; error?: string }> {
+  const cacheKey = createHash("sha256").update(`${region}:${token}`).digest("hex");
+  const cached = genesysTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return { clientId: cached.clientId };
+
   const url = `https://api.${region}/api/v2/tokens/me`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
@@ -206,6 +214,14 @@ async function validateGenesysToken(
     });
     return { error: "Genesys token missing clientId" };
   }
+
+  // Nur Erfolge cachen; abgelaufene Einträge verwerfen, Größe begrenzen
+  const now = Date.now();
+  if (genesysTokenCache.size >= GENESYS_TOKEN_CACHE_MAX) {
+    for (const [k, v] of genesysTokenCache) if (v.expiresAt <= now) genesysTokenCache.delete(k);
+    if (genesysTokenCache.size >= GENESYS_TOKEN_CACHE_MAX) genesysTokenCache.clear();
+  }
+  genesysTokenCache.set(cacheKey, { clientId: actualClientId, expiresAt: now + GENESYS_TOKEN_TTL_MS });
 
   console.log("[tenant_auth] Genesys token validated", { region, clientId: actualClientId });
   return { clientId: actualClientId };
