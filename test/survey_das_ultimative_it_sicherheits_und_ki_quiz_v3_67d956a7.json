@@ -1,0 +1,379 @@
+{
+    "id": "67d956a7-93cd-4668-a0fd-d233d42ed5da",
+    "name": "das_ultimative_it_sicherheits_und_ki_quiz_v3_67d956a7",
+    "title": "Das ultimative IT-Sicherheits- und KI-Quiz! v3",
+    "description": "Testen Sie Ihr Wissen rund um Cyber Security und Künstliche Intelligenz.",
+    "greeting_message": "Bereit für die Herausforderung? Finden wir heraus, wie sicher Sie im digitalen Raum sind!",
+    "closing_message": "Quiz beendet! Vielen Dank für die Teilnahme.",
+    "created_at": "2026-10-02T18:56:42.019Z",
+    "version": 1,
+    "questions": [
+        {
+            "id": "69ad8091-7d97-46dd-ae18-635f42b37293",
+            "name": "was_versteht_man_unter_phishing_69ad8091",
+            "type": "choice",
+            "title": "Was versteht man unter 'Phishing'?",
+            "description": "Wählen Sie die beste Definition.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "fa5f0042-5412-491c-9cfb-ee184b20c855",
+                        "label": "Ein Computervirus"
+                    },
+                    {
+                        "id": "7c9afac7-f70e-4390-9eeb-a99641889114",
+                        "label": "Betrugsversuch über gefälschte E-Mails"
+                    },
+                    {
+                        "id": "fe582fb9-329d-429a-9c27-b31f6ca21317",
+                        "label": "Ein sicheres Netzwerkprotokoll"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "51b3c5be-cbe1-4f30-8e71-82f25bea81f6",
+            "name": "wofuer_steht_die_abkuerzung_mfa_in_der_it_sicherheit_51b3c5be",
+            "type": "choice",
+            "title": "Wofür steht die Abkürzung MFA in der IT-Sicherheit?",
+            "description": "Wählen Sie die korrekte Bedeutung.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "c9176589-fe8c-4347-9fee-2bafdff495ab",
+                        "label": "Multi-Function Algorithm"
+                    },
+                    {
+                        "id": "7a246b41-7424-45ea-8c26-db1355098d8c",
+                        "label": "Multi-Factor Authentication"
+                    },
+                    {
+                        "id": "8f0841b8-3d4a-4d1f-8fd0-5212d4410b7d",
+                        "label": "Master File Access"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "3d9b90e8-0fd1-44d4-859f-9d956cd79156",
+            "name": "ist_es_sicher_sein_passwort_mit_der_it_abteilung_zu_teilen_3d9b90e8",
+            "type": "yes_no",
+            "title": "Ist es sicher, sein Passwort mit der IT-Abteilung zu teilen?",
+            "description": "Entscheiden Sie sich für Ja oder Nein.",
+            "reprompt_message": "Bitte antworten Sie.",
+            "mandatory": true,
+            "follow_ups": [
+                {
+                    "condition": {
+                        "operator": "equals",
+                        "value": true
+                    },
+                    "question": {
+                        "id": "ff1c6075-e5c0-4b93-9469-8d9682dc2f8a",
+                        "name": "falsch_warum_glauben_sie_dass_das_sicher_ist_ff1c6075",
+                        "type": "comment",
+                        "title": "Falsch! Warum glauben Sie, dass das sicher ist?",
+                        "description": "Die IT wird niemals nach Ihrem Passwort fragen."
+                    }
+                }
+            ]
+        },
+        {
+            "id": "015ba3a6-8bb8-48be-aad1-2273028f61c4",
+            "name": "wie_oft_sollten_sie_software_updates_installieren_015ba3a6",
+            "type": "choice",
+            "title": "Wie oft sollten Sie Software-Updates installieren?",
+            "description": "Wählen Sie die beste Vorgehensweise.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "1ca80267-54b8-48a5-b321-4aac3cda1170",
+                        "label": "Einmal im Jahr"
+                    },
+                    {
+                        "id": "515ffa23-e649-4e73-a960-463c5b4db910",
+                        "label": "Nur bei Fehlern"
+                    },
+                    {
+                        "id": "dff9f95e-b4c2-4289-8be1-0fc76d79c09b",
+                        "label": "Sofort nach Verfügbarkeit"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "a8c89cfc-fa10-4a21-bfc7-a18045e1f90c",
+            "name": "ist_oeffentliches_wlan_sicher_fuer_online_banking_a8c89cfc",
+            "type": "yes_no",
+            "title": "Ist öffentliches WLAN sicher für Online-Banking?",
+            "description": "Entscheiden Sie sich für Ja oder Nein.",
+            "reprompt_message": "Bitte antworten Sie.",
+            "mandatory": true,
+            "follow_ups": [
+                {
+                    "condition": {
+                        "operator": "equals",
+                        "value": true
+                    },
+                    "question": {
+                        "id": "fc0e5f22-c5ab-4d0b-abd8-aab1ae706680",
+                        "name": "achtung_was_ist_die_groesste_gefahr_bei_oeffentlichem_wlan_fc0e5f22",
+                        "type": "choice",
+                        "title": "Achtung: Was ist die größte Gefahr bei öffentlichem WLAN?",
+                        "description": "Wählen Sie das Hauptrisiko.",
+                        "options": {
+                            "labels": [
+                                {
+                                    "id": "06f28773-fbf6-4598-8f3d-9a211a1a6200",
+                                    "label": "Langsames Internet"
+                                },
+                                {
+                                    "id": "b569543f-be00-4c0b-b5f3-4d369b5ad7fd",
+                                    "label": "Man-in-the-Middle-Angriffe"
+                                },
+                                {
+                                    "id": "c685de9e-80a9-4508-93a6-81dbb5660515",
+                                    "label": "Werbeeinblendungen"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "id": "67ba032a-2a90-4436-9e4d-82057f153121",
+            "name": "kann_kuenstliche_intelligenz_genutzt_werden_um_schadsoftware_zu_programmieren_67ba032a",
+            "type": "yes_no",
+            "title": "Kann Künstliche Intelligenz genutzt werden, um Schadsoftware zu programmieren?",
+            "description": "Entscheiden Sie sich für Ja oder Nein.",
+            "reprompt_message": "Bitte antworten Sie.",
+            "mandatory": true,
+            "follow_ups": [
+                {
+                    "condition": {
+                        "operator": "equals",
+                        "value": true
+                    },
+                    "question": {
+                        "id": "acd8b82b-0352-4ef2-84cf-5bff9e4b382f",
+                        "name": "richtig_wie_schaetzen_sie_die_aktuelle_gefahr_durch_ki_malware_ein_acd8b82b",
+                        "type": "rating",
+                        "title": "Richtig! Wie schätzen Sie die aktuelle Gefahr durch KI-Malware ein?",
+                        "description": "1 = Sehr gering, 5 = Sehr hoch.",
+                        "options": {
+                            "min_value": 1,
+                            "max_value": 5
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "id": "89b27a5c-0750-40a4-b710-50b7bd01a573",
+            "name": "was_ist_social_engineering_89b27a5c",
+            "type": "choice",
+            "title": "Was ist 'Social Engineering'?",
+            "description": "Wählen Sie die beste Definition.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "696c2f4b-6c2a-4b22-803b-ed5949899d30",
+                        "label": "Ein soziales Netzwerk für Hacker"
+                    },
+                    {
+                        "id": "8729c87c-9fd0-4c78-bf37-5a5549e2081d",
+                        "label": "Manipulation von Personen zur Datenpreisgabe"
+                    },
+                    {
+                        "id": "66a7ffdb-0da7-403a-b837-b77fa6a400e9",
+                        "label": "Ein KI-gestütztes HR-Tool"
+                    },
+                    {
+                        "id": "671c3589-771a-41da-b2ba-9f7b8b4bf3e0",
+                        "label": "Automatisierter Code-Review"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "b266cdb3-343b-4206-8480-091de3f6d2f3",
+            "name": "was_versteht_man_unter_einem_deepfake_b266cdb3",
+            "type": "choice",
+            "title": "Was versteht man unter einem 'Deepfake'?",
+            "description": "Wählen Sie die korrekte Bedeutung.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "40bd342f-9db0-4a42-9323-1b161c0fdb01",
+                        "label": "Tiefgreifender Systemausfall"
+                    },
+                    {
+                        "id": "06c84c77-97d4-46cf-ac83-596868c242d3",
+                        "label": "KI-generierte, täuschend echte Medien"
+                    },
+                    {
+                        "id": "a9b84c1a-b5a4-4345-9202-653e055aa00c",
+                        "label": "Ein Verschlüsselungsalgorithmus"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "bc219528-15f8-4397-b453-7893b35b0310",
+            "name": "wofuer_steht_vpn_bc219528",
+            "type": "choice",
+            "title": "Wofür steht VPN?",
+            "description": "Wählen Sie die korrekte Bedeutung.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "c5e676e0-7340-4e4f-80f4-dd99abcff0de",
+                        "label": "Virtual Private Network"
+                    },
+                    {
+                        "id": "210ee83b-8882-4340-a212-8e82796888d8",
+                        "label": "Very Public Network"
+                    },
+                    {
+                        "id": "03b3e92e-6380-4609-bd54-91b8ab205227",
+                        "label": "Visual Protection Node"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "401d10fe-0c7f-4dbe-b124-0fdfe52a6c0f",
+            "name": "wie_sicher_fuehlen_sie_sich_im_umgang_mit_modernen_cyber_gefahren_401d10fe",
+            "type": "rating",
+            "title": "Wie sicher fühlen Sie sich im Umgang mit modernen Cyber-Gefahren?",
+            "description": "0 = Gar nicht sicher, 8 = Absoluter Experte.",
+            "reprompt_message": "Bitte geben Sie eine Bewertung ab.",
+            "mandatory": true,
+            "options": {
+                "min_value": 0,
+                "max_value": 8
+            },
+            "follow_ups": [
+                {
+                    "condition": {
+                        "operator": "less_than",
+                        "value": 4
+                    },
+                    "question": {
+                        "id": "59416325-5c7e-4894-96f5-aaf52dc267ca",
+                        "name": "in_welchem_bereich_wuenschen_sie_sich_mehr_schulungen_59416325",
+                        "type": "comment",
+                        "title": "In welchem Bereich wünschen Sie sich mehr Schulungen?",
+                        "description": "Ihre Eingabe hilft bei der Planung künftiger Trainings."
+                    }
+                }
+            ]
+        },
+        {
+            "id": "f157fa5b-f435-4a75-9728-a19b2ba9b7ea",
+            "name": "macht_sie_der_inkognito_modus_des_browsers_im_internet_unsichtbar_f157fa5b",
+            "type": "yes_no",
+            "title": "Macht Sie der Inkognito-Modus des Browsers im Internet unsichtbar?",
+            "description": "Entscheiden Sie sich für Ja oder Nein.",
+            "reprompt_message": "Bitte antworten Sie.",
+            "mandatory": true,
+            "follow_ups": [
+                {
+                    "condition": {
+                        "operator": "equals",
+                        "value": true
+                    },
+                    "question": {
+                        "id": "de751756-4444-45fa-b7b4-836d15438483",
+                        "name": "falsch_was_tut_der_inkognito_modus_stattdessen_de751756",
+                        "type": "choice",
+                        "title": "Falsch! Was tut der Inkognito-Modus stattdessen?",
+                        "description": "Wählen Sie die korrekte Funktion.",
+                        "options": {
+                            "labels": [
+                                {
+                                    "id": "9f6e690e-74da-4f71-8f04-8bea6bd3841b",
+                                    "label": "Verschlüsselt die Verbindung"
+                                },
+                                {
+                                    "id": "112a2487-522f-4ef9-9126-7ab5a933f818",
+                                    "label": "Speichert lokal keinen Verlauf"
+                                },
+                                {
+                                    "id": "ecff3bc4-7cde-48e7-88be-8d1d8589f305",
+                                    "label": "Ändert die IP-Adresse"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "id": "7c6d3833-b37a-4c06-9b06-51ac81bccc29",
+            "name": "was_ist_am_wichtigsten_fuer_ein_starkes_passwort_7c6d3833",
+            "type": "choice",
+            "title": "Was ist am wichtigsten für ein starkes Passwort?",
+            "description": "Wählen Sie das Hauptkriterium.",
+            "reprompt_message": "Bitte wählen Sie eine Antwort.",
+            "mandatory": true,
+            "options": {
+                "labels": [
+                    {
+                        "id": "d86b1bca-7fad-4c79-81da-c46ee5b1a512",
+                        "label": "Häufiger Wechsel"
+                    },
+                    {
+                        "id": "6820800d-6d49-4b66-9842-a87ffe9a1c42",
+                        "label": "Hohe Komplexität (Sonderzeichen)"
+                    },
+                    {
+                        "id": "91370f3d-ad45-48b8-b988-db471914466f",
+                        "label": "Ausreichende Länge (z.B. >12 Zeichen)"
+                    }
+                ]
+            }
+        },
+        {
+            "id": "ba8a3a6f-9fb9-4bcc-bcf2-0a5729b1e610",
+            "name": "gilt_im_zero_trust_modell_ein_internes_netzwerk_automatisch_als_sicher_ba8a3a6f",
+            "type": "yes_no",
+            "title": "Gilt im 'Zero Trust'-Modell ein internes Netzwerk automatisch als sicher?",
+            "description": "Entscheiden Sie sich für Ja oder Nein.",
+            "reprompt_message": "Bitte antworten Sie.",
+            "mandatory": true
+        },
+        {
+            "id": "b717dfda-e4aa-4b56-8291-b3b26ad3ca8b",
+            "name": "wie_wahrscheinlich_ist_es_dass_sie_dieses_quiz_kollegen_weiterempfehlen_b717dfda",
+            "type": "nps",
+            "title": "Wie wahrscheinlich ist es, dass Sie dieses Quiz Kollegen weiterempfehlen?",
+            "description": "Net Promoter Score von 0 bis 10.",
+            "reprompt_message": "Bitte geben Sie einen Wert an.",
+            "mandatory": false
+        },
+        {
+            "id": "3936d5ef-34ca-42bd-b172-a0aa4e20012e",
+            "name": "wie_fanden_sie_den_schwierigkeitsgrad_dieses_quiz_3936d5ef",
+            "type": "comment",
+            "title": "Wie fanden Sie den Schwierigkeitsgrad dieses Quiz?",
+            "description": "Hinterlassen Sie uns gerne Feedback.",
+            "reprompt_message": "Bitte hinterlassen Sie einen Kommentar.",
+            "mandatory": false
+        }
+    ],
+    "updated_at": "2026-10-02T18:56:46.295Z"
+}
