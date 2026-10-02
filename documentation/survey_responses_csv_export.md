@@ -19,6 +19,11 @@ Vorher kann man den Report zeitlich filtern, indem man ein von - bis Datum einst
   Sie wird bei jeder Änderung des Zeitraums neu geladen. Bei 0 Sitzungen ist der Download deaktiviert.
   Die Anzahl der Antworten wird bewusst nicht angezeigt: Dafür müssten alle Antwort-Maps gelesen werden,
   was bei großen Datenmengen die Vorschau stark verlangsamt.
+- Solange die Report-Subpage offen ist, aktualisiert sich die Vorschau zusätzlich **einmal pro Minute**
+  automatisch im Hintergrund (kleines Sync-Icon neben "Vorschau" statt des großen Lade-Spinners), damit
+  neu eingehende Antworten sichtbar werden, ohne den Zeitraum neu wählen zu müssen. Pausiert, während ein
+  Download läuft (dessen Fortschrittsanzeige liest `summary.versions`) oder der Browser-Tab im
+  Hintergrund ist.
 - Beim Download wird ein Fortschritt angezeigt; er kann abgebrochen werden.
 - Dateiname: `<Survey-Name>_<von>_<bis>[_v<version>].csv`.
 

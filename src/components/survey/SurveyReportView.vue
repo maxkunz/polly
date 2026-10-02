@@ -28,6 +28,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const SUMMARY_DEBOUNCE_MS = 400;
+const LIVE_REFRESH_MS = 60_000;
 const DEFAULT_RANGE_DAYS = 30;
 
 function startOfDay(date: Date): Date {
@@ -50,6 +51,7 @@ const selectedVersion = ref<number | null>(null);
 
 const summary = ref<ReportSummary | null>(null);
 const isLoadingSummary = ref<boolean>(false);
+const isLiveRefreshing = ref<boolean>(false);
 const isDownloading = ref<boolean>(false);
 const downloadProgress = ref<ExportProgress | null>(null);
 const errorMessage = ref<string>("");
@@ -57,6 +59,7 @@ const errorMessage = ref<string>("");
 let summaryAbort: AbortController | null = null;
 let downloadAbort: AbortController | null = null;
 let summaryTimer: ReturnType<typeof setTimeout> | null = null;
+let liveRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const isRangeValid = computed(
 	() => !!fromDate.value && !!toDate.value && startOfDay(fromDate.value) <= endOfDay(toDate.value)
@@ -196,6 +199,39 @@ async function refreshSummary(): Promise<void> {
 	}
 }
 
+/**
+ * Live-Aktualisierung: holt im Hintergrund die aktuellen Zahlen, ohne die Anzeige kurz zu leeren
+ * oder den großen Lade-Spinner zu zeigen (das bliebe sonst bei jedem Tick sichtbar). Pausiert,
+ * solange ein manueller Ladevorgang oder ein Download läuft – Letzterer liest `summary.versions`
+ * für den Fortschrittsbalken, ein Zwischenstand würde ihn verfälschen – und während der Tab im
+ * Hintergrund ist, um nicht unnötig DynamoDB-Lesekapazität zu verbrauchen.
+ */
+async function refreshSummaryLive(): Promise<void> {
+	// isLiveRefreshing schützt zusätzlich gegen zwei überlappende Ticks, falls ein Aufruf bei sehr
+	// großen Zeiträumen einmal länger als LIVE_REFRESH_MS dauern sollte.
+	if (!isRangeValid.value || isLoadingSummary.value || isDownloading.value || isLiveRefreshing.value) return;
+	if (typeof document !== "undefined" && document.hidden) return;
+
+	const controller = new AbortController();
+	summaryAbort = controller;
+	isLiveRefreshing.value = true;
+	try {
+		const result = await loadReportSummary(currentRange(), { signal: controller.signal });
+		if (summaryAbort !== controller) return;
+		summary.value = result;
+		if (selectedVersion.value !== null && !(String(selectedVersion.value) in result.versions)) {
+			selectedVersion.value = null;
+		}
+	} catch (error) {
+		// Fehler bei der automatischen Aktualisierung nicht anzeigen – das würde die Meldung eines
+		// vorherigen manuellen Ladevorgangs überschreiben. Beim nächsten Tick wird es erneut versucht.
+		if (!isAbortError(error)) console.warn("[report] Live-Aktualisierung fehlgeschlagen", error);
+	} finally {
+		if (summaryAbort === controller) summaryAbort = null;
+		isLiveRefreshing.value = false;
+	}
+}
+
 function scheduleSummary(): void {
 	if (summaryTimer) clearTimeout(summaryTimer);
 	// Ladezustand sofort anzeigen, damit der Download nicht auf veralteten Zahlen aktiv bleibt.
@@ -240,10 +276,14 @@ function handleCancelDownload(): void {
 
 watch([fromDate, toDate], scheduleSummary);
 
-onMounted(refreshSummary);
+onMounted(() => {
+	refreshSummary();
+	liveRefreshTimer = setInterval(refreshSummaryLive, LIVE_REFRESH_MS);
+});
 
 onBeforeUnmount(() => {
 	if (summaryTimer) clearTimeout(summaryTimer);
+	if (liveRefreshTimer) clearInterval(liveRefreshTimer);
 	summaryAbort?.abort();
 	downloadAbort?.abort();
 });
@@ -332,7 +372,15 @@ onBeforeUnmount(() => {
 
 		<!-- Vorschau -->
 		<div class="space-y-2">
-			<h3 class="text-sm font-semibold text-[var(--p-text-color)]">{{ t("report.summary.title") }}</h3>
+			<h3 class="text-sm font-semibold text-[var(--p-text-color)] flex items-center gap-2">
+				{{ t("report.summary.title") }}
+				<i
+					v-if="isLiveRefreshing"
+					class="pi pi-sync pi-spin text-xs text-[var(--p-text-muted-color)]"
+					:title="t('report.summary.liveUpdating')"
+					:aria-label="t('report.summary.liveUpdating')"
+				/>
+			</h3>
 			<p v-if="isLoadingSummary" class="text-sm text-[var(--p-text-muted-color)]">
 				<i class="pi pi-spin pi-spinner mr-1" aria-hidden="true" />
 				{{ t("report.summary.loading", { sessions: summary?.sessions ?? 0 }) }}

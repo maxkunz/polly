@@ -370,6 +370,7 @@ export const en: MessageSchema = {
 		summary: {
 			title: "Preview",
 			loading: "Loading preview … ({sessions} sessions so far)",
+			liveUpdating: "Updates automatically",
 			sessions: "Sessions",
 			completed: "Completed",
 			partial: "Partial",

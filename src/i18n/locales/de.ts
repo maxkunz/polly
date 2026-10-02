@@ -368,6 +368,7 @@ export const de = {
 		summary: {
 			title: "Vorschau",
 			loading: "Lade Vorschau … ({sessions} Sitzungen bisher)",
+			liveUpdating: "Aktualisiert automatisch",
 			sessions: "Sitzungen",
 			completed: "Abgeschlossen",
 			partial: "Teilweise",
