@@ -174,6 +174,37 @@ echo ">>> [12] Cursor-Paginierung (manuell: nextCursor aus [9] Response in &curs
 echo ""
 
 # -------------------------------------------------------------------
+# 12a. CSV-Export: Summary und Export (Zeitraum: letzte 30 Tage)
+# -------------------------------------------------------------------
+EXPORT_FROM="$(date -u -v-30d +%Y-%m-%dT00:00:00.000Z 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT00:00:00.000Z)"
+EXPORT_TO="$(date -u +%Y-%m-%dT23:59:59.999Z)"
+
+echo ">>> [12a] GET /survey-responses/export/summary"
+curl -s -X GET "${API_URL}/survey-responses/export/summary?surveyId=${SURVEY_ID}&from=${EXPORT_FROM}&to=${EXPORT_TO}" \
+  "${BASE_HEADERS[@]}" | jq .
+echo ""
+
+echo ">>> [12b] GET /survey-responses/export (CSV, Header x-next-cursor/x-sessions/x-rows)"
+curl -s -i -X GET "${API_URL}/survey-responses/export?surveyId=${SURVEY_ID}&from=${EXPORT_FROM}&to=${EXPORT_TO}&version=${SURVEY_VERSION}" \
+  "${BASE_HEADERS[@]}" | head -30
+echo ""
+
+echo ">>> [12c] GET /survey-responses/export – fehlende from/to (400 erwartet)"
+curl -s -X GET "${API_URL}/survey-responses/export?surveyId=${SURVEY_ID}" \
+  "${BASE_HEADERS[@]}" | jq .
+echo ""
+
+echo ">>> [12d] GET /survey-responses/export – manipulierter Cursor (400 erwartet)"
+BAD_CURSOR="$(printf '{"tenantId":"fremd","responseId":"x","surveyStartedAt":"%s#2026-01-01T00:00:00.000Z"}' "${SURVEY_ID}" | base64 | tr -d '\n')"
+curl -s -X GET "${API_URL}/survey-responses/export?surveyId=${SURVEY_ID}&from=${EXPORT_FROM}&to=${EXPORT_TO}&cursor=${BAD_CURSOR}" \
+  "${BASE_HEADERS[@]}" | jq .
+echo ""
+
+echo ">>> [12e] GET /survey-responses/export – kein Token (401 erwartet)"
+curl -s -X GET "${API_URL}/survey-responses/export?surveyId=${SURVEY_ID}&from=${EXPORT_FROM}&to=${EXPORT_TO}" | jq .
+echo ""
+
+# -------------------------------------------------------------------
 # 13. Fehlerfall: fehlende conversationId (400 erwartet)
 # -------------------------------------------------------------------
 echo ">>> [13] POST /survey-responses – fehlende conversationId (400 erwartet)"

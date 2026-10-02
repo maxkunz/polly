@@ -27,6 +27,7 @@ const emit = defineEmits<{
 	(e: "discard"): void;
 	(e: "save"): void;
 	(e: "deploy"): void;
+	(e: "report"): void;
 	(e: "delete"): void;
 	(e: "clone"): void;
 }>();
@@ -88,6 +89,16 @@ const emit = defineEmits<{
 				:disabled="isDirty || isSaving || isDeleting || disabled"
 				:aria-label="t('surveyEditor.toolbar.deployAriaLabel')"
 				@click="emit('deploy')"
+			/>
+			<Button
+				v-if="!isNew"
+				size="small"
+				severity="info"
+				icon="pi pi-chart-bar"
+				:label="t('surveyEditor.toolbar.report')"
+				:disabled="isDirty || isSaving || isDeleting || disabled"
+				:aria-label="t('surveyEditor.toolbar.reportAriaLabel')"
+				@click="emit('report')"
 			/>
 			<Button
 				size="small"

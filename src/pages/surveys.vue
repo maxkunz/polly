@@ -16,6 +16,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { createEmptySurvey } from "@/domain/survey/surveyTypes";
 import SurveyEditor from "@/components/survey/SurveyEditor.vue";
 import SurveyDeploymentView from "@/components/survey/SurveyDeploymentView.vue";
+import SurveyReportView from "@/components/survey/SurveyReportView.vue";
 
 const app = useAppStore();
 const route = useRoute();
@@ -86,7 +87,8 @@ onBeforeRouteUpdate(async (to, from) => {
 		to.query.id === from.query.id &&
 		to.query.new === from.query.new &&
 		to.query.clone === from.query.clone &&
-		to.query.deploy === from.query.deploy
+		to.query.deploy === from.query.deploy &&
+		to.query.report === from.query.report
 	) {
 		return true;
 	}
@@ -186,6 +188,10 @@ const isDeployView = computed(
 	() => route.query.deploy === "1" && !!selectedSurveyId.value
 );
 
+const isReportView = computed(
+	() => route.query.report === "1" && !!selectedSurveyId.value
+);
+
 const selectedSurvey = computed(() => {
 	if (!selectedSurveyId.value || !surveysList.value.length) return null;
 	return (
@@ -206,6 +212,16 @@ function handleBackToList(): void {
 
 function handleDeploy(): void {
 	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, deploy: "1" } });
+}
+
+function handleReport(): void {
+	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, report: "1" } });
+}
+
+function handleReportBack(): void {
+	if (selectedSurveyId.value) {
+		router.push({ name: "surveys", query: { id: selectedSurveyId.value } });
+	}
 }
 
 function handleDeployBack(): void {
@@ -417,7 +433,7 @@ onBeforeUnmount(() => {
 
 			<!-- Editor Component -->
 			<SurveyEditor
-				v-else-if="selectedSurveyDetail && !isDeployView"
+				v-else-if="selectedSurveyDetail && !isDeployView && !isReportView"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId"
 				:existingRow="rawRowData ?? undefined"
@@ -425,6 +441,7 @@ onBeforeUnmount(() => {
 				@saved="handleSurveySaved"
 				@back="handleBackToList"
 				@deploy="handleDeploy"
+				@report="handleReport"
 				@deleted="handleSurveyDeleted"
 				@clone="handleClone"
 			/>
@@ -437,6 +454,14 @@ onBeforeUnmount(() => {
 				:existingRow="rawRowData"
 				v-model:isDirty="isQueueMappingDirty"
 				@back="handleDeployBack"
+			/>
+
+			<!-- Report View -->
+			<SurveyReportView
+				v-else-if="isReportView && selectedSurveyDetail"
+				:survey="selectedSurveyDetail"
+				:surveyId="selectedSurveyId!"
+				@back="handleReportBack"
 			/>
 
 			<!-- Empty Draft fallback -->

@@ -15,6 +15,7 @@ import { onboarding } from "./functions/onboarding/resource";
 import { questionAnswers } from "./functions/question_answers/resource";
 import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
+import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -41,6 +42,7 @@ const backend = defineBackend({
   onboarding,
   questionAnswers,
   surveyResponses,
+  surveyResponsesExport,
   surveyCleanup,
 });
 
@@ -51,7 +53,7 @@ const httpApi = new apigw.HttpApi(stack, "AppHttpApi", {
   corsPreflight: {
     allowMethods: [apigw.CorsHttpMethod.ANY],
     allowOrigins: ["*"],
-    allowHeaders: ["content-type", "authorization"],
+    allowHeaders: ["content-type", "authorization", "x-genesys-region"],
   },
 });
 
@@ -301,6 +303,33 @@ httpApi.addRoutes({
   path: "/survey-responses/session",
   methods: [apigw.HttpMethod.GET],
   integration: surveyResponsesInteg,
+});
+
+const surveyResponsesExportLambda = backend.surveyResponsesExport.resources
+  .lambda as lambda.Function;
+
+surveyResponsesTable.grantReadData(surveyResponsesExportLambda);
+surveyResponsesExportLambda.addEnvironment(
+  "SURVEY_RESPONSES_TABLE_NAME",
+  surveyResponsesTable.tableName,
+);
+attachTenantAuth(surveyResponsesExportLambda);
+
+const surveyResponsesExportInteg = new integrations.HttpLambdaIntegration(
+  "SurveyResponsesExportInteg",
+  surveyResponsesExportLambda,
+);
+
+httpApi.addRoutes({
+  path: "/survey-responses/export",
+  methods: [apigw.HttpMethod.GET],
+  integration: surveyResponsesExportInteg,
+});
+
+httpApi.addRoutes({
+  path: "/survey-responses/export/summary",
+  methods: [apigw.HttpMethod.GET],
+  integration: surveyResponsesExportInteg,
 });
 
 const surveyCleanupLambda = backend.surveyCleanup.resources

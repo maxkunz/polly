@@ -33,6 +33,7 @@ const emit = defineEmits<{
 	(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
 	(e: "back"): void;
 	(e: "deploy"): void;
+	(e: "report"): void;
 	(e: "deleted"): void;
 	(e: "clone", clonedSurvey: Survey): void;
 	(e: "update:isDirty", isDirty: boolean): void;
@@ -158,6 +159,7 @@ function handleClone() {
 			@discard="handleDiscard"
 			@save="handleSave"
 			@deploy="emit('deploy')"
+			@report="emit('report')"
 			@delete="handleDelete"
 			@clone="handleClone"
 		/>

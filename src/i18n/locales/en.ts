@@ -139,6 +139,8 @@ export const en: MessageSchema = {
 			cloneAriaLabel: "Clone survey",
 			deploy: "Deploy",
 			deployAriaLabel: "Go to deployment view",
+			report: "Report",
+			reportAriaLabel: "Go to report view",
 			save: "Save"
 		},
 		stickyBar: {
@@ -346,6 +348,44 @@ export const en: MessageSchema = {
 		rollback: "Rollback",
 		rollbackAriaLabel: "Restore last version to prod",
 		unknownError: "Unknown error during deployment"
+	},
+
+	report: {
+		back: "Back to editor",
+		backAriaLabel: "Back to editor",
+		from: "From",
+		to: "To",
+		range: "Date range",
+		quickRanges: {
+			today: "Today",
+			last7Days: "Last 7 days",
+			last30Days: "Last 30 days",
+			currentMonth: "Current month",
+			lastMonth: "Last month"
+		},
+		hint: "The date range refers to the start of the survey session (first answer).",
+		version: "Survey version",
+		allVersions: "All versions",
+		versionOption: "v{version} ({sessions})",
+		summary: {
+			title: "Preview",
+			loading: "Loading preview … ({sessions} sessions so far)",
+			sessions: "Sessions",
+			answers: "Answers",
+			completed: "Completed",
+			partial: "Partial",
+			timedOut: "Timed out",
+			empty: "There are no answers in the selected date range."
+		},
+		download: "Download CSV",
+		downloadAriaLabel: "Download CSV report",
+		cancel: "Cancel",
+		progress: "{sessions} sessions / {rows} rows loaded",
+		errors: {
+			invalidRange: "Please choose a valid date range (From must not be after To).",
+			missingToken: "No Genesys access token available. Please sign in again.",
+			generic: "Error while loading the report"
+		}
 	},
 
 	queueMapping: {

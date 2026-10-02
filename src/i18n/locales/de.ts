@@ -137,6 +137,8 @@ export const de = {
 			cloneAriaLabel: "Umfrage klonen",
 			deploy: "Deploy",
 			deployAriaLabel: "Zur Deployment-Ansicht",
+			report: "Report",
+			reportAriaLabel: "Zur Report-Ansicht",
 			save: "Speichern"
 		},
 		stickyBar: {
@@ -344,6 +346,44 @@ export const de = {
 		rollback: "Rollback",
 		rollbackAriaLabel: "Letze Version auf Prod zurückspielen",
 		unknownError: "Unbekannter Fehler beim Deployment"
+	},
+
+	report: {
+		back: "Zurück zum Editor",
+		backAriaLabel: "Zurück zum Editor",
+		from: "Von",
+		to: "Bis",
+		range: "Zeitraum",
+		quickRanges: {
+			today: "Heute",
+			last7Days: "Letzte 7 Tage",
+			last30Days: "Letzte 30 Tage",
+			currentMonth: "Aktueller Monat",
+			lastMonth: "Letzter Monat"
+		},
+		hint: "Der Zeitraum bezieht sich auf den Start der Umfrage-Sitzung (erste Antwort).",
+		version: "Survey-Version",
+		allVersions: "Alle Versionen",
+		versionOption: "v{version} ({sessions})",
+		summary: {
+			title: "Vorschau",
+			loading: "Lade Vorschau … ({sessions} Sitzungen bisher)",
+			sessions: "Sitzungen",
+			answers: "Antworten",
+			completed: "Abgeschlossen",
+			partial: "Teilweise",
+			timedOut: "Zeitüberschreitung",
+			empty: "Im gewählten Zeitraum gibt es keine Antworten."
+		},
+		download: "CSV herunterladen",
+		downloadAriaLabel: "CSV-Report herunterladen",
+		cancel: "Abbrechen",
+		progress: "{sessions} Sitzungen / {rows} Zeilen geladen",
+		errors: {
+			invalidRange: "Bitte einen gültigen Zeitraum wählen (Von darf nicht nach Bis liegen).",
+			missingToken: "Kein Genesys-Zugriffstoken vorhanden. Bitte neu anmelden.",
+			generic: "Fehler beim Laden des Reports"
+		}
 	},
 
 	queueMapping: {

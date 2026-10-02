@@ -356,6 +356,41 @@ x-genesys-region: mypurecloud.de
 
 ---
 
+### 4.5 GET `/survey-responses/export` und `/survey-responses/export/summary`
+Export der Antworten einer Umfrage als CSV (Lambda `survey_responses_export`, nur lesender Zugriff). Fachliche Beschreibung, Format und UI: siehe [survey_responses_csv_export.md](survey_responses_csv_export.md).
+
+Beide Endpunkte arbeiten in **Teilabrufen**: Eine Antwort enthält höchstens ca. 4 MB bzw. wird nach ca. 20 s abgeschlossen (Lambda-Antwort max. 6 MB, HTTP-API-Timeout 30 s). Setzt der Aufrufer mit dem Cursor fort, bis kein Cursor mehr geliefert wird, erhält er alle Daten genau einmal. Ein Teilabruf endet immer an einer Session-Grenze.
+
+#### Query Parameters
+| Parameter | Typ | Pflicht | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `surveyId` | `string` | **Ja** | ID der Umfrage |
+| `from` | ISO-8601 | **Ja** | Beginn des Zeitraums (inklusive), bezogen auf den **Session-Start** |
+| `to` | ISO-8601 | **Ja** | Ende des Zeitraums (inklusive), muss `>= from` sein |
+| `version` | `integer` | Nein | Nur Sessions dieser `surveyVersion` (nur `/export`, `/export/summary` ignoriert den Parameter) |
+| `cursor` | `string` | Nein | Fortsetzungs-Cursor aus dem vorherigen Teilabruf |
+
+Der Cursor ist an Mandant und Umfrage gebunden; ein fremder oder manipulierter Cursor führt zu `400`.
+
+#### `/export` – Response (200 OK)
+- `Content-Type: text/csv; charset=utf-8`, Trennzeichen `;`, Zeilenende `\r\n`, Kopfzeile nur im ersten Teilabruf (ohne `cursor`).
+- Response-Header: `x-sessions` und `x-rows` (Zähler dieses Teilabrufs), `x-next-cursor` (nur vorhanden, wenn weitere Daten folgen).
+- Kein BOM vom Server: das Frontend ergänzt `\uFEFF` beim Zusammensetzen der Datei.
+
+#### `/export/summary` – Response (200 OK)
+```json
+{
+  "sessions": 1200,
+  "answers": 5400,
+  "statusCounts": { "completed": 1000, "partial": 120, "timed_out": 80 },
+  "versions": { "2": 300, "3": 900 },
+  "nextCursor": null
+}
+```
+Die Werte sind Teil-Aggregate und müssen über alle Teilabrufe addiert werden.
+
+---
+
 ## 5. Fehlerbehandlung (HTTP Status Codes)
 
 Alle Fehler werden als einheitliches JSON-Objekt mit dem Feld `message` zurückgegeben:
@@ -368,7 +403,7 @@ Alle Fehler werden als einheitliches JSON-Objekt mit dem Feld `message` zurückg
 
 | HTTP Status | Ursache / Bedeutung |
 | :--- | :--- |
-| **`400 Bad Request`** | Fehlende Pflichtfelder (`conversationId`, `surveyId`), ungültiges JSON, weder `questionName` noch `isCompleted: true` übergeben, oder ungültiger `cursor` bei `/survey-responses/raw`. |
+| **`400 Bad Request`** | Fehlende Pflichtfelder (`conversationId`, `surveyId`), ungültiges JSON, weder `questionName` noch `isCompleted: true` übergeben, ungültiger `cursor` bei `/survey-responses/raw` bzw. ungültige oder fehlende `from`/`to`/`cursor` bei den Export-Endpunkten. |
 | **`401 Unauthorized`** | Fehlendes oder ungültiges Token (Genesys oder Cognito) bzw. Mandant nicht freigeschaltet. |
 | **`404 Not Found`** | Session mit angegebener `conversationId` existiert nicht, oder falsche Route/Methode (Antwort enthält dann zusätzlich `method` und `path`). |
 | **`500 Internal Server Error`** | Unerwarteter Serverfehler oder fehlende Tabellenkonfiguration in Lambda Environment. |
