@@ -50,6 +50,9 @@ const toDate = ref<Date | null>(endOfDay(new Date()));
 const selectedVersion = ref<number | null>(null);
 
 const summary = ref<ReportSummary | null>(null);
+/** Erhöht sich bei jeder Live-Aktualisierung mit tatsächlich geänderten Werten; über :key an der
+ *  Vorschau löst das einen kurzen Puls aus (siehe <style> unten). */
+const summaryPulseKey = ref<number>(0);
 const isLoadingSummary = ref<boolean>(false);
 const isLiveRefreshing = ref<boolean>(false);
 const isDownloading = ref<boolean>(false);
@@ -157,6 +160,20 @@ function isAbortError(error: unknown): boolean {
 	return error instanceof DOMException && error.name === "AbortError";
 }
 
+function recordsEqual(a: Record<string, number>, b: Record<string, number>): boolean {
+	const keysA = Object.keys(a);
+	if (keysA.length !== Object.keys(b).length) return false;
+	return keysA.every(key => a[key] === b[key]);
+}
+
+/** Inhaltlicher Vergleich, unabhängig von der Einfüge-Reihenfolge der statusCounts/versions-Keys
+ *  (die kann sich zwischen zwei Abfragen unterscheiden, auch wenn sich die Werte nicht geändert haben,
+ *  weil die Backend-Zeitabschnitte parallel statt in fester Reihenfolge abgefragt werden). */
+function summariesEqual(a: ReportSummary | null, b: ReportSummary): boolean {
+	if (!a) return false;
+	return a.sessions === b.sessions && recordsEqual(a.statusCounts, b.statusCounts) && recordsEqual(a.versions, b.versions);
+}
+
 function currentRange() {
 	return {
 		surveyId: props.surveyId,
@@ -218,6 +235,7 @@ async function refreshSummaryLive(): Promise<void> {
 	try {
 		const result = await loadReportSummary(currentRange(), { signal: controller.signal });
 		if (summaryAbort !== controller) return;
+		if (!summariesEqual(summary.value, result)) summaryPulseKey.value++;
 		summary.value = result;
 		if (selectedVersion.value !== null && !(String(selectedVersion.value) in result.versions)) {
 			selectedVersion.value = null;
@@ -388,7 +406,11 @@ onBeforeUnmount(() => {
 			<p v-else-if="summary && summary.sessions === 0" class="text-sm text-[var(--p-text-muted-color)]">
 				{{ t("report.summary.empty") }}
 			</p>
-			<dl v-else-if="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+			<dl
+				v-else-if="summary"
+				:key="summaryPulseKey"
+				class="report-summary-pulse grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm"
+			>
 				<div>
 					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.sessions") }}</dt>
 					<dd class="font-semibold">{{ summary.sessions }}</dd>
@@ -437,3 +459,27 @@ onBeforeUnmount(() => {
 		</div>
 	</div>
 </template>
+
+<style scoped>
+/* Kurzer Ripple-Puls, wenn die Live-Aktualisierung tatsächlich geänderte Werte liefert (siehe
+   summaryPulseKey). Box-shadow statt Hintergrundfarbe, damit sich am Layout/Abstand nichts ändert. */
+.report-summary-pulse {
+	animation: report-summary-pulse 900ms ease-out;
+	border-radius: 0.5rem;
+}
+
+@keyframes report-summary-pulse {
+	0% {
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-primary-color) 45%, transparent);
+	}
+	100% {
+		box-shadow: 0 0 0 10px color-mix(in srgb, var(--p-primary-color) 0%, transparent);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.report-summary-pulse {
+		animation: none;
+	}
+}
+</style>

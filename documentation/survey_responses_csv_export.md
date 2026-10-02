@@ -23,7 +23,8 @@ Vorher kann man den Report zeitlich filtern, indem man ein von - bis Datum einst
   automatisch im Hintergrund (kleines Sync-Icon neben "Vorschau" statt des großen Lade-Spinners), damit
   neu eingehende Antworten sichtbar werden, ohne den Zeitraum neu wählen zu müssen. Pausiert, während ein
   Download läuft (dessen Fortschrittsanzeige liest `summary.versions`) oder der Browser-Tab im
-  Hintergrund ist.
+  Hintergrund ist. Haben sich die Werte dabei tatsächlich geändert, pulsiert die Vorschau kurz
+  (inhaltlicher Vergleich, nicht nur neu geladen).
 - Beim Download wird ein Fortschritt angezeigt; er kann abgebrochen werden.
 - Dateiname: `<Survey-Name>_<von>_<bis>[_v<version>].csv`.
 
