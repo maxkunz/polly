@@ -5,7 +5,7 @@ import { createIntegrationOfType, createDataAction, enableIntegration, getIntegr
 import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/services/genesys/groups";
 import { updateIntegrationProperties } from "@/services/genesys/auth";
 import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
-import questionAnswerActionJson from "@/templates/genesys/dataActionStructure_question_answers.json";
+import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 
 type SetupMeta = {
   projectTag: string;
@@ -54,7 +54,7 @@ export async function runFullProvisioning(
     backendClient: `${projectTag}_backend_client`,
     dataActionIntegration: `${projectTag}_data_actions`,
     dataActionCredential: `${projectTag}_credentials`,
-    dataAction: `${projectTag}_submit_question_answer`,
+    dataAction: `${projectTag}_submit_survey_response`,
   };
 
   const appIntegration = await getIntegrationWithID(integrationAppId);
@@ -142,7 +142,7 @@ export async function runFullProvisioning(
 
   onProgress(`Creating data action ${names.dataAction}...`);
   const dataActionTemplate = JSON.parse(
-    applyDomainDatActPlaceholder(JSON.stringify(questionAnswerActionJson), appOrigin)
+    applyDomainDatActPlaceholder(JSON.stringify(surveyResponseActionJson), appOrigin)
   );
   const dataAction = await createDataAction({
     name: names.dataAction,

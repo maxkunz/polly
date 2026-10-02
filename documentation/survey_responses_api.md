@@ -377,7 +377,38 @@ Alle Fehler werden als einheitliches JSON-Objekt mit dem Feld `message` zurückg
 
 ---
 
-## 6. Automatisches Cleanup (Timeout von Abbrüchen)
+## 6. Genesys Data Action
+
+Beim Setup (`SetupOrchestrator.ts`, Template `src/templates/genesys/dataActionStructure_survey_responses.json`) wird eine Data Action **`<projectTag>_submit_survey_response`** (Kategorie `survey`) angelegt, über die der Architect Call Flow Antworten an `POST /survey-responses` schickt. Die Authentifizierung läuft über die Data-Action-Integration mit den Cognito-M2M-Credentials aus dem Onboarding (Client-Credentials-Flow), nicht über den Genesys-Bearer-Pfad.
+
+### Input-Contract (flach, Architect-freundlich)
+| Feld | Typ | Pflicht | Hinweis |
+| :--- | :--- | :--- | :--- |
+| `conversationId` | `string` | **Ja** | |
+| `surveyId` | `string` | **Ja** | |
+| `surveyName` | `string` | Nein | |
+| `surveyVersion` | `integer` | Nein | |
+| `questionName` | `string` | Nein | |
+| `questionType` | `string` | Nein | `rating` \| `nps` \| `choice` \| `yes_no` \| `comment` |
+| `value` | `string` | Nein | **immer als String** an die Data Action übergeben, siehe Typumwandlung unten |
+| `isCompleted` | `boolean` | Nein | |
+
+> Architect kann pro Aufruf nur einen Variablentyp pro Input binden. Damit ein einziger Contract für alle Fragetypen reicht, erwartet die Data Action `value` immer als String (Flow wandelt Zahl/Boolean vorher mit `ToString(...)` um); das Request-Template wandelt den String anhand von `questionType` wieder in den von der API erwarteten JSON-Typ um:
+> - `rating`, `nps`, `yes_no` → roher JSON-Wert (Zahl bzw. `true`/`false`), unverändert übernommen.
+> - alles andere (`choice`, `comment`, kein `questionType`) → JSON-String.
+
+Optionale Felder werden nur ins Request-JSON übernommen, wenn sie im Flow gesetzt sind (leerer String/`false`/kein Wert ⇒ Feld entfällt, wie bei einem direkten API-Aufruf ohne das Feld – siehe Hinweis in Abschnitt 4.1). Ein reiner Abschluss-Aufruf ohne Antwort funktioniert also mit `conversationId`, `surveyId` und `isCompleted: true`.
+
+### Output-Contract
+| Feld | Typ | Quelle |
+| :--- | :--- | :--- |
+| `message` | `string` | `$.message` |
+| `status` | `string` | `$.session.status` |
+| `responseId` | `string` | `$.session.responseId` |
+
+---
+
+## 7. Automatisches Cleanup (Timeout von Abbrüchen)
 
 - **Lambda:** `survey_cleanup`
 - **Auslöser:** Amazon EventBridge Rule mit festem Intervall alle 15 Minuten (rate-basiert, nicht an feste Uhrzeiten wie `:00`/`:15`/`:30`/`:45` gebunden, sondern relativ zum Deployment-Zeitpunkt der Regel)
