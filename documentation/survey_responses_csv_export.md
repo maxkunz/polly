@@ -37,6 +37,9 @@ Tag wäre ein Monatsreport um ein Vielfaches größer. Der Export läuft deshalb
 - Das Frontend setzt die Teilstücke zu einer Datei zusammen (UTF-8 **mit BOM**, damit Excel Umlaute richtig liest).
   Die Kopfzeile steht nur im ersten Teilstück.
 - Dasselbe Verfahren gilt für die Vorschau (`/export/summary`), deren Teil-Aggregate das Frontend addiert.
+- `/export/summary` fragt den Zeitraum intern in mehreren parallelen Zeitabschnitten ab (statt einer
+  einzigen sequenziellen Abfrage), um bei großen Datenmengen deutlich schneller zu sein. Das ist ein
+  Implementierungsdetail hinter dem Cursor und ändert nichts am Aufrufverhalten.
 
 ### CSV Format
 

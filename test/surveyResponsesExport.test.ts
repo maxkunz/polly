@@ -7,6 +7,7 @@ import {
 	sessionToCsvRows
 } from "../amplify/functions/survey_responses_export/csv";
 import { addToSummary, createSummary } from "../amplify/functions/survey_responses_export/summary";
+import { buildTimeSlices } from "../amplify/functions/survey_responses_export/handler";
 
 let passed = 0;
 
@@ -86,6 +87,33 @@ test("addToSummary zählt Sessions, Antworten, Status und Versionen", () => {
 	assert.equal(summary.answers, 3);
 	assert.deepEqual(summary.statusCounts, { completed: 1, partial: 1, timed_out: 1 });
 	assert.deepEqual(summary.versions, { "2": 2, "1": 1 });
+});
+
+test("buildTimeSlices deckt den Zeitraum lückenlos und ohne Überlappung ab", () => {
+	const slices = buildTimeSlices("2026-01-01T00:00:00.000Z", "2026-01-31T23:59:59.999Z", 10);
+	assert.equal(slices.length, 10);
+	assert.equal(slices[0].from, "2026-01-01T00:00:00.000Z");
+	assert.equal(slices[slices.length - 1].to, "2026-01-31T23:59:59.999Z");
+	for (let i = 1; i < slices.length; i++) {
+		const prevEndMs = Date.parse(slices[i - 1].to);
+		const curStartMs = Date.parse(slices[i].from);
+		assert.equal(curStartMs, prevEndMs + 1, `Slice ${i} muss direkt nach dem vorherigen beginnen`);
+	}
+});
+
+test("buildTimeSlices erzeugt bei kurzen Zeiträumen weniger, aber gültige Abschnitte", () => {
+	const slices = buildTimeSlices("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.002Z", 10);
+	assert.ok(slices.length <= 4, "nicht mehr Slices als Millisekunden im Zeitraum");
+	for (const slice of slices) {
+		assert.ok(Date.parse(slice.from) <= Date.parse(slice.to), "jeder Slice muss from <= to haben");
+	}
+	assert.equal(slices[0].from, "2026-01-01T00:00:00.000Z");
+	assert.equal(slices[slices.length - 1].to, "2026-01-01T00:00:00.002Z");
+});
+
+test("buildTimeSlices mit identischem from/to ergibt genau einen Slice", () => {
+	const slices = buildTimeSlices("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z", 10);
+	assert.deepEqual(slices, [{ from: "2026-01-01T00:00:00.000Z", to: "2026-01-01T00:00:00.000Z" }]);
 });
 
 console.log(`\n${passed} Tests bestanden`);

@@ -2,7 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { resolveTenantContext } from "../shared/tenant_auth";
 import { CSV_HEADER, sessionToCsvRows, type ExportSession } from "./csv";
-import { addToSummary, createSummary } from "./summary";
+import { addToSummary, createSummary, type ExportSummary } from "./summary";
 
 type AnyApiGwEvent = any;
 type AnyLambdaContext = { getRemainingTimeInMillis: () => number };
@@ -232,32 +232,175 @@ async function exportCsv(
   return { statusCode: 200, headers, body };
 }
 
+// Anzahl paralleler Zeitabschnitte für die Vorschau (siehe exportSummary). Bei 100.000+ Sessions
+// dauerte die bisherige sequenzielle Abfrage ca. 16 s; mit parallelen Teilbereichen laufen die
+// Query-Aufrufe gleichzeitig statt nacheinander.
+const SUMMARY_SLICE_COUNT = Number(process.env.SUMMARY_SLICE_COUNT ?? 10);
+
+// Für die Vorschau genügen diese drei Felder (siehe addToSummary); schlanker als die Projektion
+// von iterateSessions, die zusätzlich für die CSV-Zeilen und den Fortsetzungs-Key gebraucht wird.
+const SUMMARY_NAMES: Record<string, string> = {
+  "#tenantId": "tenantId",
+  "#sk": "surveyStartedAt",
+  "#status": "status",
+  "#answers": "answers",
+  "#surveyVersion": "surveyVersion",
+};
+const SUMMARY_PROJECTION = "#status, #answers, #surveyVersion";
+
+interface SummarySlice {
+  from: string;
+  to: string;
+  startKey?: Record<string, any>;
+  done: boolean;
+}
+
+/**
+ * Teilt [fromIso, toIso] in bis zu `count` lückenlose, nicht überlappende Zeitabschnitte (auf
+ * Millisekunden-Basis), damit die Vorschau mehrere Query-Aufrufe parallel statt nacheinander
+ * ausführen kann. Bei sehr kurzen Zeiträumen (weniger Millisekunden als `count`) entstehen
+ * entsprechend weniger, aber immer gültige (nicht-leere) Abschnitte.
+ */
+export function buildTimeSlices(fromIso: string, toIso: string, count: number): { from: string; to: string }[] {
+  const fromMs = Date.parse(fromIso);
+  const toMs = Date.parse(toIso);
+  // Anzahl Millisekunden im (inklusiven) Zeitraum; exakte Integer-Aufteilung statt proportionaler
+  // Rundung, damit bei sehr kurzen Zeiträumen keine zwei Grenzen zusammenfallen (leerer/ungültiger
+  // Abschnitt mit from > to).
+  const totalMs = toMs - fromMs + 1;
+  const sliceCount = Math.max(1, Math.min(count, totalMs));
+  const baseLength = Math.floor(totalMs / sliceCount);
+  const remainder = totalMs % sliceCount;
+
+  const slices: { from: string; to: string }[] = [];
+  let start = fromMs;
+  for (let i = 0; i < sliceCount; i++) {
+    const length = baseLength + (i < remainder ? 1 : 0);
+    const end = start + length - 1;
+    slices.push({ from: new Date(start).toISOString(), to: new Date(end).toISOString() });
+    start = end + 1;
+  }
+  return slices;
+}
+
+function encodeSummaryCursor(tenantId: string, surveyId: string, slices: SummarySlice[]): string {
+  return encodeCursor({ tenantId, surveyId, slices });
+}
+
+/** Wie beim CSV-Cursor an Mandant und Umfrage gebunden; ein fremder/manipulierter Cursor wird abgelehnt. */
+function parseSummaryCursor(raw: string, tenantId: string, surveyId: string): SummarySlice[] | null {
+  let payload: any;
+  try {
+    payload = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!payload || payload.tenantId !== tenantId || payload.surveyId !== surveyId || !Array.isArray(payload.slices)) {
+    return null;
+  }
+  for (const slice of payload.slices) {
+    if (typeof slice?.from !== "string" || typeof slice?.to !== "string" || typeof slice?.done !== "boolean") {
+      return null;
+    }
+  }
+  return payload.slices as SummarySlice[];
+}
+
+/**
+ * Liest einen Zeitabschnitt der Vorschau zu Ende (oder bis das Zeitbudget ausgeht) und zählt die
+ * Sessions direkt in `summary` ein. `summary` wird parallel von mehreren Slices mutiert; das ist
+ * unkritisch, weil addToSummary synchron läuft und zwischen den Items keine await-Punkte liegen –
+ * die JS-Event-Loop unterbricht also nie mitten in einem Zähl-Durchlauf.
+ */
+async function processSlice(
+  tenantId: string,
+  surveyId: string,
+  slice: SummarySlice,
+  summary: ExportSummary,
+  lambdaContext: AnyLambdaContext,
+): Promise<SummarySlice> {
+  if (slice.done) return slice;
+
+  let startKey = slice.startKey;
+  while (lambdaContext.getRemainingTimeInMillis() >= MIN_REMAINING_MS) {
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: SURVEY_RESPONSES_TABLE_NAME,
+        IndexName: "byTenantSurvey",
+        KeyConditionExpression: "#tenantId = :tenantId AND #sk BETWEEN :from AND :to",
+        ExpressionAttributeNames: SUMMARY_NAMES,
+        ExpressionAttributeValues: {
+          ":tenantId": tenantId,
+          ":from": `${surveyId}#${slice.from}`,
+          ":to": `${surveyId}#${slice.to}`,
+        },
+        ProjectionExpression: SUMMARY_PROJECTION,
+        Limit: PAGE_SIZE,
+        ScanIndexForward: true,
+        ExclusiveStartKey: startKey,
+      }),
+    );
+
+    for (const item of result.Items ?? []) {
+      addToSummary(summary, item as ExportSession);
+    }
+
+    startKey = result.LastEvaluatedKey;
+    if (!startKey) {
+      return { from: slice.from, to: slice.to, done: true };
+    }
+  }
+
+  return { from: slice.from, to: slice.to, startKey, done: false };
+}
+
 /**
  * GET /survey-responses/export/summary?surveyId&from&to[&cursor]
  * Teil-Aggregate (Sessions, Antworten, Status, Versionen); version wird bewusst ignoriert,
  * damit der Versionsfilter im Frontend immer alle Versionen anbieten kann.
+ *
+ * Fragt den Zeitraum in SUMMARY_SLICE_COUNT parallelen Abschnitten ab (statt einer einzigen
+ * sequenziellen Abfrage über den gesamten Zeitraum) – das verkürzt die Laufzeit bei großen
+ * Datenmengen etwa um den Faktor der Slice-Anzahl. Reicht das Zeitbudget nicht für alle
+ * Abschnitte, trägt jeder unfertige Abschnitt seinen eigenen Fortsetzungs-Key im Cursor; bereits
+ * fertige Abschnitte werden beim nächsten Aufruf übersprungen statt erneut gelesen.
  */
 async function exportSummary(
   event: AnyApiGwEvent,
   tenantId: string,
   lambdaContext: AnyLambdaContext,
 ): Promise<AnyResult> {
-  const parsed = parseParams(event, tenantId);
-  if ("error" in parsed) return parsed.error;
-  const params: ExportParams = { ...parsed.params, version: undefined };
+  const query = event?.queryStringParameters ?? {};
+  const surveyId = String(query.surveyId ?? "").trim();
+  if (!surveyId) {
+    return jsonResponse(400, { message: "surveyId query parameter is required" });
+  }
+
+  const fromIso = toIso(query.from);
+  const toIsoValue = toIso(query.to);
+  if (!fromIso || !toIsoValue) {
+    return jsonResponse(400, { message: "from and to must be valid ISO dates" });
+  }
+  if (fromIso > toIsoValue) {
+    return jsonResponse(400, { message: "from must not be after to" });
+  }
+
+  let slices: SummarySlice[];
+  if (query.cursor) {
+    const parsed = parseSummaryCursor(String(query.cursor), tenantId, surveyId);
+    if (!parsed) return jsonResponse(400, { message: "Invalid cursor" });
+    slices = parsed;
+  } else {
+    slices = buildTimeSlices(fromIso, toIsoValue, SUMMARY_SLICE_COUNT).map((range) => ({ ...range, done: false }));
+  }
 
   const summary = createSummary();
-  let lastKey: Record<string, any> | undefined;
-  let nextCursor: string | null = null;
+  const updatedSlices = await Promise.all(
+    slices.map((slice) => processSlice(tenantId, surveyId, slice, summary, lambdaContext)),
+  );
 
-  for await (const { session, key } of iterateSessions(tenantId, params)) {
-    if (lambdaContext.getRemainingTimeInMillis() < MIN_REMAINING_MS) {
-      nextCursor = resumeCursor(lastKey, params);
-      break;
-    }
-    addToSummary(summary, session);
-    lastKey = key;
-  }
+  const stillOpen = updatedSlices.some((slice) => !slice.done);
+  const nextCursor = stillOpen ? encodeSummaryCursor(tenantId, surveyId, updatedSlices) : null;
 
   return jsonResponse(200, { ...summary, nextCursor });
 }
