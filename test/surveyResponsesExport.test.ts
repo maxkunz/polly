@@ -73,7 +73,7 @@ test("Session ohne Antworten ergibt keine Zeilen", () => {
 	assert.deepEqual(sessionToCsvRows({ responseId: "x" }), []);
 });
 
-test("addToSummary zählt Sessions, Antworten, Status und Versionen", () => {
+test("addToSummary zählt Sessions, Status und Versionen", () => {
 	const summary = createSummary();
 	addToSummary(summary, {
 		responseId: "1",
@@ -84,7 +84,6 @@ test("addToSummary zählt Sessions, Antworten, Status und Versionen", () => {
 	addToSummary(summary, { responseId: "2", surveyVersion: 2, status: "partial", answers: { a: {} } });
 	addToSummary(summary, { responseId: "3", status: "timed_out" });
 	assert.equal(summary.sessions, 3);
-	assert.equal(summary.answers, 3);
 	assert.deepEqual(summary.statusCounts, { completed: 1, partial: 1, timed_out: 1 });
 	assert.deepEqual(summary.versions, { "2": 2, "1": 1 });
 });

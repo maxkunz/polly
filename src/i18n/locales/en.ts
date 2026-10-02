@@ -371,11 +371,10 @@ export const en: MessageSchema = {
 			title: "Preview",
 			loading: "Loading preview … ({sessions} sessions so far)",
 			sessions: "Sessions",
-			answers: "Answers",
 			completed: "Completed",
 			partial: "Partial",
 			timedOut: "Timed out",
-			empty: "There are no answers in the selected date range."
+			empty: "There are no sessions in the selected date range."
 		},
 		download: "Download CSV",
 		downloadAriaLabel: "Download CSV report",

@@ -10,7 +10,6 @@ export interface ReportRange {
 
 export interface ReportSummary {
 	sessions: number;
-	answers: number;
 	statusCounts: Record<string, number>;
 	/** Survey-Version → Anzahl Sitzungen */
 	versions: Record<string, number>;
@@ -42,7 +41,7 @@ export async function loadReportSummary(
 	range: ReportRange,
 	options: ReportCallOptions & { onProgress?: (partial: ReportSummary) => void } = {}
 ): Promise<ReportSummary> {
-	const summary: ReportSummary = { sessions: 0, answers: 0, statusCounts: {}, versions: {} };
+	const summary: ReportSummary = { sessions: 0, statusCounts: {}, versions: {} };
 	let cursor: string | undefined;
 
 	do {
@@ -51,7 +50,6 @@ export async function loadReportSummary(
 		});
 		const part = await response.json();
 		summary.sessions += part.sessions ?? 0;
-		summary.answers += part.answers ?? 0;
 		mergeCounts(summary.statusCounts, part.statusCounts);
 		mergeCounts(summary.versions, part.versions);
 		cursor = part.nextCursor ?? undefined;

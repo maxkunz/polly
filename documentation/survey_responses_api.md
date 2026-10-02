@@ -381,7 +381,6 @@ Der Cursor ist an Mandant und Umfrage gebunden; ein fremder oder manipulierter C
 ```json
 {
   "sessions": 1200,
-  "answers": 5400,
   "statusCounts": { "completed": 1000, "partial": 120, "timed_out": 80 },
   "versions": { "2": 300, "3": 900 },
   "nextCursor": null

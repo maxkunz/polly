@@ -369,11 +369,10 @@ export const de = {
 			title: "Vorschau",
 			loading: "Lade Vorschau … ({sessions} Sitzungen bisher)",
 			sessions: "Sitzungen",
-			answers: "Antworten",
 			completed: "Abgeschlossen",
 			partial: "Teilweise",
 			timedOut: "Zeitüberschreitung",
-			empty: "Im gewählten Zeitraum gibt es keine Antworten."
+			empty: "Im gewählten Zeitraum gibt es keine Sitzungen."
 		},
 		download: "CSV herunterladen",
 		downloadAriaLabel: "CSV-Report herunterladen",

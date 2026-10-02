@@ -15,8 +15,10 @@ Vorher kann man den Report zeitlich filtern, indem man ein von - bis Datum einst
   wird komplett dem Starttag zugerechnet.
 - Optional kann auf eine **Survey-Version** gefiltert werden. Das Dropdown wird aus der Vorschau befüllt
   (nur Versionen, die im Zeitraum vorkommen, inkl. Anzahl Sitzungen).
-- Eine **Vorschau** zeigt vor dem Download die Anzahl der Sitzungen und Antworten sowie die Aufteilung nach Status.
-  Sie wird bei jeder Änderung des Zeitraums neu geladen. Bei 0 Antworten ist der Download deaktiviert.
+- Eine **Vorschau** zeigt vor dem Download die Anzahl der Sitzungen sowie die Aufteilung nach Status.
+  Sie wird bei jeder Änderung des Zeitraums neu geladen. Bei 0 Sitzungen ist der Download deaktiviert.
+  Die Anzahl der Antworten wird bewusst nicht angezeigt: Dafür müssten alle Antwort-Maps gelesen werden,
+  was bei großen Datenmengen die Vorschau stark verlangsamt.
 - Beim Download wird ein Fortschritt angezeigt; er kann abgebrochen werden.
 - Dateiname: `<Survey-Name>_<von>_<bis>[_v<version>].csv`.
 

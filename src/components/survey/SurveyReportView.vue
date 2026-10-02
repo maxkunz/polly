@@ -136,7 +136,7 @@ const canDownload = computed(
 		!isLoadingSummary.value &&
 		!isDownloading.value &&
 		!!summary.value &&
-		summary.value.answers > 0
+		summary.value.sessions > 0
 );
 
 function formatDateParam(date: Date): string {
@@ -337,17 +337,13 @@ onBeforeUnmount(() => {
 				<i class="pi pi-spin pi-spinner mr-1" aria-hidden="true" />
 				{{ t("report.summary.loading", { sessions: summary?.sessions ?? 0 }) }}
 			</p>
-			<p v-else-if="summary && summary.answers === 0" class="text-sm text-[var(--p-text-muted-color)]">
+			<p v-else-if="summary && summary.sessions === 0" class="text-sm text-[var(--p-text-muted-color)]">
 				{{ t("report.summary.empty") }}
 			</p>
-			<dl v-else-if="summary" class="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
+			<dl v-else-if="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
 				<div>
 					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.sessions") }}</dt>
 					<dd class="font-semibold">{{ summary.sessions }}</dd>
-				</div>
-				<div>
-					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.answers") }}</dt>
-					<dd class="font-semibold">{{ summary.answers }}</dd>
 				</div>
 				<div>
 					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.completed") }}</dt>

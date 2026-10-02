@@ -237,16 +237,15 @@ async function exportCsv(
 // Query-Aufrufe gleichzeitig statt nacheinander.
 const SUMMARY_SLICE_COUNT = Number(process.env.SUMMARY_SLICE_COUNT ?? 10);
 
-// Für die Vorschau genügen diese drei Felder (siehe addToSummary); schlanker als die Projektion
-// von iterateSessions, die zusätzlich für die CSV-Zeilen und den Fortsetzungs-Key gebraucht wird.
+// Für die Vorschau genügen Status und Version (siehe addToSummary). Die answers-Maps werden bewusst
+// nicht gelesen: ihr Unmarshalling war bei 100.000+ Sessions der Hauptteil der Laufzeit.
 const SUMMARY_NAMES: Record<string, string> = {
   "#tenantId": "tenantId",
   "#sk": "surveyStartedAt",
   "#status": "status",
-  "#answers": "answers",
   "#surveyVersion": "surveyVersion",
 };
-const SUMMARY_PROJECTION = "#status, #answers, #surveyVersion";
+const SUMMARY_PROJECTION = "#status, #surveyVersion";
 
 interface SummarySlice {
   from: string;
@@ -356,7 +355,7 @@ async function processSlice(
 
 /**
  * GET /survey-responses/export/summary?surveyId&from&to[&cursor]
- * Teil-Aggregate (Sessions, Antworten, Status, Versionen); version wird bewusst ignoriert,
+ * Teil-Aggregate (Sessions, Status, Versionen); version wird bewusst ignoriert,
  * damit der Versionsfilter im Frontend immer alle Versionen anbieten kann.
  *
  * Fragt den Zeitraum in SUMMARY_SLICE_COUNT parallelen Abschnitten ab (statt einer einzigen
