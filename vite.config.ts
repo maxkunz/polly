@@ -17,6 +17,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: true,
       },
+      "/api/survey-responses": {
+        target: "https://main.d1a6p4nkkob4i7.amplifyapp.com",
+        changeOrigin: true,
+        secure: true,
+      },
       "/api": {
         //target: outputs.custom.apiUrl,          // holt url aus amplify_outputs.json
         //target: process.env.AWS_BRANCH ?? "",   // holt url aus env (funktioniert nur in aws?)
