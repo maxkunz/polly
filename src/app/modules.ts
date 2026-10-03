@@ -29,6 +29,8 @@ export interface ModuleDefinition {
 	routeModule: boolean;
 	terminal?: boolean;
 	showChildrenInSidebar?: boolean;
+	/** Query-Parameter, die beim Wechsel zwischen Kindern desselben Moduls erhalten bleiben (z. B. Sub-Page wie Deploy/Report). */
+	preserveQueryKeys?: string[];
 	isActive: () => boolean;
 	getChildren: () => ModuleChild[];
 }
@@ -89,6 +91,7 @@ export function moduleRegistry() {
 			page: true,
 			dashboardColumn: 3,
 			routeModule: false,
+			preserveQueryKeys: ["deploy", "report"],
 			isActive: () => true,
 			getChildren: () =>
 				(useAppStore().surveys ?? []).map((survey: any, index: number) => {

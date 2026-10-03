@@ -61,9 +61,23 @@ function handleChildClick(module: ModuleDefinition, child: ModuleChild): void {
 		router.replace({ name: String(child.value?.id ?? "") });
 		return;
 	}
+
+	// Beim Wechsel zu einem anderen Kind desselben Moduls bleibt die aktuelle
+	// Sub-Page (z. B. Deploy/Report bei Umfragen) erhalten.
+	const preservedQuery: Record<string, string> = {};
+	if (route.name === module.key && module.preserveQueryKeys) {
+		for (const key of module.preserveQueryKeys) {
+			const value = route.query[key];
+			if (typeof value === "string") {
+				preservedQuery[key] = value;
+			}
+		}
+	}
+
 	router.replace({
 		name: module.key,
 		query: {
+			...preservedQuery,
 			id: child.value?.id ?? child.key
 		}
 	});
