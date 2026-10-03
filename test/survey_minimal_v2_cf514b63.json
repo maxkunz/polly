@@ -1,16 +1,16 @@
 {
-    "id": "1718e427-0661-4716-95f5-4b1e4bc0233a",
-    "name": "mini_1718e427",
-    "title": "Minimal",
+    "id": "cf514b63-2b63-4db6-84cf-f105823de563",
+    "name": "minimal_v2_cf514b63",
+    "title": "Minimal mk2",
     "description": "",
     "greeting_message": "",
     "closing_message": "",
-    "created_at": "2026-08-28T11:59:56.368Z",
-    "version": 21,
+    "created_at": "2026-10-02T20:24:58.138Z",
+    "version": 5,
     "questions": [
         {
-            "id": "46d4db2f-20da-4721-b3c6-1941bbf76c35",
-            "name": "ja_oder_nein_46d4db2f",
+            "id": "b8d3c569-8e2b-4d29-93c4-fbdc83aea6f0",
+            "name": "ja_oder_nein_b8d3c569",
             "type": "yes_no",
             "title": "Ja oder nein?",
             "description": "",
@@ -19,8 +19,8 @@
             "follow_ups": []
         },
         {
-            "id": "3557a5bf-4268-4077-b516-e650d422b960",
-            "name": "bewertung_3557a5bf",
+            "id": "d84f7596-41c4-496d-9d82-feae200d1a0c",
+            "name": "bewertung_d84f7596",
             "type": "rating",
             "title": "Bewertung",
             "description": "",
@@ -37,8 +37,8 @@
                         "value": 3
                     },
                     "question": {
-                        "id": "0c414408-3058-4ccc-b30c-35c7cb6f5d9c",
-                        "name": "warum_3_0c414408",
+                        "id": "a70cbb61-113b-4cbd-8794-536048b2abf9",
+                        "name": "warum_3_a70cbb61",
                         "type": "comment",
                         "title": "Warum 3?",
                         "description": "",
@@ -52,8 +52,8 @@
                         "value": 3
                     },
                     "question": {
-                        "id": "d64ccdb1-5543-4330-a504-03856f86541d",
-                        "name": "warum_weniger_als_3_d64ccdb1",
+                        "id": "449fd198-a895-48d8-acec-8d3d8d2d116a",
+                        "name": "warum_weniger_als_3_449fd198",
                         "type": "comment",
                         "title": "Warum weniger als 3?",
                         "description": "",
@@ -67,8 +67,8 @@
                         "value": 3
                     },
                     "question": {
-                        "id": "d80a2522-22bf-4a05-bd70-a43e874d9c28",
-                        "name": "warum_mehr_als_3_d80a2522",
+                        "id": "77acb46f-0f90-429e-8aee-a1ca8336ce52",
+                        "name": "warum_mehr_als_3_77acb46f",
                         "type": "comment",
                         "title": "Warum mehr als 3?",
                         "description": "",
@@ -79,8 +79,8 @@
             ]
         },
         {
-            "id": "58bd0bde-3556-4d6a-b2a6-dd3d2ad86845",
-            "name": "auswahl_frucht_58bd0bde",
+            "id": "773cc9ef-d6fb-4fb8-bf13-d9da8423ff94",
+            "name": "auswahl_frucht_773cc9ef",
             "type": "choice",
             "title": "Auswahl Frucht",
             "description": "",
@@ -89,7 +89,7 @@
             "options": {
                 "labels": [
                     {
-                        "id": "c7ad1192-bf4c-489c-9fdf-297e76d1c453",
+                        "id": "dc254964-0901-47fd-892f-b156aeed1c96",
                         "label": "Orange",
                         "synonyms": [
                             "Apfelsine",
@@ -97,11 +97,11 @@
                         ]
                     },
                     {
-                        "id": "b7ea9d06-bdea-4c1b-9ee1-66ce5d6e5ac1",
+                        "id": "6c3a48cc-efd6-427b-b560-085687a092dd",
                         "label": "Passionsfrucht"
                     },
                     {
-                        "id": "35de19af-cef6-464d-b349-93d444b032fb",
+                        "id": "d411d371-2bfd-48c8-b194-4df13dafd8bc",
                         "label": "Johannisbeere",
                         "synonyms": [
                             "Ribisel",
@@ -115,11 +115,11 @@
                 {
                     "condition": {
                         "operator": "equals",
-                        "value": "c7ad1192-bf4c-489c-9fdf-297e76d1c453"
+                        "value": "dc254964-0901-47fd-892f-b156aeed1c96"
                     },
                     "question": {
-                        "id": "8931c696-642b-4ff3-87d0-c6506d3ee4d3",
-                        "name": "lecker_8931c696",
+                        "id": "ddec890b-ce4b-4efd-a3d7-a978012d5f67",
+                        "name": "lecker_ddec890b",
                         "type": "comment",
                         "title": "Lecker?",
                         "description": "",
@@ -130,28 +130,28 @@
                 {
                     "condition": {
                         "operator": "equals",
-                        "value": "b7ea9d06-bdea-4c1b-9ee1-66ce5d6e5ac1"
+                        "value": "6c3a48cc-efd6-427b-b560-085687a092dd"
                     },
                     "question": {
-                        "id": "4d104e1f-e46c-4bbb-a2c0-06af9109490c",
-                        "name": "xx_4d104e1f",
+                        "id": "de4d606f-d9d7-41ce-8763-5f118e2cc87a",
+                        "name": "suess_de4d606f",
                         "type": "comment",
-                        "title": "prompt",
+                        "title": "Süss?",
                         "description": "",
-                        "reprompt_message": "reprompt",
+                        "reprompt_message": "",
                         "mandatory": false
                     }
                 },
                 {
                     "condition": {
                         "operator": "equals",
-                        "value": "35de19af-cef6-464d-b349-93d444b032fb"
+                        "value": "d411d371-2bfd-48c8-b194-4df13dafd8bc"
                     },
                     "question": {
-                        "id": "85a9c5c4-047a-4fe2-a2ad-e74f78d72713",
-                        "name": "cdfdfgfdg_85a9c5c4",
+                        "id": "26ceea0f-edd7-4973-9868-25b3db3079c5",
+                        "name": "sauer_26ceea0f",
                         "type": "comment",
-                        "title": "cdfdfgfdg",
+                        "title": "Sauer?",
                         "description": "",
                         "reprompt_message": "",
                         "mandatory": false
@@ -160,8 +160,8 @@
             ]
         },
         {
-            "id": "ce9b05b7-f124-4966-b827-3ef049aaf797",
-            "name": "nps_ce9b05b7",
+            "id": "abd4e947-e7e7-4e99-94d8-e7892ded5805",
+            "name": "nps_abd4e947",
             "type": "nps",
             "title": "NPS",
             "description": "",
@@ -169,8 +169,8 @@
             "mandatory": false
         },
         {
-            "id": "e80f5583-253e-4ec1-8160-022a4f60a19f",
-            "name": "kommentar_e80f5583",
+            "id": "f525aad0-c699-43d5-ba2b-d03d46c548ac",
+            "name": "kommentar_f525aad0",
             "type": "comment",
             "title": "Kommentar",
             "description": "",
@@ -178,5 +178,5 @@
             "mandatory": false
         }
     ],
-    "updated_at": "2026-09-25T14:52:42.911Z"
+    "updated_at": "2026-10-02T20:28:19.494Z"
 }
