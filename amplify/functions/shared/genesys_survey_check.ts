@@ -75,6 +75,12 @@ async function getRow(
   return { status: res.status };
 }
 
+async function getTableStatus(region: string, token: string, dataTableId: string): Promise<number> {
+  const url = `https://api.${region}/api/v2/flows/datatables/${encodeURIComponent(dataTableId)}`;
+  const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
+  return res.status;
+}
+
 function listContainsSurvey(listRow: Record<string, any>, surveyId: string): boolean | null {
   const raw = listRow.Draft ?? listRow.draft;
   if (raw === undefined || raw === null) return null;
@@ -91,8 +97,8 @@ function listContainsSurvey(listRow: Record<string, any>, surveyId: string): boo
 /**
  * Prüft für JEDE übergebene Data Table, dass die Umfrage dort nicht existiert:
  *  - Zeile `survey_<id>` muss 404 liefern,
- *  - Zeile `survey_list` muss lesbar sein (sonst wäre ein 404 auch bei fehlender Tabelle möglich)
- *    und darf die ID nicht enthalten.
+ *  - Zeile `survey_list` darf die ID nicht enthalten; fehlt die Zeile (noch nie eine Umfrage gespeichert),
+ *    muss die Tabelle selbst lesbar sein (sonst wäre ein 404 auch bei fehlender Tabelle möglich).
  * Jedes andere Ergebnis führt zu `exists` bzw. `error`.
  */
 export async function assertSurveyAbsent(
@@ -117,6 +123,15 @@ export async function assertSurveyAbsent(
       }
 
       const listRow = await getRow(region, token, tableId, "survey_list");
+      if (listRow.status === 404) {
+        // survey_list entsteht erst beim ersten Speichern einer Umfrage. Ohne Index kann die Umfrage dort
+        // nur fehlen, sofern die Tabelle selbst nachweislich existiert (sonst wären beide 404 bedeutungslos).
+        const tableStatus = await getTableStatus(region, token, tableId);
+        if (tableStatus !== 200) {
+          return { status: "error", reason: `Data table ${tableId}: table check HTTP ${tableStatus}` };
+        }
+        continue;
+      }
       if (listRow.status !== 200) {
         return { status: "error", reason: `Data table ${tableId}: survey_list check HTTP ${listRow.status}` };
       }

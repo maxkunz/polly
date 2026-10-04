@@ -24,8 +24,13 @@ function mockFetch(routes: MockRoutes): () => void {
 	const original = globalThis.fetch;
 	globalThis.fetch = (async (input: any) => {
 		const url = String(input);
-		const match = url.match(/datatables\/([^/]+)\/rows\/([^?]+)/);
-		const key = match ? `${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}` : url;
+		const rowMatch = url.match(/datatables\/([^/]+)\/rows\/([^?]+)/);
+		const tableMatch = url.match(/datatables\/([^/?]+)$/);
+		const key = rowMatch
+			? `${decodeURIComponent(rowMatch[1])}/${decodeURIComponent(rowMatch[2])}`
+			: tableMatch
+				? decodeURIComponent(tableMatch[1])
+				: url;
 		const route = routes[key];
 		if (!route) return new Response("{}", { status: 404 });
 		if (route instanceof Error) throw route;
@@ -77,9 +82,32 @@ async function main() {
 		assert.equal(result.status, "exists");
 	});
 
-	await test("error: survey_list fehlt (Tabelle evtl. nicht vorhanden)", async () => {
+	await test("error: survey_list und Tabelle fehlen", async () => {
 		const result = await check({});
 		assert.equal(result.status, "error");
+	});
+
+	await test("absent: survey_list fehlt, Tabelle existiert (noch nie eine Umfrage gespeichert)", async () => {
+		const result = await check({ t1: { status: 200, body: { id: "t1" } } });
+		assert.equal(result.status, "absent");
+	});
+
+	await test("error: survey_list fehlt, Tabelle nicht lesbar (403)", async () => {
+		const result = await check({ t1: { status: 403 } });
+		assert.equal(result.status, "error");
+	});
+
+	await test("exists: survey_list fehlt, aber Zeile survey_<id> vorhanden", async () => {
+		const result = await check({
+			t1: { status: 200 },
+			[`t1/survey_${SURVEY_ID}`]: { status: 200, body: { key: `survey_${SURVEY_ID}` } }
+		});
+		assert.equal(result.status, "exists");
+	});
+
+	await test("Tabelle ohne survey_list + Tabelle mit gelisteter Umfrage → exists", async () => {
+		const result = await check({ t1: { status: 200 }, "t2/survey_list": listRow([SURVEY_ID]) }, ["t1", "t2"]);
+		assert.equal(result.status, "exists");
 	});
 
 	await test("error: 403 beim Lesen der Zeile", async () => {

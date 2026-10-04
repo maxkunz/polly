@@ -410,7 +410,7 @@ Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `r
 
 #### Ablauf und Sicherheitsregeln (Ergebnisse existierender Umfragen werden nie gelöscht)
 1. `surveyId` muss eine UUID sein; der Mandant stammt ausschließlich aus dem Token.
-2. **Prüfung bei der Anfrage** (mit dem Genesys-Token des Aufrufers): in jeder geprüften Data Table muss `survey_<id>` mit `404` antworten, `survey_list` lesbar sein und die ID nicht enthalten. Jedes andere Ergebnis bricht ab.
+2. **Prüfung bei der Anfrage** (mit dem Genesys-Token des Aufrufers): in jeder geprüften Data Table muss `survey_<id>` mit `404` antworten und `survey_list` darf die ID nicht enthalten. Fehlt `survey_list` (in der Tabelle wurde noch nie eine Umfrage gespeichert), muss die Tabelle selbst lesbar sein (`GET /api/v2/flows/datatables/{id}` → `200`). Jedes andere Ergebnis bricht ab.
 3. Der Job (Tabelle `SurveyDeletionJobsTable`, Schlüssel `tenantId` + `surveyId`) wird angelegt und mit **15 Minuten Verzögerung** in die Queue gestellt, damit laufende Gespräche ihre Umfrage noch beenden können.
 4. **Erneute Prüfung im Worker** mit den Backend-Credentials des Mandanten unmittelbar vor dem Löschen. Existiert die Umfrage dann doch, wird der Job `aborted`. Ist die Data Table für die Backend-Rolle nicht lesbar, wird nach 3 Versuchen `failed`; gelöscht wird in beiden Fällen nichts.
 5. Gelöscht wird pro Item mit Bedingung (`tenantId` und `surveyId` müssen passen). Items, bei denen `surveyId` inzwischen auf eine andere Umfrage zeigt (gleiche Conversation, zweite Umfrage), werden übersprungen (`skipped`).
