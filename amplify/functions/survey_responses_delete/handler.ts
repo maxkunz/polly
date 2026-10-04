@@ -70,8 +70,9 @@ async function setJobStatus(
   surveyId: string,
   status: JobStatus,
   message?: string
-): Promise<void> {
-  await ddb.send(
+): Promise<Record<string, any>> {
+  // ReturnValues liefert den Gesamtstand des Jobs ohne zusätzliche Leseanfrage (für das Log)
+  const result = await ddb.send(
     new UpdateCommand({
       TableName: SURVEY_DELETION_JOBS_TABLE_NAME,
       Key: jobKey(tenantId, surveyId),
@@ -82,8 +83,10 @@ async function setJobStatus(
         ":now": new Date().toISOString(),
         ":message": message ?? "",
       },
+      ReturnValues: "ALL_NEW",
     })
   );
+  return result.Attributes ?? {};
 }
 
 async function addJobCounters(
@@ -197,6 +200,7 @@ async function requestDeletion(event: AnyApiGwEvent, tenantId: string, source: s
     );
   } catch (err: any) {
     if (err.name === "ConditionalCheckFailedException") {
+      console.log("[survey_responses_delete] deletion already running", { tenantId, surveyId });
       return jsonResponse(202, { status: "already_running", surveyId });
     }
     throw err;
@@ -210,6 +214,12 @@ async function requestDeletion(event: AnyApiGwEvent, tenantId: string, source: s
     return jsonResponse(502, { message: "Could not start deletion" });
   }
 
+  console.log("[survey_responses_delete] deletion queued", {
+    tenantId,
+    surveyId,
+    dataTableIds,
+    startDelaySeconds: START_DELAY_SECONDS,
+  });
   return jsonResponse(202, { status: "queued", surveyId });
 }
 
@@ -302,16 +312,19 @@ async function deleteConditionally(
   }
 }
 
+type PassResult = { complete: boolean; deleted: number; skipped: number };
+
 /** Ein Durchlauf über alle Aggregate der Umfrage. Gibt false zurück, wenn die Zeit knapp wird. */
 async function deleteAggregatesPass(
   tenantId: string,
   surveyId: string,
   getRemainingMs: () => number
-): Promise<{ complete: boolean; deleted: number }> {
+): Promise<PassResult> {
   let lastKey: Record<string, any> | undefined;
   let total = 0;
+  let totalSkipped = 0;
   do {
-    if (getRemainingMs() < MIN_REMAINING_MS) return { complete: false, deleted: total };
+    if (getRemainingMs() < MIN_REMAINING_MS) return { complete: false, deleted: total, skipped: totalSkipped };
 
     const page = await ddb.send(
       new QueryCommand({
@@ -335,10 +348,11 @@ async function deleteAggregatesPass(
       )
     );
     total += deleted;
+    totalSkipped += skipped;
     await addJobCounters(tenantId, surveyId, { deletedAggregates: deleted, skipped });
     lastKey = page.LastEvaluatedKey;
   } while (lastKey);
-  return { complete: true, deleted: total };
+  return { complete: true, deleted: total, skipped: totalSkipped };
 }
 
 /** Ein Durchlauf über alle Sessions der Umfrage (GSI byTenantSurvey). */
@@ -346,11 +360,12 @@ async function deleteResponsesPass(
   tenantId: string,
   surveyId: string,
   getRemainingMs: () => number
-): Promise<{ complete: boolean; deleted: number }> {
+): Promise<PassResult> {
   let lastKey: Record<string, any> | undefined;
   let total = 0;
+  let totalSkipped = 0;
   do {
-    if (getRemainingMs() < MIN_REMAINING_MS) return { complete: false, deleted: total };
+    if (getRemainingMs() < MIN_REMAINING_MS) return { complete: false, deleted: total, skipped: totalSkipped };
 
     const page = await ddb.send(
       new QueryCommand({
@@ -374,10 +389,11 @@ async function deleteResponsesPass(
       )
     );
     total += deleted;
+    totalSkipped += skipped;
     await addJobCounters(tenantId, surveyId, { deletedResponses: deleted, skipped });
     lastKey = page.LastEvaluatedKey;
   } while (lastKey);
-  return { complete: true, deleted: total };
+  return { complete: true, deleted: total, skipped: totalSkipped };
 }
 
 async function processMessage(message: DeletionMessage, getRemainingMs: () => number): Promise<void> {
@@ -397,10 +413,17 @@ async function processMessage(message: DeletionMessage, getRemainingMs: () => nu
   }
 
   await setJobStatus(tenantId, surveyId, "running");
+  console.log("[survey_responses_delete] worker started", {
+    tenantId,
+    surveyId,
+    previousStatus: job.status,
+    requestedAt: job.requestedAt,
+  });
 
   // Zweite, unabhängige Prüfung unmittelbar vor dem Löschen (Backend-Credentials des Mandanten)
   const credentials = await loadTenantCredentials(tenantId);
   if (!credentials) {
+    console.warn("[survey_responses_delete] aborted, no Genesys credentials", { tenantId, surveyId });
     await setJobStatus(tenantId, surveyId, "aborted", "No Genesys credentials, nothing deleted");
     return;
   }
@@ -421,26 +444,48 @@ async function processMessage(message: DeletionMessage, getRemainingMs: () => nu
     throw new Error(`Verification failed: ${check.reason}`);
   }
 
+  console.log("[survey_responses_delete] verification passed, deleting", { tenantId, surveyId });
+
+  // Zähler dieses Laufs (der Gesamtstand über alle Läufe steht im Job)
+  const run = { deletedResponses: 0, deletedAggregates: 0, skipped: 0 };
+
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     const aggregates = await deleteAggregatesPass(tenantId, surveyId, getRemainingMs);
-    const responses = aggregates.complete
+    const responses: PassResult = aggregates.complete
       ? await deleteResponsesPass(tenantId, surveyId, getRemainingMs)
-      : { complete: false, deleted: 0 };
+      : { complete: false, deleted: 0, skipped: 0 };
+
+    run.deletedAggregates += aggregates.deleted;
+    run.deletedResponses += responses.deleted;
+    run.skipped += aggregates.skipped + responses.skipped;
 
     if (!aggregates.complete || !responses.complete) {
       // Zeit knapp: Fortsetzung in einer neuen Nachricht, Fortschritt steht im Job
       await enqueue({ tenantId, surveyId }, 0);
+      console.log("[survey_responses_delete] time budget reached, continuing in new run", { tenantId, surveyId, run });
       return;
     }
     // Ein Durchlauf ohne Löschungen bestätigt, dass nichts mehr (eventually consistent) nachkommt
     if (aggregates.deleted === 0 && responses.deleted === 0) {
-      await setJobStatus(tenantId, surveyId, "done");
+      const finalJob = await setJobStatus(tenantId, surveyId, "done");
+      console.log("[survey_responses_delete] deletion done", {
+        tenantId,
+        surveyId,
+        run,
+        total: {
+          deletedResponses: finalJob.deletedResponses ?? 0,
+          deletedAggregates: finalJob.deletedAggregates ?? 0,
+          skipped: finalJob.skipped ?? 0,
+        },
+        requestedAt: finalJob.requestedAt,
+      });
       return;
     }
   }
 
   // Immer noch Treffer nach mehreren Durchläufen: erneut einreihen
   await enqueue({ tenantId, surveyId }, 30);
+  console.log("[survey_responses_delete] items still appearing, re-queued", { tenantId, surveyId, run });
 }
 
 async function handleSqs(event: any, context: any): Promise<void> {
@@ -456,8 +501,14 @@ async function handleSqs(event: any, context: any): Promise<void> {
     try {
       await processMessage(message, getRemainingMs);
     } catch (err: any) {
-      console.error("[survey_responses_delete] processing failed", err);
       const receiveCount = Number(record.attributes?.ApproximateReceiveCount ?? 1);
+      console.error("[survey_responses_delete] run failed", {
+        tenantId: message?.tenantId,
+        surveyId: message?.surveyId,
+        receiveCount,
+        willRetry: receiveCount < MAX_RECEIVE_COUNT,
+        error: String(err?.message ?? err),
+      });
       if (receiveCount >= MAX_RECEIVE_COUNT && message?.tenantId && isValidSurveyId(message?.surveyId)) {
         await setJobStatus(message.tenantId, message.surveyId, "failed", String(err?.message ?? err)).catch(() => {});
       }
