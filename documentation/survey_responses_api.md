@@ -388,6 +388,35 @@ Der Cursor ist an Mandant und Umfrage gebunden; ein fremder oder manipulierter C
 ```
 Die Werte sind Teil-Aggregate und müssen über alle Teilabrufe addiert werden.
 
+### 4.6 DELETE `/survey-responses` und GET `/survey-responses/delete-status`
+Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable` und `SurveyAggregatesTable` (Lambda `survey_responses_delete`). Das Löschen läuft **asynchron** über eine SQS-Queue; der Aufruf liefert sofort `202 Accepted`. Das Frontend ruft den Endpunkt automatisch auf, nachdem eine Umfrage aus der Data Table entfernt wurde.
+
+#### DELETE – Query Parameters
+| Parameter | Typ | Pflicht | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `surveyId` | `string` (UUID) | **Ja** | ID der gelöschten Umfrage |
+| `datatableId` | `string` | **Ja** | Data Table, in der die Umfrage gespeichert war (wird zusätzlich zu den beim Onboarding hinterlegten `allowedDataTableIds` geprüft) |
+
+#### Response
+| Status | Bedeutung |
+| :--- | :--- |
+| `202` | Job angelegt (`{ "status": "queued" }`) oder läuft bereits (`{ "status": "already_running" }`). Der Aufruf ist idempotent. |
+| `400` | `surveyId` keine UUID oder `datatableId` fehlt. |
+| `409` | Die Umfrage existiert noch (Zeile `survey_<id>` vorhanden oder in `survey_list` gelistet). Es wird nichts gelöscht. |
+| `502` | Nicht zweifelsfrei prüfbar (z. B. kein Zugriff auf die Data Table, Genesys-Fehler). Es wird nichts gelöscht. |
+
+#### GET `/survey-responses/delete-status?surveyId=...`
+Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `requestedAt`, `updatedAt`, `deletedResponses`, `deletedAggregates`, `skipped`, `message`. `404`, wenn kein Job existiert.
+
+#### Ablauf und Sicherheitsregeln (Ergebnisse existierender Umfragen werden nie gelöscht)
+1. `surveyId` muss eine UUID sein; der Mandant stammt ausschließlich aus dem Token.
+2. **Prüfung bei der Anfrage** (mit dem Genesys-Token des Aufrufers): in jeder geprüften Data Table muss `survey_<id>` mit `404` antworten, `survey_list` lesbar sein und die ID nicht enthalten. Jedes andere Ergebnis bricht ab.
+3. Der Job (Tabelle `SurveyDeletionJobsTable`, Schlüssel `tenantId` + `surveyId`) wird angelegt und mit **15 Minuten Verzögerung** in die Queue gestellt, damit laufende Gespräche ihre Umfrage noch beenden können.
+4. **Erneute Prüfung im Worker** mit den Backend-Credentials des Mandanten unmittelbar vor dem Löschen. Existiert die Umfrage dann doch, wird der Job `aborted`. Ist die Data Table für die Backend-Rolle nicht lesbar, wird nach 3 Versuchen `failed`; gelöscht wird in beiden Fällen nichts.
+5. Gelöscht wird pro Item mit Bedingung (`tenantId` und `surveyId` müssen passen). Items, bei denen `surveyId` inzwischen auf eine andere Umfrage zeigt (gleiche Conversation, zweite Umfrage), werden übersprungen (`skipped`).
+6. Der Worker läuft in Seiten à 100 Items, setzt bei knapper Laufzeit in einer neuen Nachricht fort und beendet den Job erst nach einem Durchlauf ohne Löschungen (`done`). Nach 3 Fehlversuchen landet die Nachricht in der Dead-Letter-Queue.
+7. **Tombstone:** Solange der Job `queued`, `running` oder `done` ist, beantwortet `POST /survey-responses` Antworten zu dieser Umfrage mit `200` und `{ "ignored": true }`, ohne zu speichern. Bei `aborted`/`failed` wird nicht gesperrt.
+
 ---
 
 ## 5. Fehlerbehandlung (HTTP Status Codes)
@@ -404,6 +433,8 @@ Alle Fehler werden als einheitliches JSON-Objekt mit dem Feld `message` zurückg
 | :--- | :--- |
 | **`400 Bad Request`** | Fehlende Pflichtfelder (`conversationId`, `surveyId`), ungültiges JSON, weder `questionName` noch `isCompleted: true` übergeben, ungültiger `cursor` bei `/survey-responses/raw` bzw. ungültige oder fehlende `from`/`to`/`cursor` bei den Export-Endpunkten. |
 | **`401 Unauthorized`** | Fehlendes oder ungültiges Token (Genesys oder Cognito) bzw. Mandant nicht freigeschaltet. |
+| **`409 Conflict`** | Nur `DELETE /survey-responses`: Die Umfrage existiert noch, die Ergebnisse werden nicht gelöscht. |
+| **`502 Bad Gateway`** | Nur `DELETE /survey-responses`: Die Nichtexistenz der Umfrage konnte nicht zweifelsfrei geprüft werden. |
 | **`404 Not Found`** | Session mit angegebener `conversationId` existiert nicht, oder falsche Route/Methode (Antwort enthält dann zusätzlich `method` und `path`). |
 | **`500 Internal Server Error`** | Unerwarteter Serverfehler oder fehlende Tabellenkonfiguration in Lambda Environment. |
 

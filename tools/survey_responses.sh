@@ -262,5 +262,40 @@ curl -s -X POST "${API_URL}/survey-responses" \
   }" | jq .
 echo ""
 
+# -------------------------------------------------------------------
+# Ergebnisse löschen (DELETE /survey-responses)
+# Braucht DATATABLE_ID (Genesys Data Table der Umfragen) und optional
+# EXISTING_SURVEY_ID (Umfrage, die in dieser Data Table EXISTIERT).
+# -------------------------------------------------------------------
+if [ -n "${DATATABLE_ID:-}" ]; then
+  if [ -n "${EXISTING_SURVEY_ID:-}" ]; then
+    echo ">>> [D1] DELETE /survey-responses – existierende Umfrage (erwartet 409, nichts wird gelöscht)"
+    curl -s -w "\nHTTP %{http_code}\n" -X DELETE \
+      "${API_URL}/survey-responses?surveyId=${EXISTING_SURVEY_ID}&datatableId=${DATATABLE_ID}" \
+      "${BASE_HEADERS[@]}"
+    echo ""
+  fi
+
+  DELETED_SURVEY_ID="$(uuidgen | tr 'A-Z' 'a-z')"
+  echo ">>> [D2] DELETE /survey-responses – nie existierende Umfrage ${DELETED_SURVEY_ID} (erwartet 202)"
+  curl -s -w "\nHTTP %{http_code}\n" -X DELETE \
+    "${API_URL}/survey-responses?surveyId=${DELETED_SURVEY_ID}&datatableId=${DATATABLE_ID}" \
+    "${BASE_HEADERS[@]}"
+  echo ""
+
+  echo ">>> [D3] GET /survey-responses/delete-status"
+  curl -s "${API_URL}/survey-responses/delete-status?surveyId=${DELETED_SURVEY_ID}" \
+    "${BASE_HEADERS[@]}" | jq .
+  echo ""
+
+  echo ">>> [D4] POST /survey-responses – Antwort zur gelöschten Umfrage (erwartet ignored: true)"
+  curl -s -X POST "${API_URL}/survey-responses" \
+    "${BASE_HEADERS[@]}" \
+    -d "{\"conversationId\": \"${CONVERSATION_ID}-del\", \"surveyId\": \"${DELETED_SURVEY_ID}\", \"questionName\": \"q\", \"questionType\": \"nps\", \"value\": 5}" | jq .
+  echo ""
+else
+  echo "DATATABLE_ID nicht gesetzt – Lösch-Tests übersprungen."
+fi
+
 echo "==== Fertig ===="
 

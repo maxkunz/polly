@@ -181,13 +181,17 @@ export const en: MessageSchema = {
 		},
 		deleteConfirm: {
 			header: "Delete survey",
-			message: "Do you really want to permanently delete the survey „{title}“?",
+			message: "Do you really want to permanently delete the survey „{title}“? All collected results of the survey will be permanently deleted as well.",
 			acceptLabel: "Yes, delete",
 			rejectLabel: "Cancel",
 			successSummary: "Survey deleted",
 			successDetail: "The survey „{title}“ was deleted successfully.",
 			errorSummary: "Delete error",
-			errorFallback: "Failed to delete the survey from the data table."
+			errorFallback: "Failed to delete the survey from the data table.",
+			resultsSummary: "Deleting results",
+			resultsDetail: "The survey results are being deleted in the background. This may take a while.",
+			resultsErrorSummary: "Results not deleted",
+			resultsErrorFallback: "The survey was deleted, but deleting its results could not be started."
 		}
 	},
 

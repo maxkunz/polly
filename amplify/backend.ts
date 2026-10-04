@@ -9,6 +9,8 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
+import * as sqs from "aws-cdk-lib/aws-sqs";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { Fn, RemovalPolicy, Stack } from "aws-cdk-lib";
 import { auth } from "./auth/resource";
 import { onboarding } from "./functions/onboarding/resource";
@@ -16,6 +18,7 @@ import { questionAnswers } from "./functions/question_answers/resource";
 import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
+import { surveyResponsesDelete } from "./functions/survey_responses_delete/resource";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -43,6 +46,7 @@ const backend = defineBackend({
   questionAnswers,
   surveyResponses,
   surveyResponsesExport,
+  surveyResponsesDelete,
   surveyCleanup,
 });
 
@@ -115,6 +119,14 @@ surveyAggregatesTable.addGlobalSecondaryIndex({
   partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
   sortKey: { name: "surveyId", type: dynamodb.AttributeType.STRING },
   projectionType: dynamodb.ProjectionType.ALL,
+});
+
+// Lösch-Jobs für Umfrage-Ergebnisse; ein Eintrag dient zugleich als Tombstone gegen neue Antworten
+const surveyDeletionJobsTable = new dynamodb.Table(stack, "SurveyDeletionJobsTable", {
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "surveyId", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.RETAIN,
 });
 
 const tenantAuthIssuer = `https://cognito-idp.${stack.region}.amazonaws.com/${backend.auth.resources.userPool.userPoolId}`;
@@ -274,6 +286,11 @@ surveyResponsesLambda.addEnvironment(
   "SURVEY_AGGREGATES_TABLE_NAME",
   surveyAggregatesTable.tableName,
 );
+surveyDeletionJobsTable.grantReadData(surveyResponsesLambda);
+surveyResponsesLambda.addEnvironment(
+  "SURVEY_DELETION_JOBS_TABLE_NAME",
+  surveyDeletionJobsTable.tableName,
+);
 attachTenantAuth(surveyResponsesLambda);
 
 const surveyResponsesInteg = new integrations.HttpLambdaIntegration(
@@ -330,6 +347,62 @@ httpApi.addRoutes({
   path: "/survey-responses/export/summary",
   methods: [apigw.HttpMethod.GET],
   integration: surveyResponsesExportInteg,
+});
+
+const surveyResponsesDeleteLambda = backend.surveyResponsesDelete.resources
+  .lambda as lambda.Function;
+
+const surveyDeletionDlq = new sqs.Queue(stack, "SurveyDeletionDlq", {
+  queueName: `survey-deletion-dlq-${envSuffix}`,
+  retentionPeriod: cdk.Duration.days(14),
+});
+const surveyDeletionQueue = new sqs.Queue(stack, "SurveyDeletionQueue", {
+  queueName: `survey-deletion-${envSuffix}`,
+  // Muss größer als das Lambda-Timeout (300 s) sein
+  visibilityTimeout: cdk.Duration.seconds(330),
+  deadLetterQueue: { queue: surveyDeletionDlq, maxReceiveCount: 3 },
+});
+
+surveyResponsesTable.grantReadWriteData(surveyResponsesDeleteLambda);
+surveyAggregatesTable.grantReadWriteData(surveyResponsesDeleteLambda);
+surveyDeletionJobsTable.grantReadWriteData(surveyResponsesDeleteLambda);
+surveyDeletionQueue.grantSendMessages(surveyResponsesDeleteLambda);
+surveyResponsesDeleteLambda.addEventSource(
+  new SqsEventSource(surveyDeletionQueue, { batchSize: 1 }),
+);
+surveyResponsesDeleteLambda.addEnvironment(
+  "SURVEY_RESPONSES_TABLE_NAME",
+  surveyResponsesTable.tableName,
+);
+surveyResponsesDeleteLambda.addEnvironment(
+  "SURVEY_AGGREGATES_TABLE_NAME",
+  surveyAggregatesTable.tableName,
+);
+surveyResponsesDeleteLambda.addEnvironment(
+  "SURVEY_DELETION_JOBS_TABLE_NAME",
+  surveyDeletionJobsTable.tableName,
+);
+surveyResponsesDeleteLambda.addEnvironment(
+  "SURVEY_DELETION_QUEUE_URL",
+  surveyDeletionQueue.queueUrl,
+);
+attachTenantAuth(surveyResponsesDeleteLambda);
+
+const surveyResponsesDeleteInteg = new integrations.HttpLambdaIntegration(
+  "SurveyResponsesDeleteInteg",
+  surveyResponsesDeleteLambda,
+);
+
+httpApi.addRoutes({
+  path: "/survey-responses",
+  methods: [apigw.HttpMethod.DELETE],
+  integration: surveyResponsesDeleteInteg,
+});
+
+httpApi.addRoutes({
+  path: "/survey-responses/delete-status",
+  methods: [apigw.HttpMethod.GET],
+  integration: surveyResponsesDeleteInteg,
 });
 
 const surveyCleanupLambda = backend.surveyCleanup.resources

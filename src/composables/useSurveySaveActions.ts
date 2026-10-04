@@ -4,7 +4,8 @@ import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
-import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey } from "@/services/surveyService";
+import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, resolveDataTableId } from "@/services/surveyService";
+import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
 
 export interface SurveySaveActionsOptions {
 	draftSurvey: Ref<Survey | null>;
@@ -160,6 +161,25 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 						detail: t("surveyEditor.deleteConfirm.successDetail", { title }),
 						life: 3500
 					});
+					// Erst nach dem Entfernen aus der Data Table: das Backend löscht nur Ergebnisse nicht mehr existierender Umfragen
+					try {
+						const tableId = await resolveDataTableId(options.datatableId);
+						await requestSurveyResultsDeletion(options.surveyId, tableId);
+						toast.add({
+							severity: "info",
+							summary: t("surveyEditor.deleteConfirm.resultsSummary"),
+							detail: t("surveyEditor.deleteConfirm.resultsDetail"),
+							life: 5000
+						});
+					} catch (resultsErr: any) {
+						console.error("Delete survey results error:", resultsErr);
+						toast.add({
+							severity: "warn",
+							summary: t("surveyEditor.deleteConfirm.resultsErrorSummary"),
+							detail: resultsErr?.message || t("surveyEditor.deleteConfirm.resultsErrorFallback"),
+							life: 8000
+						});
+					}
 					if (options.onDeleted) {
 						options.onDeleted();
 					}

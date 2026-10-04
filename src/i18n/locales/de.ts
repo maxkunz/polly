@@ -179,13 +179,17 @@ export const de = {
 		},
 		deleteConfirm: {
 			header: "Umfrage löschen",
-			message: "Möchten Sie die Umfrage „{title}“ wirklich unwiderruflich löschen?",
+			message: "Möchten Sie die Umfrage „{title}“ wirklich unwiderruflich löschen? Alle gesammelten Ergebnisse der Umfrage werden dabei ebenfalls endgültig gelöscht.",
 			acceptLabel: "Ja, löschen",
 			rejectLabel: "Abbrechen",
 			successSummary: "Umfrage gelöscht",
 			successDetail: "Die Umfrage „{title}“ wurde erfolgreich gelöscht.",
 			errorSummary: "Fehler beim Löschen",
-			errorFallback: "Fehler beim Löschen der Umfrage aus der Data Table."
+			errorFallback: "Fehler beim Löschen der Umfrage aus der Data Table.",
+			resultsSummary: "Ergebnisse werden gelöscht",
+			resultsDetail: "Die Ergebnisse der Umfrage werden im Hintergrund gelöscht. Das kann einige Zeit dauern.",
+			resultsErrorSummary: "Ergebnisse nicht gelöscht",
+			resultsErrorFallback: "Die Umfrage wurde gelöscht, das Löschen der Ergebnisse konnte aber nicht gestartet werden."
 		}
 	},
 

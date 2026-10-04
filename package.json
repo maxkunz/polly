@@ -7,12 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "tsx test/surveyFlowTranslator.test.ts && tsx test/surveyResponsesExport.test.ts"
+    "test": "tsx test/surveyFlowTranslator.test.ts && tsx test/surveyResponsesExport.test.ts && tsx test/surveyDeletion.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.975.0",
     "@aws-sdk/client-dynamodb": "^3.975.0",
     "@aws-sdk/client-secrets-manager": "^3.975.0",
+    "@aws-sdk/client-sqs": "^3.975.0",
     "@aws-sdk/lib-dynamodb": "^3.975.0",
     "@heroicons/vue": "^2.2.0",
     "@primeuix/themes": "^2.0.2",

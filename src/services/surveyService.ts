@@ -7,7 +7,7 @@ import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
 import { i18n } from "@/i18n";
 
-async function resolveDataTableId(datatableId?: string): Promise<string> {
+export async function resolveDataTableId(datatableId?: string): Promise<string> {
 	if (datatableId && datatableId.trim()) {
 		return datatableId;
 	}

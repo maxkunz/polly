@@ -46,7 +46,7 @@ function base64UrlToBuffer(input: string): Buffer {
   return Buffer.from(base64, "base64");
 }
 
-function getAuthorizationToken(event: AnyApiGwEvent): string {
+export function getAuthorizationToken(event: AnyApiGwEvent): string {
   const headers = event?.headers ?? {};
   const auth = headers.authorization ?? headers.Authorization ?? "";
   if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
@@ -55,7 +55,7 @@ function getAuthorizationToken(event: AnyApiGwEvent): string {
   return "";
 }
 
-function getGenesysRegion(event: AnyApiGwEvent): string {
+export function getGenesysRegion(event: AnyApiGwEvent): string {
   const headers = event?.headers ?? {};
   const region = typeof headers["x-genesys-region"] === "string"
     ? headers["x-genesys-region"].trim()
@@ -339,4 +339,31 @@ export async function resolveTenantContext(
   }
 
   return await resolveTenantFromGenesysToken(event, opts);
+}
+
+export type TenantCredentials = {
+  region: string;
+  clientId: string;
+  clientSecret: string;
+  allowedDataTableIds: string[];
+};
+
+/**
+ * Lädt die hinterlegten Genesys-Backend-Credentials eines Mandanten (für Hintergrundjobs ohne User-Token).
+ */
+export async function loadTenantCredentials(tenantId: string): Promise<TenantCredentials | undefined> {
+  const item = await loadTenantByTenantId(tenantId);
+  if (!item?.genesysSecretArn || item.status !== "APPROVED") return undefined;
+
+  const secret = await loadGenesysSecret(item.genesysSecretArn);
+  if (!secret.genesysClientId || !secret.genesysClientSecret) return undefined;
+
+  return {
+    region: item.genesysRegion ?? "mypurecloud.de",
+    clientId: secret.genesysClientId,
+    clientSecret: secret.genesysClientSecret,
+    allowedDataTableIds: Array.isArray(item.allowedDataTableIds)
+      ? item.allowedDataTableIds.map((id: unknown) => String(id))
+      : [],
+  };
 }

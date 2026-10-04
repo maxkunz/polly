@@ -29,6 +29,7 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 
 const SURVEY_RESPONSES_TABLE_NAME = process.env.SURVEY_RESPONSES_TABLE_NAME ?? "";
 const SURVEY_AGGREGATES_TABLE_NAME = process.env.SURVEY_AGGREGATES_TABLE_NAME ?? "";
+const SURVEY_DELETION_JOBS_TABLE_NAME = process.env.SURVEY_DELETION_JOBS_TABLE_NAME ?? "";
 
 function jsonResponse(statusCode: number, body: unknown): AnyResult {
   return {
@@ -50,6 +51,23 @@ function normalizeCountKey(value: any): string {
   if (value === null || value === undefined) return "empty";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value).trim();
+}
+
+/**
+ * Liegt für die Umfrage ein aktiver oder abgeschlossener Lösch-Job vor, werden keine neuen Antworten
+ * mehr gespeichert (sonst entstünden nach dem Löschen wieder verwaiste Ergebnisse).
+ * Abgebrochene/fehlgeschlagene Jobs sperren nicht.
+ */
+async function isSurveyBeingDeleted(tenantId: string, surveyId: string): Promise<boolean> {
+  if (!SURVEY_DELETION_JOBS_TABLE_NAME) return false;
+  const result = await ddb.send(
+    new GetCommand({
+      TableName: SURVEY_DELETION_JOBS_TABLE_NAME,
+      Key: { tenantId, surveyId },
+    })
+  );
+  const status = result.Item?.status;
+  return status === "queued" || status === "running" || status === "done";
 }
 
 /**
@@ -275,6 +293,11 @@ async function submitSurveyResponse(event: AnyApiGwEvent, tenantId: string): Pro
 
   if (!body.questionName && !body.isCompleted) {
     return jsonResponse(400, { message: "questionName or isCompleted: true is required" });
+  }
+
+  // Antworten zu gelöschten Umfragen ignorieren (200, damit der Flow nicht in den Fehlerpfad läuft)
+  if (await isSurveyBeingDeleted(tenantId, surveyId)) {
+    return jsonResponse(200, { message: "Survey deleted, answer ignored", ignored: true, session: {} });
   }
 
   const now = new Date().toISOString();
