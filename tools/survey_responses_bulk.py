@@ -9,8 +9,14 @@ schrittweise an die deployte API, genau wie der Architect Flow es tun würde.
 Verwendung:
   export GENESYS_TOKEN=<Bearer aus dem Genesys-Portal>
   python3 test/survey_responses_bulk.py umfrage.json [-n ANZAHL_SESSIONS]
+  python3 test/survey_responses_bulk.py --surveyid <UUID> [-n ANZAHL_SESSIONS]
 
 Optionen (jeweils auch per Umgebungsvariable):
+  --surveyid              UUID einer Umfrage: statt der JSON-Datei wird das Draft-Feld der
+                          Zeile survey_<UUID> aus der Genesys Data Table geladen
+                          (siehe documentation/datatablerow_survey_entry.md)
+  --table / DATA_TABLE_NAME
+                          Name der Data Table (Default "Polly Mock Surveys")
   -n / SESSIONS           Anzahl Sessions (Default 200)
   -p / PARALLEL           gleichzeitige Sessions (Default 10)
   --abort-pct / ABORT_PCT Anteil abgebrochener Sessions in % (Default 15)
@@ -32,10 +38,13 @@ import sys
 import threading
 import time
 import http.client
+import urllib.error
 import urllib.parse
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 DEFAULT_API_URL = "https://main.d1a6p4nkkob4i7.amplifyapp.com/api"
+DEFAULT_TABLE_NAME = "Polly Mock Surveys"  # POLLY_DATA_TABLE_NAME in src/constants/surveyConstants.ts
 
 
 def env_int(name, default):
@@ -248,6 +257,42 @@ def run_session(n, survey, answer, args, url, headers, run_id, stats, stop):
     return True
 
 
+# ---------------------------------------------------------------- Umfrage aus Data Table
+
+def genesys_get(region, token, path, params=None):
+    url = f"https://api.{region}{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")
+        if e.code == 404:
+            return None
+        sys.exit(f"Error: Genesys {path} -> HTTP {e.code} {detail}")
+    except urllib.error.URLError as e:
+        sys.exit(f"Error: Genesys {path} nicht erreichbar: {e.reason}")
+
+
+def load_survey_from_datatable(region, token, table_name, survey_id):
+    """Lädt das Draft-Feld der Zeile survey_<uuid> aus der Genesys Data Table."""
+    res = genesys_get(region, token, "/api/v2/flows/datatables", {"name": table_name, "pageSize": 100})
+    table = next((t for t in (res or {}).get("entities", []) if t.get("name") == table_name), None)
+    if not table:
+        sys.exit(f"Error: Data Table '{table_name}' nicht gefunden")
+    key = f"survey_{survey_id}"
+    row = genesys_get(region, token, f"/api/v2/flows/datatables/{table['id']}/rows/{urllib.parse.quote(key)}",
+                      {"showbrief": "false"})
+    if row is None:
+        sys.exit(f"Error: Zeile '{key}' in Data Table '{table_name}' nicht gefunden")
+    raw = row.get("Draft") or row.get("draft")  # Groß-/Kleinschreibung der Spalte variiert
+    if not raw:
+        sys.exit(f"Error: Zeile '{key}' hat kein Draft-Feld")
+    return json.loads(raw) if isinstance(raw, str) else raw
+
+
 # ---------------------------------------------------------------- Main
 
 def count_questions(questions):
@@ -256,7 +301,10 @@ def count_questions(questions):
 
 def main():
     ap = argparse.ArgumentParser(description="Zufällige Umfrage-Sessions an die survey_responses-API senden")
-    ap.add_argument("survey", help="JSON-Datei mit der Umfrage-Definition")
+    ap.add_argument("survey", nargs="?", help="JSON-Datei mit der Umfrage-Definition")
+    ap.add_argument("--surveyid", help="Umfrage-UUID: Draft aus der Genesys Data Table laden statt JSON-Datei")
+    ap.add_argument("--table", default=os.environ.get("DATA_TABLE_NAME", DEFAULT_TABLE_NAME),
+                    help="Name der Data Table (nur mit --surveyid)")
     ap.add_argument("-n", "--sessions", type=int, default=env_int("SESSIONS", 200))
     ap.add_argument("-p", "--parallel", type=int, default=env_int("PARALLEL", 10))
     ap.add_argument("--abort-pct", type=float, default=env_int("ABORT_PCT", 15))
@@ -269,11 +317,19 @@ def main():
         sys.exit("Error: No Genesys token provided.\nPlease set the GENESYS_TOKEN environment variable.\n"
                  "Example: export GENESYS_TOKEN=<GENESYS_BEARER_TOKEN>")
 
-    with open(args.survey, encoding="utf-8") as f:
-        survey = json.load(f)
+    region = os.environ.get("GENESYS_REGION", "mypurecloud.de")
+    if args.surveyid:
+        source = f"Data Table '{args.table}', survey_{args.surveyid}"
+        survey = load_survey_from_datatable(region, token, args.table, args.surveyid)
+    elif args.survey:
+        source = args.survey
+        with open(args.survey, encoding="utf-8") as f:
+            survey = json.load(f)
+    else:
+        ap.error("JSON-Datei oder --surveyid angeben")
     for key in ("id", "name", "version", "questions"):
         if key not in survey:
-            sys.exit(f"Error: Feld '{key}' fehlt in {args.survey}")
+            sys.exit(f"Error: Feld '{key}' fehlt in {source}")
 
     with open(args.answers, encoding="utf-8") as f:
         comments = [line.strip() for line in f if line.strip()]
@@ -281,7 +337,6 @@ def main():
         sys.exit(f"Error: {args.answers} enthält keine Antworten")
 
     api_url = os.environ.get("API_URL", DEFAULT_API_URL)
-    region = os.environ.get("GENESYS_REGION", "mypurecloud.de")
     url = f"{api_url}/survey-responses"
     headers = {
         "Authorization": f"Bearer {token}",
