@@ -47,6 +47,8 @@ const DELETE_PARALLELISM = 10;
 const MIN_REMAINING_MS = 60 * 1000;
 const MAX_PASSES = 3;
 const MAX_RECEIVE_COUNT = 3;
+// Aufbewahrung abgeschlossener Jobs (inkl. Tombstone), danach entfernt DynamoDB-TTL den Eintrag
+const DONE_JOB_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 
 function jsonResponse(statusCode: number, body: unknown): AnyResult {
   return {
@@ -71,17 +73,27 @@ async function setJobStatus(
   status: JobStatus,
   message?: string
 ): Promise<Record<string, any>> {
+  // Nur erfolgreich abgeschlossene Jobs laufen ab; alle anderen Status entfernen ein evtl. gesetztes expiresAt
+  const expires = status === "done";
   // ReturnValues liefert den Gesamtstand des Jobs ohne zusätzliche Leseanfrage (für das Log)
   const result = await ddb.send(
     new UpdateCommand({
       TableName: SURVEY_DELETION_JOBS_TABLE_NAME,
       Key: jobKey(tenantId, surveyId),
-      UpdateExpression: "SET #status = :status, #updatedAt = :now, #message = :message",
-      ExpressionAttributeNames: { "#status": "status", "#updatedAt": "updatedAt", "#message": "message" },
+      UpdateExpression: expires
+        ? "SET #status = :status, #updatedAt = :now, #message = :message, #expiresAt = :expiresAt"
+        : "SET #status = :status, #updatedAt = :now, #message = :message REMOVE #expiresAt",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#updatedAt": "updatedAt",
+        "#message": "message",
+        "#expiresAt": "expiresAt",
+      },
       ExpressionAttributeValues: {
         ":status": status,
         ":now": new Date().toISOString(),
         ":message": message ?? "",
+        ...(expires ? { ":expiresAt": Math.floor(Date.now() / 1000) + DONE_JOB_RETENTION_SECONDS } : {}),
       },
       ReturnValues: "ALL_NEW",
     })

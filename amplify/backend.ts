@@ -121,11 +121,13 @@ surveyAggregatesTable.addGlobalSecondaryIndex({
   projectionType: dynamodb.ProjectionType.ALL,
 });
 
-// Lösch-Jobs für Umfrage-Ergebnisse; ein Eintrag dient zugleich als Tombstone gegen neue Antworten
+// Lösch-Jobs für Umfrage-Ergebnisse; ein Eintrag dient zugleich als Tombstone gegen neue Antworten.
+// Abgeschlossene Jobs (done) laufen über TTL (expiresAt) ab.
 const surveyDeletionJobsTable = new dynamodb.Table(stack, "SurveyDeletionJobsTable", {
   partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
   sortKey: { name: "surveyId", type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  timeToLiveAttribute: "expiresAt",
   removalPolicy: RemovalPolicy.RETAIN,
 });
 

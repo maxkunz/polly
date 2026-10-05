@@ -416,6 +416,7 @@ Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `r
 5. Gelöscht wird pro Item mit Bedingung (`tenantId` und `surveyId` müssen passen). Items, bei denen `surveyId` inzwischen auf eine andere Umfrage zeigt (gleiche Conversation, zweite Umfrage), werden übersprungen (`skipped`).
 6. Der Worker läuft in Seiten à 100 Items, setzt bei knapper Laufzeit in einer neuen Nachricht fort und beendet den Job erst nach einem Durchlauf ohne Löschungen (`done`). Nach 3 Fehlversuchen landet die Nachricht in der Dead-Letter-Queue.
 7. **Tombstone:** Solange der Job `queued`, `running` oder `done` ist, beantwortet `POST /survey-responses` Antworten zu dieser Umfrage mit `200` und `{ "ignored": true }`, ohne zu speichern. Bei `aborted`/`failed` wird nicht gesperrt.
+8. **Aufbewahrung:** Jobs mit Status `done` erhalten das Attribut `expiresAt` (Unix-Sekunden, 7 Tage nach Abschluss) und werden per DynamoDB-TTL entfernt (TTL löscht verzögert, meist innerhalb von 48 h nach Ablauf). Danach liefert `delete-status` `404` und der Tombstone entfällt. `aborted`/`failed`-Jobs bleiben zur Analyse erhalten.
 
 ---
 
