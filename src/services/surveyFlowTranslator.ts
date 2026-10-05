@@ -54,7 +54,7 @@ export interface FlowYesNoQuestion extends FlowQuestionBase {
 export interface FlowChoiceQuestion extends FlowQuestionBase {
 	type: "choice";
 	labels: string[];
-	/** Pro Option ein String mit kommagetrennten Synonymen (", "), leerer String ohne Synonyme. */
+	/** Pro Option ein String mit durch "; " getrennten Synonymen, leerer String ohne Synonyme. */
 	synonyms: string[];
 	next_question_ids: (string | null)[];
 }
@@ -96,7 +96,7 @@ export interface FlowSurvey {
 	questions: FlowQuestion[];
 }
 
-const SYNONYM_SEPARATOR = ", ";
+const SYNONYM_SEPARATOR = "; ";
 
 const CONDITIONAL_OPERATOR_ORDER: ConditionOperator[] = ["equals", "less_than", "greater_than"];
 

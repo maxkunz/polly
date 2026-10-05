@@ -232,13 +232,13 @@ test("choice: Label-ID wird auf den richtigen Index gemappt, Labels ohne Folgefr
 	assert.deepEqual(choice.next_question_ids, [null, "341fb62c-8cd7-48f0-b997-759081e7d82e"]);
 });
 
-test("choice: Synonyme werden pro Option als kommagetrennter String ausgegeben", () => {
+test("choice: Synonyme werden pro Option als durch Semikolon getrennter String ausgegeben", () => {
 	const survey = buildExampleSurvey();
 	const choiceQuestion = survey.questions.find(q => q.id === "25f822ac-d1a1-4ea6-b9b0-9f44e13fc1ab")!;
 	(choiceQuestion.options as any).labels[1].synonyms = ["Auto-Export", "Automatischer Export"];
 	const flow = translateSurveyObject(survey);
 	const choice = flow.questions.find(q => q.id === "25f822ac-d1a1-4ea6-b9b0-9f44e13fc1ab") as FlowChoiceQuestion;
-	assert.deepEqual(choice.synonyms, ["", "Auto-Export, Automatischer Export"]);
+	assert.deepEqual(choice.synonyms, ["", "Auto-Export; Automatischer Export"]);
 });
 
 test("choice: unbekannte Label-ID in Bedingung wirft Fehler", () => {
