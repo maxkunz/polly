@@ -125,6 +125,20 @@ export type DeployTarget = "Stage" | "Prod";
  * Deployt den Draft-Inhalt auf Stage oder Prod.
  * Bei Prod wird der aktuelle Prod-Inhalt zuerst in Backup gesichert.
  */
+/**
+ * Liest die Versionsnummer aus einem JSON-Feld der Survey-Zeile (Draft/Stage/Prod/Backup).
+ * Liefert null, wenn das Feld leer oder nicht lesbar ist.
+ */
+export function readFieldVersion(raw: unknown): number | null {
+	if (!raw || raw === "{}") return null;
+	try {
+		const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+		return typeof parsed?.version === "number" ? parsed.version : null;
+	} catch {
+		return null;
+	}
+}
+
 export async function deploySurvey(
 	datatableId: string | undefined,
 	surveyId: string,
@@ -142,6 +156,15 @@ export async function deploySurvey(
 		Backup: existingRow.Backup ?? "{}",
 		lock: existingRow.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
 	};
+
+	// Gleiche Version nicht erneut nach Prod deployen, sonst würde das Backup
+	// mit derselben Version überschrieben und die Vorgängerversion ginge verloren.
+	if (target === "Prod") {
+		const draftVersion = readFieldVersion(existingRow.Draft);
+		if (draftVersion !== null && draftVersion === readFieldVersion(existingRow.Prod)) {
+			throw new Error(i18n.global.t("deployment.alreadyInProd", { version: draftVersion }));
+		}
+	}
 
 	const translatedPayload = translateSurveyForFlow(existingRow.Draft ?? "{}");
 

@@ -4,7 +4,7 @@ Die Zeile hat mehrere Felder: Prod/Draft/Backup/Stage.
 
 * Prod: Das flow-optimierte, verkettete JSON (siehe @survey_translator_for_flow.md), das aktiv vom Call Flow genutzt wird.
 * Draft: Das baumförmige Editor-Format (siehe @survey_definition.md), das man im Editor sieht und bearbeitet.
-* Backup: 1:1-Sicherheitskopie des vorherigen Prod-Inhalts (ebenfalls flow-optimiertes JSON); wird bei jedem Prod-Deploy mit dem bisherigen Prod-Inhalt überschrieben, bevor der neue Draft nach Prod übersetzt wird. Über einen Rollback kann dieser Backup-Inhalt wieder nach Prod zurückgespielt werden.
+* Backup: 1:1-Sicherheitskopie des vorherigen Prod-Inhalts (ebenfalls flow-optimiertes JSON); wird bei jedem Prod-Deploy mit dem bisherigen Prod-Inhalt überschrieben, bevor der neue Draft nach Prod übersetzt wird. Über einen Rollback kann dieser Backup-Inhalt wieder nach Prod zurückgespielt werden. Ein Prod-Deploy ist gesperrt, solange die Draft-Version identisch mit der Prod-Version ist – sonst würde das Backup mit derselben Version überschrieben und die Vorgängerversion ginge verloren.
 * Stage: Ebenfalls flow-optimiertes JSON (Übersetzung des aktuellen Drafts); wird vom Flow benutzt, wenn mit der Test-Rufnummer angerufen wird.
 
 ## Spezielle Felder

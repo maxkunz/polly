@@ -5,7 +5,8 @@ import { i18n } from "@/i18n";
 import {
 	deploySurvey,
 	rollbackSurvey,
-	fetchSurveyDetail
+	fetchSurveyDetail,
+	readFieldVersion
 } from "@/services/surveyService";
 
 export interface UseSurveyDeploymentOptions {
@@ -20,6 +21,8 @@ export interface UseSurveyDeploymentReturn {
 	stageSnapshot: ComputedRef<Survey | null>;
 	prodSnapshot: ComputedRef<Survey | null>;
 	backupSnapshot: ComputedRef<Survey | null>;
+	/** true, wenn die Draft-Version bereits in Prod liegt – erneutes Prod-Deploy ist dann gesperrt. */
+	isDraftInProd: ComputedRef<boolean>;
 	deployToStage(): Promise<void>;
 	deployToProd(): Promise<void>;
 	rollback(): Promise<void>;
@@ -47,6 +50,10 @@ export function useSurveyDeployment({
 	const stageSnapshot = computed(() => parseField(existingRow.value, "Stage"));
 	const prodSnapshot = computed(() => parseField(existingRow.value, "Prod"));
 	const backupSnapshot = computed(() => parseField(existingRow.value, "Backup"));
+	const isDraftInProd = computed(() => {
+		const draftVersion = readFieldVersion(existingRow.value?.Draft);
+		return draftVersion !== null && draftVersion === readFieldVersion(existingRow.value?.Prod);
+	});
 
 	async function refresh(): Promise<void> {
 		const res = await fetchSurveyDetail(datatableId, surveyId);
@@ -84,6 +91,7 @@ export function useSurveyDeployment({
 		stageSnapshot,
 		prodSnapshot,
 		backupSnapshot,
+		isDraftInProd,
 		deployToStage,
 		deployToProd,
 		rollback

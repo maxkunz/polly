@@ -349,6 +349,7 @@ export const de = {
 		deployProdAriaLabel: "Draft auf Prod deployen",
 		rollback: "Rollback",
 		rollbackAriaLabel: "Letze Version auf Prod zurückspielen",
+		alreadyInProd: "Version v{version} ist bereits in Prod deployed. Ein erneutes Prod-Deployment ist erst nach einer Änderung am Entwurf möglich.",
 		unknownError: "Unbekannter Fehler beim Deployment"
 	},
 

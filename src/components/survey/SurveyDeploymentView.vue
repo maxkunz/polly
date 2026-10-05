@@ -49,6 +49,7 @@ const {
 	stageSnapshot,
 	prodSnapshot,
 	backupSnapshot,
+	isDraftInProd,
 	deployToStage,
 	deployToProd,
 	rollback
@@ -108,7 +109,7 @@ const {
 				:label="t('deployment.deployProd')"
 				severity="warn"
 				:loading="isDeploying"
-				:disabled="isDeploying"
+				:disabled="isDeploying || isDraftInProd"
 				:aria-label="t('deployment.deployProdAriaLabel')"
 				@click="deployToProd"
 			/>
@@ -123,6 +124,10 @@ const {
 				@click="rollback"
 			/>
 		</div>
+
+		<Message v-if="isDraftInProd" severity="info" :closable="false">
+			{{ t("deployment.alreadyInProd", { version: survey.version ?? 1 }) }}
+		</Message>
 
 		<!-- Queue Mapping (nur wenn Version in Prod deployt ist) -->
 		<div v-if="prodSnapshot !== null || stageSnapshot !== null" class="pt-4 border-t border-[var(--p-content-border-color)]">

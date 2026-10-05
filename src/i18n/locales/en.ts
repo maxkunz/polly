@@ -351,6 +351,7 @@ export const en: MessageSchema = {
 		deployProdAriaLabel: "Deploy draft to prod",
 		rollback: "Rollback",
 		rollbackAriaLabel: "Restore last version to prod",
+		alreadyInProd: "Version v{version} is already deployed in prod. Deploying to prod again requires a change to the draft.",
 		unknownError: "Unknown error during deployment"
 	},
 
