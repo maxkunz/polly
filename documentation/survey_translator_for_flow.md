@@ -13,7 +13,7 @@ Bei Typ "nps" und "rating" muss im JSON "conditional_next_question" gesetzt werd
 
 Bei Typ "rating" bitte beachten, dass im Flow-JSON-Format zusätzlich alle möglichen Antworten explizit als Array "values" (von min_value bis max_value) angegeben werden müssen. Siehe Beispiel JSON unten.
 
-Bei Typ "choice" gehen im Flow-JSON die Options-IDs aus dem Draft verloren: "labels", "synonyms" (pro Option, ggf. leeres Array) und "next_question_ids" sind drei parallele Arrays, deren Reihenfolge der Reihenfolge der Optionen im Draft entspricht (Zuordnung also ausschließlich über den Array-Index, nicht mehr über eine ID).
+Bei Typ "choice" gehen im Flow-JSON die Options-IDs aus dem Draft verloren: "labels", "synonyms" (pro Option ein String, in dem die Synonyme durch ", " getrennt sind, z. B. "Hammer, Zange, Schraubenzieher"; ohne Synonyme ein leerer String "") und "next_question_ids" sind drei parallele Arrays, deren Reihenfolge der Reihenfolge der Optionen im Draft entspricht (Zuordnung also ausschließlich über den Array-Index, nicht mehr über eine ID).
 
 Folgende Felder werden beim Übersetzen aus dem Draft-Format übernommen bzw. umbenannt: "title" → "prompt", "reprompt_message" → "reprompt", bei der Umfrage "greeting_message" → "greeting_prompt" und "closing_message" → "closing_prompt". "id", "name", "description", "mandatory" sowie bei der Umfrage "created_at"/"updated_at"/"version" werden unverändert übernommen. Zusätzlich wird bei der Umfrage "type": "Flow" gesetzt.
 
@@ -78,9 +78,9 @@ Das folgende Beispiel zeigt die Übersetzung einer Umfrage mit drei Hauptfragen 
       "default_next_question_id": "85a238d2-78da-4ad5-9291-277394544779",
       "labels": ["Inhalt", "Freundlichkeit", "Beides"],
       "synonyms": [
-        ["Content", "Inhaltlich", "Thema"],
-        ["Freundlich", "Unfreundlich"],
-        []
+        "Content, Inhaltlich, Thema",
+        "Freundlich, Unfreundlich",
+        ""
       ],
       "next_question_ids": [null, null, null]
     },

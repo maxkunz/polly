@@ -54,7 +54,8 @@ export interface FlowYesNoQuestion extends FlowQuestionBase {
 export interface FlowChoiceQuestion extends FlowQuestionBase {
 	type: "choice";
 	labels: string[];
-	synonyms: string[][];
+	/** Pro Option ein String mit kommagetrennten Synonymen (", "), leerer String ohne Synonyme. */
+	synonyms: string[];
 	next_question_ids: (string | null)[];
 }
 
@@ -94,6 +95,8 @@ export interface FlowSurvey {
 	type: "Flow";
 	questions: FlowQuestion[];
 }
+
+const SYNONYM_SEPARATOR = ", ";
 
 const CONDITIONAL_OPERATOR_ORDER: ConditionOperator[] = ["equals", "less_than", "greater_than"];
 
@@ -188,7 +191,7 @@ function buildYesNoOptions(
 function buildChoiceFields(
 	question: SurveyQuestion,
 	followUps: FollowUpRule[]
-): { labels: string[]; synonyms: string[][]; next_question_ids: (string | null)[] } {
+): { labels: string[]; synonyms: string[]; next_question_ids: (string | null)[] } {
 	if (!isChoiceOptions(question.options)) {
 		throw new SurveyFlowTranslationError(
 			`Fragetyp choice benötigt options.labels`,
@@ -199,7 +202,7 @@ function buildChoiceFields(
 
 	const labelIds = question.options.labels.map(label => label.id);
 	const labels = question.options.labels.map(label => label.label);
-	const synonyms = question.options.labels.map(label => label.synonyms ?? []);
+	const synonyms = question.options.labels.map(label => (label.synonyms ?? []).join(SYNONYM_SEPARATOR));
 	const nextQuestionIds: (string | null)[] = new Array(labelIds.length).fill(null);
 	const usedLabelIds = new Set<string>();
 
