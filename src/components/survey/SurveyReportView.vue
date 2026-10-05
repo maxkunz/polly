@@ -6,6 +6,7 @@ import DatePicker from "primevue/datepicker";
 import Message from "primevue/message";
 import ProgressBar from "primevue/progressbar";
 import Select from "primevue/select";
+import Tooltip from "primevue/tooltip";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { MissingTokenError } from "@/services/pollyApi";
 import {
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const vTooltip = Tooltip;
 
 const SUMMARY_DEBOUNCE_MS = 400;
 const LIVE_REFRESH_MS = 60_000;
@@ -423,19 +425,43 @@ onBeforeUnmount(() => {
 				class="report-summary-pulse grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm"
 			>
 				<div>
-					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.sessions") }}</dt>
+					<dt
+						v-tooltip.top="t('report.summary.tooltips.sessions')"
+						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+					>
+						{{ t("report.summary.sessions") }}
+						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
+					</dt>
 					<dd class="font-semibold">{{ summary.sessions }}</dd>
 				</div>
 				<div>
-					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.completed") }}</dt>
+					<dt
+						v-tooltip.top="t('report.summary.tooltips.completed')"
+						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+					>
+						{{ t("report.summary.completed") }}
+						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
+					</dt>
 					<dd class="font-semibold">{{ summary.statusCounts.completed ?? 0 }}</dd>
 				</div>
 				<div>
-					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.partial") }}</dt>
+					<dt
+						v-tooltip.top="t('report.summary.tooltips.partial')"
+						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+					>
+						{{ t("report.summary.partial") }}
+						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
+					</dt>
 					<dd class="font-semibold">{{ summary.statusCounts.partial ?? 0 }}</dd>
 				</div>
 				<div>
-					<dt class="text-[var(--p-text-muted-color)]">{{ t("report.summary.timedOut") }}</dt>
+					<dt
+						v-tooltip.top="t('report.summary.tooltips.timedOut')"
+						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+					>
+						{{ t("report.summary.timedOut") }}
+						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
+					</dt>
 					<dd class="font-semibold">{{ summary.statusCounts.timed_out ?? 0 }}</dd>
 				</div>
 			</dl>

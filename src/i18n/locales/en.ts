@@ -378,7 +378,13 @@ export const en: MessageSchema = {
 			sessions: "Sessions",
 			completed: "Completed",
 			partial: "In progress",
-			timedOut: "Timed out",
+			timedOut: "Abandoned",
+			tooltips: {
+				sessions: "All survey participations started in the selected date range (at least one answer).",
+				completed: "Participations in which the survey was completed to the end.",
+				partial: "Participations that are currently running or whose last answer was less than 30 minutes ago.",
+				timedOut: "Participations that were left early (e.g. hung up or chat closed) – 30 minutes without a further answer."
+			},
 			empty: "There are no sessions in the selected date range."
 		},
 		download: "Download CSV",

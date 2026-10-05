@@ -376,7 +376,13 @@ export const de = {
 			sessions: "Sitzungen",
 			completed: "Abgeschlossen",
 			partial: "Laufend",
-			timedOut: "Zeitüberschreitung",
+			timedOut: "Abgebrochen",
+			tooltips: {
+				sessions: "Alle Umfrage-Teilnahmen, die im gewählten Zeitraum begonnen wurden (mindestens eine Antwort).",
+				completed: "Teilnahmen, bei denen die Umfrage bis zum Ende durchlaufen wurde.",
+				partial: "Teilnahmen, die gerade laufen oder deren letzte Antwort weniger als 30 Minuten zurückliegt.",
+				timedOut: "Teilnahmen, die vorzeitig verlassen wurden (z. B. aufgelegt oder Chat geschlossen) – 30 Minuten ohne weitere Antwort."
+			},
 			empty: "Im gewählten Zeitraum gibt es keine Sitzungen."
 		},
 		download: "CSV herunterladen",
