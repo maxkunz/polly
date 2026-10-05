@@ -111,15 +111,26 @@ function applyQuickRange(range: () => readonly [Date, Date]): void {
 	toDate.value = to;
 }
 
+/** Platzhalterwert für „Alle Versionen“ im Dropdown: PrimeVue-Select zeigt bei `null` keinen Text an. */
+const ALL_VERSIONS = "all" as const;
+
+/** Bindung des Dropdowns; intern bleibt `selectedVersion` bei `null` für „alle Versionen“. */
+const versionSelectValue = computed<number | typeof ALL_VERSIONS>({
+	get: () => selectedVersion.value ?? ALL_VERSIONS,
+	set: value => {
+		selectedVersion.value = value === ALL_VERSIONS ? null : value;
+	}
+});
+
 const versionOptions = computed(() => {
 	const versions = Object.entries(summary.value?.versions ?? {})
 		.map(([version, sessions]) => ({ version: Number(version), sessions }))
 		.sort((a, b) => b.version - a.version);
 	return [
-		{ label: t("report.allVersions"), value: null as number | null },
+		{ label: t("report.allVersions"), value: ALL_VERSIONS as number | typeof ALL_VERSIONS },
 		...versions.map(entry => ({
 			label: t("report.versionOption", { version: entry.version, sessions: entry.sessions }),
-			value: entry.version as number | null
+			value: entry.version as number | typeof ALL_VERSIONS
 		}))
 	];
 });
@@ -363,7 +374,7 @@ onBeforeUnmount(() => {
 				<div class="flex flex-col gap-1">
 					<label for="report-version" class="text-sm text-[var(--p-text-muted-color)]">{{ t("report.version") }}</label>
 					<Select
-						v-model="selectedVersion"
+						v-model="versionSelectValue"
 						inputId="report-version"
 						:options="versionOptions"
 						optionLabel="label"
