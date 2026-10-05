@@ -375,7 +375,7 @@ export const de = {
 			liveUpdating: "Aktualisiert automatisch",
 			sessions: "Sitzungen",
 			completed: "Abgeschlossen",
-			partial: "Teilweise",
+			partial: "Laufend",
 			timedOut: "Zeitüberschreitung",
 			empty: "Im gewählten Zeitraum gibt es keine Sitzungen."
 		},

@@ -377,7 +377,7 @@ export const en: MessageSchema = {
 			liveUpdating: "Updates automatically",
 			sessions: "Sessions",
 			completed: "Completed",
-			partial: "Partial",
+			partial: "In progress",
 			timedOut: "Timed out",
 			empty: "There are no sessions in the selected date range."
 		},
