@@ -6,15 +6,16 @@ Polly prüft im Frontend zwei Genesys-Cloud-Rollen des eingeloggten Users. Die P
 |---|---|
 | `polly_write` | Umfragen anlegen, klonen, bearbeiten/speichern, löschen |
 | `polly_deploy` | Deploy nach Stage und Prod, Rollback, Queue-Mapping speichern |
+| `polly_reporting` | Umfrageergebnisse exportieren (CSV-Download im Report) |
 
-- Ohne Rolle hat ein User nur Lesezugriff. Er kann Umfragen im schreibgeschützten Editor ansehen und Reports erstellen.
+- Ohne Rolle hat ein User nur Lesezugriff. Er kann Umfragen im schreibgeschützten Editor ansehen und die Report-Vorschau öffnen, aber keine Ergebnisse exportieren.
 - Die Rollen sind unabhängig voneinander. Ein User nur mit `polly_deploy` kann deployen, aber nicht editieren.
 - Fehlende Rechte zeigen sich als deaktivierte Buttons mit Tooltip und als Hinweisbanner im Editor bzw. in der Deploy-Ansicht.
 - Read-only-User nehmen kein Umfrage-Lock und sehen keinen Lock-Konflikt-Dialog.
 
 ## Einrichtung in Genesys
 
-1. Die Rollen `polly_write` und `polly_deploy` in Genesys anlegen. Sie benötigen keine Permissions, entscheidend ist nur der Name. Groß-/Kleinschreibung wird ignoriert.
+1. Die Rollen `polly_write`, `polly_deploy` und `polly_reporting` in Genesys anlegen. Sie benötigen keine Permissions, entscheidend ist nur der Name. Groß-/Kleinschreibung wird ignoriert.
 2. Die Rollen den gewünschten Usern zuweisen.
 3. Der Implicit-Grant-OAuth-Client des Frontends braucht ggf. den Scope `authorization:readonly`, damit `GET /api/v2/users/me?expand=authorization` die Rollen liefert. Schlägt der Abruf fehl, arbeitet der User read-only (Warnung in der Browser-Konsole).
 
@@ -22,5 +23,5 @@ Polly prüft im Frontend zwei Genesys-Cloud-Rollen des eingeloggten Users. Die P
 
 - Die Rollennamen stehen als Konstanten in `src/constants/permissionConstants.ts`.
 - Die Rollen werden einmalig beim Login geladen (`services/genesys_helper.ts`, `loadCurrentUserRoles`). Sie liegen in `appStore.currentUser.roles`.
-- Die Getter `appStore.canWrite` und `appStore.canDeploy` liefern die Berechtigungen.
+- Die Getter `appStore.canWrite`, `appStore.canDeploy` und `appStore.canExport` liefern die Berechtigungen.
 - Rollenänderungen in Genesys greifen erst nach einem Neuladen der App.

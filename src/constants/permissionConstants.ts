@@ -2,3 +2,4 @@
 // Reine Bedienschutz-Prüfung im Client, keine serverseitige Absicherung.
 export const POLLY_ROLE_WRITE = "polly_write";
 export const POLLY_ROLE_DEPLOY = "polly_deploy";
+export const POLLY_ROLE_REPORTING = "polly_reporting";

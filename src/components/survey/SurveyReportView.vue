@@ -16,6 +16,7 @@ import {
 	type ReportSummary
 } from "@/services/surveyReportService";
 import { downloadBlob } from "@/utils/download";
+import { useAppStore } from "@/stores/appStore";
 
 const props = defineProps<{
 	survey: Survey;
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const vTooltip = Tooltip;
+const app = useAppStore();
 
 const SUMMARY_DEBOUNCE_MS = 400;
 const LIVE_REFRESH_MS = 60_000;
@@ -151,6 +153,7 @@ const progressPercent = computed(() => {
 
 const canDownload = computed(
 	() =>
+		app.canExport &&
 		isRangeValid.value &&
 		!isLoadingSummary.value &&
 		!isDownloading.value &&
@@ -470,14 +473,16 @@ onBeforeUnmount(() => {
 		<!-- Download -->
 		<div class="space-y-3 pt-2">
 			<div class="flex flex-wrap gap-3">
-				<Button
-					icon="pi pi-download"
-					:label="t('report.download')"
-					:aria-label="t('report.downloadAriaLabel')"
-					:loading="isDownloading"
-					:disabled="!canDownload"
-					@click="handleDownload"
-				/>
+				<span v-tooltip.top="app.canExport ? undefined : t('permissions.missingExport')">
+					<Button
+						icon="pi pi-download"
+						:label="t('report.download')"
+						:aria-label="t('report.downloadAriaLabel')"
+						:loading="isDownloading"
+						:disabled="!canDownload"
+						@click="handleDownload"
+					/>
+				</span>
 				<Button
 					v-if="isDownloading"
 					severity="secondary"

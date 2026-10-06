@@ -94,6 +94,7 @@ export const en: MessageSchema = {
 	permissions: {
 		missingWrite: "Not permitted – write permission is missing.",
 		missingDeploy: "Not permitted – deploy permission is missing.",
+		missingExport: "Not permitted – permission to export results is missing.",
 		readOnlyBanner: "Read-only access: creating, editing, cloning and deleting surveys requires write permission.",
 		deployReadOnlyBanner: "Read-only access: deployments, rollback and queue mapping require deploy permission."
 	},

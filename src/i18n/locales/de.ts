@@ -92,6 +92,7 @@ export const de = {
 	permissions: {
 		missingWrite: "Keine Berechtigung – Schreibrechte fehlen.",
 		missingDeploy: "Keine Berechtigung – Deployrechte fehlen.",
+		missingExport: "Keine Berechtigung – Rechte zum Export der Ergebnisse fehlen.",
 		readOnlyBanner: "Nur Lesezugriff: Das Erstellen, Bearbeiten, Klonen und Löschen von Umfragen erfordert Schreibrechte.",
 		deployReadOnlyBanner: "Nur Lesezugriff: Für Deployments, Rollback und Queue-Mapping werden Deployrechte benötigt."
 	},

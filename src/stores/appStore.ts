@@ -3,7 +3,7 @@ import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
 import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
-import { POLLY_ROLE_DEPLOY, POLLY_ROLE_WRITE } from "@/constants/permissionConstants";
+import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE } from "@/constants/permissionConstants";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
@@ -69,6 +69,8 @@ export const useAppStore = defineStore("app", {
 		canWrite: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_WRITE),
 		// Darf nach Stage/Prod deployen, Rollback ausführen und Queue-Mapping pflegen
 		canDeploy: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_DEPLOY),
+		// Darf Umfrageergebnisse exportieren (CSV-Download im Report)
+		canExport: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_REPORTING),
 	},
 	actions: {
 		initGenesysClients(): void {
