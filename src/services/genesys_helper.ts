@@ -3,6 +3,7 @@ import { Domain } from "@/domain/Domain";
 import { Meta } from "@/domain/Meta";
 import { Questions } from "@/domain/Questions";
 import type { LockObject, LockRow } from "@/services/lockingService";
+import { GENESYS_REGION } from "@/constants/genesysConstants";
 
 export type QuestionAnswerStats = {
 	tenantId: string;
@@ -41,7 +42,7 @@ export async function login(
 	app.initGenesysClients();
 	const genesys = app.genesys;
 
-	genesys.client.setEnvironment("mypurecloud.de");
+	genesys.client.setEnvironment(GENESYS_REGION);
 
 	await genesys.client.loginImplicitGrant(clientId, redirectUri);
 
@@ -265,7 +266,7 @@ export async function getQuestionAnswers(): Promise<QuestionAnswerStats[]> {
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Content-Type": "application/json",
-			"x-genesys-region": "mypurecloud.de"
+			"x-genesys-region": GENESYS_REGION
 		}
 	});
 

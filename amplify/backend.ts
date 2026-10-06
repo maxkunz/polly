@@ -39,6 +39,8 @@ const appId = (
 ).toLowerCase();
 const envSuffix = `${appId}-${safeBranchName}`;
 const tenantSecretsPrefix = `gc-clients/${envSuffix}`;
+// Optionale Genesys-Region (Amplify-Hosting-Umgebungsvariable), Default liegt in shared/tenant_auth.ts.
+const genesysRegion = (process.env.GENESYS_REGION ?? "").trim();
 
 const backend = defineBackend({
   auth,
@@ -146,6 +148,9 @@ function attachTenantAuth(fn: lambda.Function) {
   fn.addEnvironment("USER_POOL_ID", backend.auth.resources.userPool.userPoolId);
   fn.addEnvironment("COGNITO_ISSUER", tenantAuthIssuer);
   fn.addEnvironment("SECRETS_PREFIX", tenantSecretsPrefix);
+  if (genesysRegion) {
+    fn.addEnvironment("GENESYS_REGION", genesysRegion);
+  }
   fn.addToRolePolicy(
     new iam.PolicyStatement({
       actions: ["secretsmanager:GetSecretValue"],

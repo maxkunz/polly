@@ -55,12 +55,16 @@ export function getAuthorizationToken(event: AnyApiGwEvent): string {
   return "";
 }
 
+// Fallback, wenn weder Header x-genesys-region noch Mandanteneintrag eine Region liefern.
+// Per Lambda-Env GENESYS_REGION überschreibbar (gesetzt in backend.ts), sonst mypurecloud.de.
+export const DEFAULT_GENESYS_REGION = (process.env.GENESYS_REGION ?? "").trim() || "mypurecloud.de";
+
 export function getGenesysRegion(event: AnyApiGwEvent): string {
   const headers = event?.headers ?? {};
   const region = typeof headers["x-genesys-region"] === "string"
     ? headers["x-genesys-region"].trim()
     : "";
-  return region || "mypurecloud.de";
+  return region || DEFAULT_GENESYS_REGION;
 }
 
 function getIssuer(): string {
@@ -359,7 +363,7 @@ export async function loadTenantCredentials(tenantId: string): Promise<TenantCre
   if (!secret.genesysClientId || !secret.genesysClientSecret) return undefined;
 
   return {
-    region: item.genesysRegion ?? "mypurecloud.de",
+    region: item.genesysRegion ?? DEFAULT_GENESYS_REGION,
     clientId: secret.genesysClientId,
     clientSecret: secret.genesysClientSecret,
     allowedDataTableIds: Array.isArray(item.allowedDataTableIds)

@@ -14,6 +14,9 @@ declare global {
 	interface Window {
 		app: any;
 	}
+
+	// Per `define` in vite.config.ts aus der Umgebungsvariable GENESYS_REGION gesetzt.
+	const __GENESYS_REGION__: string;
 }
 
 export {};

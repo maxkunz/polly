@@ -6,6 +6,7 @@ import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/
 import { updateIntegrationProperties } from "@/services/genesys/auth";
 import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
+import { GENESYS_REGION } from "@/constants/genesysConstants";
 
 type SetupMeta = {
   projectTag: string;
@@ -159,7 +160,7 @@ export async function runFullProvisioning(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       backendClientId: backendAuth.clientId,
-      genesysRegion: "mypurecloud.de",
+      genesysRegion: GENESYS_REGION,
       genesysClientId: backendClient.id,
       genesysClientSecret: backendClient.secret,
       allowedDataTableIds: [dataTableId],
@@ -307,7 +308,7 @@ function resolveAppUrl(rawUrl?: string) {
 function getLaunchContext() {
   const params = new URLSearchParams(window.location.search);
   return {
-    gcHostOrigin: params.get("gcHostOrigin") || "https://apps.mypurecloud.de",
+    gcHostOrigin: params.get("gcHostOrigin") || `https://apps.${GENESYS_REGION}`,
     gcTargetEnv: params.get("gcTargetEnv") || "prod",
   };
 }
