@@ -6,7 +6,7 @@ import { deleteIntegration } from "@/services/genesys/integration";
 import { deleteDataAction } from "@/services/genesys/dataAction";
 import { deleteGroup, deleteRole } from "@/services/genesys/groups";
 import { inactiveOAuth, deleteBackend, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
-import { GENESYS_REGION } from "@/constants/genesysConstants";
+import { getGenesysRegion } from "@/services/genesysRegion";
 
 export async function runFullDelete(
   setup: any,
@@ -162,7 +162,7 @@ function buildSetupModeLink(domainName: string, clientId: string, launchUrl?: st
 function getLaunchContext(launchUrl?: string) {
   const params = launchUrl ? new URL(launchUrl).searchParams : new URLSearchParams(window.location.search);
   return {
-    gcHostOrigin: params.get("gcHostOrigin") || `https://apps.${GENESYS_REGION}`,
+    gcHostOrigin: params.get("gcHostOrigin") || `https://apps.${getGenesysRegion()}`,
     gcTargetEnv: params.get("gcTargetEnv") || "prod",
   };
 }

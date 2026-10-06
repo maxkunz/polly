@@ -2,6 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { createHash, createPublicKey, verify } from "crypto";
+import { isGenesysRegion, normalizeGenesysRegion } from "./genesys_regions";
 
 type AnyApiGwEvent = any;
 
@@ -57,14 +58,18 @@ export function getAuthorizationToken(event: AnyApiGwEvent): string {
 
 // Fallback, wenn weder Header x-genesys-region noch Mandanteneintrag eine Region liefern.
 // Per Lambda-Env GENESYS_REGION überschreibbar (gesetzt in backend.ts), sonst mypurecloud.de.
-export const DEFAULT_GENESYS_REGION = (process.env.GENESYS_REGION ?? "").trim() || "mypurecloud.de";
+const ENV_GENESYS_REGION = normalizeGenesysRegion(process.env.GENESYS_REGION);
+export const DEFAULT_GENESYS_REGION = isGenesysRegion(ENV_GENESYS_REGION) ? ENV_GENESYS_REGION : "mypurecloud.de";
 
-export function getGenesysRegion(event: AnyApiGwEvent): string {
+/**
+ * Region aus dem Header x-genesys-region (Fallback DEFAULT_GENESYS_REGION, wenn leer).
+ * undefined, wenn der Header keine bekannte Genesys-Region enthält.
+ */
+export function getGenesysRegion(event: AnyApiGwEvent): string | undefined {
   const headers = event?.headers ?? {};
-  const region = typeof headers["x-genesys-region"] === "string"
-    ? headers["x-genesys-region"].trim()
-    : "";
-  return region || DEFAULT_GENESYS_REGION;
+  const region = normalizeGenesysRegion(headers["x-genesys-region"]);
+  if (!region) return DEFAULT_GENESYS_REGION;
+  return isGenesysRegion(region) ? region : undefined;
 }
 
 function getIssuer(): string {
@@ -288,6 +293,10 @@ export async function resolveTenantFromGenesysToken(
   if (!token) return { error: "Missing Authorization bearer token" };
 
   const region = getGenesysRegion(event);
+  if (!region) {
+    console.warn("[tenant_auth] Unsupported Genesys region", { header: event?.headers?.["x-genesys-region"] });
+    return { error: "Unsupported Genesys region" };
+  }
   console.log("[tenant_auth] Validating Genesys token", { region });
   const validation = await validateGenesysToken(region, token);
   if (validation.error) {

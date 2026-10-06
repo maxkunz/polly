@@ -6,7 +6,7 @@ import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/
 import { updateIntegrationProperties } from "@/services/genesys/auth";
 import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
-import { GENESYS_REGION } from "@/constants/genesysConstants";
+import { getGenesysRegion } from "@/services/genesysRegion";
 
 type SetupMeta = {
   projectTag: string;
@@ -160,7 +160,7 @@ export async function runFullProvisioning(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       backendClientId: backendAuth.clientId,
-      genesysRegion: GENESYS_REGION,
+      genesysRegion: getGenesysRegion(),
       genesysClientId: backendClient.id,
       genesysClientSecret: backendClient.secret,
       allowedDataTableIds: [dataTableId],
@@ -308,7 +308,7 @@ function resolveAppUrl(rawUrl?: string) {
 function getLaunchContext() {
   const params = new URLSearchParams(window.location.search);
   return {
-    gcHostOrigin: params.get("gcHostOrigin") || `https://apps.${GENESYS_REGION}`,
+    gcHostOrigin: params.get("gcHostOrigin") || `https://apps.${getGenesysRegion()}`,
     gcTargetEnv: params.get("gcTargetEnv") || "prod",
   };
 }

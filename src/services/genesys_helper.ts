@@ -3,7 +3,7 @@ import { Domain } from "@/domain/Domain";
 import { Meta } from "@/domain/Meta";
 import { Questions } from "@/domain/Questions";
 import type { LockObject, LockRow } from "@/services/lockingService";
-import { GENESYS_REGION } from "@/constants/genesysConstants";
+import { getGenesysRegion } from "@/services/genesysRegion";
 
 export type QuestionAnswerStats = {
 	tenantId: string;
@@ -42,7 +42,7 @@ export async function login(
 	app.initGenesysClients();
 	const genesys = app.genesys;
 
-	genesys.client.setEnvironment(GENESYS_REGION);
+	genesys.client.setEnvironment(getGenesysRegion());
 
 	await genesys.client.loginImplicitGrant(clientId, redirectUri);
 
@@ -266,7 +266,7 @@ export async function getQuestionAnswers(): Promise<QuestionAnswerStats[]> {
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Content-Type": "application/json",
-			"x-genesys-region": GENESYS_REGION
+			"x-genesys-region": getGenesysRegion()
 		}
 	});
 
