@@ -276,6 +276,7 @@ function scheduleSummary(): void {
 }
 
 async function handleDownload(): Promise<void> {
+	await app.refreshRoles();
 	if (!canDownload.value) return;
 	const controller = new AbortController();
 	downloadAbort = controller;

@@ -114,7 +114,8 @@ const newSurveyDraft = ref<Survey | null>(null);
 const isCloneSurvey = computed(() => route.query.clone === "1");
 const cloneSurveyDraft = ref<Survey | null>(null);
 
-function handleCreateNew(): void {
+async function handleCreateNew(): Promise<void> {
+	await app.refreshRoles();
 	if (!app.canWrite) return;
 	newSurveyDraft.value = createEmptySurvey();
 	router.push({ name: "surveys", query: { new: "1" } });

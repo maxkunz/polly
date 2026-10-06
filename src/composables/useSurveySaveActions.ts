@@ -42,6 +42,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 
 	async function handleSave() {
 		// Zweite Absicherung neben den deaktivierten Buttons
+		await app.refreshRoles();
 		if (!app.canWrite) return;
 		saveAttempted.value = true;
 		if (!options.isValid.value || !options.draftSurvey.value) {
@@ -146,7 +147,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 		});
 	}
 
-	function handleDelete() {
+	async function handleDelete() {
+		await app.refreshRoles();
 		if (!app.canWrite) return;
 		const title = options.draftSurvey.value?.title || options.surveyId;
 		confirm.require({

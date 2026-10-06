@@ -3,18 +3,21 @@ import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
 import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
-import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE } from "@/constants/permissionConstants";
+import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
 
-// roles: Namen der Genesys-Rollen des Users (einmalig beim Login geladen)
+// roles: Namen der Genesys-Rollen des Users (beim Login geladen, Refresh über refreshRoles)
 export type CurrentUser = { id: string; name: string; email?: string; roles: string[] };
 
 function hasRole(user: CurrentUser | null, role: string): boolean {
 	const wanted = role.toLowerCase();
 	return (user?.roles ?? []).some(r => r.toLowerCase() === wanted);
 }
+
+// Laufender Rollen-Refresh, damit parallele Aufrufe nur einen API-Call auslösen
+let rolesRefreshPromise: Promise<void> | null = null;
 
 const SESSION_ID_KEY = "app.sessionId";
 function loadSessionId(): string {
@@ -38,6 +41,8 @@ export const useAppStore = defineStore("app", {
 		editMode: false,
 		sessionId: loadSessionId(),
 		currentUser: null as CurrentUser | null,
+		// Zeitpunkt (ms) des letzten Rollen-Ladeversuchs
+		rolesLoadedAt: 0,
 
 		domain: new Domain(),
 		questionAnswers: {} as Record<string, QuestionAnswerStats>,
@@ -73,6 +78,27 @@ export const useAppStore = defineStore("app", {
 		canExport: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_REPORTING),
 	},
 	actions: {
+		// Liest die Rollen neu ein, wenn sie älter als ROLE_CACHE_TTL_MINUTES sind.
+		// Bei einem Fehler bleiben die bisherigen Rollen erhalten, neuer Versuch nach Ablauf der TTL.
+		async refreshRoles(force = false): Promise<void> {
+			if (!this.currentUser || !this.genesys.accessToken) return;
+			const isFresh = Date.now() - this.rolesLoadedAt < ROLE_CACHE_TTL_MINUTES * 60_000;
+			if (isFresh && !force) return;
+			if (!rolesRefreshPromise) {
+				rolesRefreshPromise = (async () => {
+					try {
+						const roles = await genesysHelper.loadCurrentUserRoles();
+						if (roles && this.currentUser) {
+							this.currentUser.roles = roles;
+						}
+						this.rolesLoadedAt = Date.now();
+					} finally {
+						rolesRefreshPromise = null;
+					}
+				})();
+			}
+			await rolesRefreshPromise;
+		},
 		initGenesysClients(): void {
 			if (!this.genesys.client) {
 				this.genesys.client = (platformClient as any).ApiClient.instance;

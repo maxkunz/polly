@@ -56,7 +56,22 @@ function handleBeforeUnload(e: BeforeUnloadEvent): void {
 	e.returnValue = "";
 }
 
+// Rollen bei Bedarf auffrischen (nur wenn TTL abgelaufen, siehe appStore.refreshRoles)
+function handleVisibilityChange(): void {
+	if (document.visibilityState === "visible") {
+		app.refreshRoles();
+	}
+}
+
+watch(
+	() => route.fullPath,
+	() => {
+		app.refreshRoles();
+	}
+);
+
 onMounted(async () => {
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   window.app = app;
   window.addEventListener("keydown", handleKeydown);
   window.addEventListener("beforeunload", handleBeforeUnload);
@@ -90,6 +105,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
 	window.removeEventListener("keydown", handleKeydown);
+	document.removeEventListener("visibilitychange", handleVisibilityChange);
 	window.removeEventListener("beforeunload", handleBeforeUnload);
 });
 

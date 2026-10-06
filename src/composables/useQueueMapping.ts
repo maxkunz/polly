@@ -117,7 +117,9 @@ export function useQueueMapping({
 	}
 
 	async function executeSave(): Promise<boolean> {
-		if (!useAppStore().canDeploy) return false;
+		const app = useAppStore();
+		await app.refreshRoles();
+		if (!app.canDeploy) return false;
 		isSaving.value = true;
 		saveError.value = null;
 

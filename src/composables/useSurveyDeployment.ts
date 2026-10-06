@@ -63,7 +63,9 @@ export function useSurveyDeployment({
 
 	async function run(action: () => Promise<void>): Promise<void> {
 		// Zweite Absicherung neben den deaktivierten Buttons
-		if (!useAppStore().canDeploy) return;
+		const app = useAppStore();
+		await app.refreshRoles();
+		if (!app.canDeploy) return;
 		isDeploying.value = true;
 		deployError.value = null;
 		try {

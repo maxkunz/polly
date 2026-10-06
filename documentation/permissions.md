@@ -22,6 +22,7 @@ Polly prüft im Frontend zwei Genesys-Cloud-Rollen des eingeloggten Users. Die P
 ## Technik
 
 - Die Rollennamen stehen als Konstanten in `src/constants/permissionConstants.ts`.
-- Die Rollen werden einmalig beim Login geladen (`services/genesys_helper.ts`, `loadCurrentUserRoles`). Sie liegen in `appStore.currentUser.roles`.
+- Die Rollen werden beim Login geladen (`services/genesys_helper.ts`, `loadCurrentUserRoles`). Sie liegen in `appStore.currentUser.roles`.
 - Die Getter `appStore.canWrite`, `appStore.canDeploy` und `appStore.canExport` liefern die Berechtigungen.
-- Rollenänderungen in Genesys greifen erst nach einem Neuladen der App.
+- Die Rollen werden höchstens alle `ROLE_CACHE_TTL_MINUTES` (5 Minuten) neu gelesen (`appStore.refreshRoles`). Auslöser sind ein Seiten-/Ansichtswechsel, die Rückkehr in den Browser-Tab und jede schreibende Aktion (Speichern, Löschen, Neu anlegen, Deploy, Queue-Mapping, Export) direkt vor der Ausführung.
+- Rollenänderungen in Genesys greifen damit spätestens nach 5 Minuten. Schlägt ein Refresh fehl, bleiben die bisherigen Rollen erhalten.
