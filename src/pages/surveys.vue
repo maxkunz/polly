@@ -115,11 +115,13 @@ const isCloneSurvey = computed(() => route.query.clone === "1");
 const cloneSurveyDraft = ref<Survey | null>(null);
 
 function handleCreateNew(): void {
+	if (!app.canWrite) return;
 	newSurveyDraft.value = createEmptySurvey();
 	router.push({ name: "surveys", query: { new: "1" } });
 }
 
 function handleClone(clonedSurvey: Survey): void {
+	if (!app.canWrite) return;
 	cloneSurveyDraft.value = clonedSurvey;
 	router.push({ name: "surveys", query: { clone: "1" } });
 }
@@ -145,6 +147,18 @@ watch(
 			cloneSurveyDraft.value = null;
 		}
 	}
+);
+
+// Direktaufruf von ?new=1 / ?clone=1 ohne Rolle polly_write: zurück zur Liste.
+// Erst nach der Initialisierung prüfen, da die Rollen beim Login geladen werden.
+watch(
+	() => [isNewSurvey.value || isCloneSurvey.value, app.initialized, app.canWrite] as const,
+	([isCreating, initialized, canWrite]) => {
+		if (isCreating && initialized && !canWrite) {
+			handleBackToList();
+		}
+	},
+	{ immediate: true }
 );
 
 async function handleNewSurveySaved(updated: Survey): Promise<void> {
@@ -325,7 +339,8 @@ usePageControlBar(
 						label: t("surveys.actions.new"),
 						iconKey: "add",
 						severity: "primary",
-						handler: handleCreateNew
+						handler: handleCreateNew,
+						disabled: () => !app.canWrite
 					},
 					{
 						id: "surveys.reload",
@@ -381,6 +396,7 @@ onBeforeUnmount(() => {
 				:surveyId="newSurveyDraft.id"
 				:existingRow="undefined"
 				:isNew="true"
+				:disabled="!app.canWrite"
 				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleNewSurveySaved"
 				@back="handleBackToList"
@@ -394,6 +410,7 @@ onBeforeUnmount(() => {
 				:surveyId="cloneSurveyDraft.id"
 				:existingRow="undefined"
 				:isNew="true"
+				:disabled="!app.canWrite"
 				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleCloneSurveySaved"
 				@back="handleBackToList"
@@ -437,6 +454,7 @@ onBeforeUnmount(() => {
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId"
 				:existingRow="rawRowData ?? undefined"
+				:disabled="!app.canWrite"
 				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleSurveySaved"
 				@back="handleBackToList"
@@ -489,13 +507,16 @@ onBeforeUnmount(() => {
 						<h2 class="text-base font-semibold text-[var(--p-text-color)]">
 							{{ t("surveys.list.availableCount", { count: filteredSurveys.length }) }}
 						</h2>
-						<Button
-							size="small"
-							severity="primary"
-							:label="t('surveys.actions.new')"
-							icon="pi pi-plus"
-							@click="handleCreateNew"
-						/>
+						<span v-tooltip.top="app.canWrite ? undefined : t('permissions.missingWrite')">
+							<Button
+								size="small"
+								severity="primary"
+								:label="t('surveys.actions.new')"
+								icon="pi pi-plus"
+								:disabled="!app.canWrite"
+								@click="handleCreateNew"
+							/>
+						</span>
 					</div>
 				</template>
 				<template #content>
@@ -538,7 +559,7 @@ onBeforeUnmount(() => {
 										</div>
 									</div>
 									<div class="flex items-center gap-2 text-[var(--p-text-muted-color)] shrink-0">
-										<span class="text-xs hidden sm:inline">{{ t("surveys.list.edit") }}</span>
+										<span class="text-xs hidden sm:inline">{{ app.canWrite ? t("surveys.list.edit") : t("surveys.list.view") }}</span>
 										<i class="pi pi-chevron-right text-xs" aria-hidden="true" />
 									</div>
 								</button>

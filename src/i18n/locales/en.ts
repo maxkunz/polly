@@ -91,6 +91,13 @@ export const en: MessageSchema = {
 		}
 	},
 
+	permissions: {
+		missingWrite: "Not permitted – write permission is missing.",
+		missingDeploy: "Not permitted – deploy permission is missing.",
+		readOnlyBanner: "Read-only access: creating, editing, cloning and deleting surveys requires write permission.",
+		deployReadOnlyBanner: "Read-only access: deployments, rollback and queue mapping require deploy permission."
+	},
+
 	surveys: {
 		searchPlaceholder: "Search survey...",
 		actions: {
@@ -121,6 +128,7 @@ export const en: MessageSchema = {
 			unnamedSurvey: "Unnamed survey",
 			openAriaLabel: "Open survey: {title}",
 			edit: "Edit",
+			view: "View",
 			emptySearch: "No surveys found for this search.",
 			empty: "No surveys available."
 		}

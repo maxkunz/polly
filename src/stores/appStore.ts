@@ -3,11 +3,18 @@ import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
 import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
+import { POLLY_ROLE_DEPLOY, POLLY_ROLE_WRITE } from "@/constants/permissionConstants";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
 
-export type CurrentUser = { id: string; name: string; email?: string };
+// roles: Namen der Genesys-Rollen des Users (einmalig beim Login geladen)
+export type CurrentUser = { id: string; name: string; email?: string; roles: string[] };
+
+function hasRole(user: CurrentUser | null, role: string): boolean {
+	const wanted = role.toLowerCase();
+	return (user?.roles ?? []).some(r => r.toLowerCase() === wanted);
+}
 
 const SESSION_ID_KEY = "app.sessionId";
 function loadSessionId(): string {
@@ -58,7 +65,10 @@ export const useAppStore = defineStore("app", {
 
 	}),
 	getters: {
-
+		// Darf Umfragen anlegen, klonen, bearbeiten und löschen
+		canWrite: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_WRITE),
+		// Darf nach Stage/Prod deployen, Rollback ausführen und Queue-Mapping pflegen
+		canDeploy: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_DEPLOY),
 	},
 	actions: {
 		initGenesysClients(): void {

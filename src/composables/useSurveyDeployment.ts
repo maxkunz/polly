@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import type { Ref, ComputedRef } from "vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { i18n } from "@/i18n";
+import { useAppStore } from "@/stores/appStore";
 import {
 	deploySurvey,
 	rollbackSurvey,
@@ -61,6 +62,8 @@ export function useSurveyDeployment({
 	}
 
 	async function run(action: () => Promise<void>): Promise<void> {
+		// Zweite Absicherung neben den deaktivierten Buttons
+		if (!useAppStore().canDeploy) return;
 		isDeploying.value = true;
 		deployError.value = null;
 		try {

@@ -6,6 +6,7 @@ import { appTheme } from '@/theme/appTheme';
 import { appIconSet } from "@/components/icons/appIconSet";
 import App from "./App.vue";
 import ConfirmationService from "primevue/confirmationservice";
+import Tooltip from "primevue/tooltip";
 
 import "primeicons/primeicons.css";
 import "./assets/main.css";
@@ -31,6 +32,7 @@ app.component('InputIcon', InputIcon);
 app.use(ToastService);
 app.use(router);
 app.use(ConfirmationService)
+app.directive("tooltip", Tooltip);
 
 app.use(PrimeVue, {
 	theme: {

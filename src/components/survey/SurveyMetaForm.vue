@@ -43,7 +43,7 @@ const computedTechnicalName = computed(() => {
 			</h2>
 		</template>
 		<template #content>
-			<form class="space-y-4" @submit.prevent="emit('save')">
+			<form class="space-y-4" @submit.prevent="!disabled && emit('save')">
 				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					<div class="md:col-span-8">
 						<label :for="surveyTitleId" class="block text-sm font-medium mb-1">

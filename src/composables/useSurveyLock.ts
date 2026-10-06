@@ -17,6 +17,8 @@ export interface UseSurveyLockOptions {
 	existingRow: Ref<Record<string, any> | null>;
 	isDirty: Ref<boolean>;
 	isNew?: boolean;
+	// Read-only (fehlende Rolle polly_write): kein Lock nehmen, kein Konflikt-Dialog
+	readOnly?: Ref<boolean>;
 	onRowRefreshed?: (freshRow: Record<string, any>) => void;
 	onBack?: () => void;
 }
@@ -41,6 +43,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 				const me = await appStore.genesys.usersApi.getUsersMe();
 				if (me) {
 					appStore.currentUser = {
+						roles: appStore.currentUser?.roles ?? [],
 						id: String(me.id ?? ""),
 						name: String(me.name ?? me.username ?? t("surveyLock.unknownUser")),
 						email: me.email
@@ -69,7 +72,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	}
 
 	async function checkInitialConflict(): Promise<void> {
-		if (options.isNew) return;
+		if (options.isNew || options.readOnly?.value) return;
 
 		isCheckingConflict.value = true;
 		try {
@@ -109,6 +112,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 	async function acquireLock(force = false): Promise<boolean> {
 		if (options.isNew) return true;
+		if (options.readOnly?.value) return false;
 		if (isLockedByMe.value && !force) return true;
 
 		try {
@@ -185,6 +189,16 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 			}
 		},
 		{ immediate: false }
+	);
+
+	// Rollen werden ggf. erst nach dem Mount geladen – Konfliktprüfung dann nachholen
+	watch(
+		() => options.readOnly?.value,
+		(readOnly, wasReadOnly) => {
+			if (!readOnly && wasReadOnly && !isLockedByMe.value && !isConflictDismissed.value) {
+				checkInitialConflict();
+			}
+		}
 	);
 
 	onMounted(() => {

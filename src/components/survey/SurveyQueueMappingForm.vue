@@ -12,9 +12,15 @@ import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { useQueueMapping } from "@/composables/useQueueMapping";
 
-const props = defineProps<{
-	surveyId: string;
-}>();
+const props = withDefaults(
+	defineProps<{
+		surveyId: string;
+		disabled?: boolean;
+	}>(),
+	{
+		disabled: false
+	}
+);
 
 const emit = defineEmits<{
 	(e: "update:isDirty", isDirty: boolean): void;
@@ -73,6 +79,7 @@ async function performSave(): Promise<void> {
 }
 
 function handleSave(): void {
+	if (props.disabled) return;
 	if (activeConflicts.value.length > 0) {
 		const conflictList = activeConflicts.value
 			.map(c => t("queueMapping.overwriteConfirm.listItem", { queueName: c.queueName, surveyId: c.surveyId }))
@@ -175,6 +182,7 @@ function handleSave(): void {
 								v-model="deliveryRate"
 								:options="deliveryRateOptions"
 								:allowEmpty="false"
+								:disabled="disabled"
 								class="w-full"
 								:aria-label="t('queueMapping.deliveryRateAriaLabel')"
 							>
@@ -202,6 +210,7 @@ function handleSave(): void {
 							rows="5"
 							autoResize
 							placeholder=""
+							:disabled="disabled"
 							aria-describedby="queue-names-hint"
 						/>
 						<p id="queue-names-hint" class="text-xs text-[var(--p-text-muted-color)]">
@@ -228,15 +237,17 @@ function handleSave(): void {
 
 					<!-- Action Buttons -->
 					<div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-						<Button
-							type="submit"
-							icon="pi pi-save"
-							:label="t('queueMapping.save')"
-							severity="primary"
-							:loading="isSaving"
-							:disabled="isSaving"
-							:aria-label="t('queueMapping.save')"
-						/>
+						<span v-tooltip.top="disabled ? t('permissions.missingDeploy') : undefined">
+							<Button
+								type="submit"
+								icon="pi pi-save"
+								:label="t('queueMapping.save')"
+								severity="primary"
+								:loading="isSaving"
+								:disabled="isSaving || disabled"
+								:aria-label="t('queueMapping.save')"
+							/>
+						</span>
 						<Button
 							v-if="isDirty"
 							type="button"
@@ -245,7 +256,7 @@ function handleSave(): void {
 							severity="secondary"
 							variant="text"
 							size="small"
-							:disabled="isSaving"
+							:disabled="isSaving || disabled"
 							@click="resetForm"
 						/>
 					</div>

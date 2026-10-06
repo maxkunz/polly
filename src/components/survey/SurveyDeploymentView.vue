@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import Message from "primevue/message";
@@ -7,6 +7,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { useSurveyDeployment } from "@/composables/useSurveyDeployment";
 import SurveyDeploymentStatus from "./SurveyDeploymentStatus.vue";
 import SurveyQueueMappingForm from "./SurveyQueueMappingForm.vue";
+import { useAppStore } from "@/stores/appStore";
 
 const props = defineProps<{
 	survey: Survey;
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const app = useAppStore();
 
 const isQueueMappingDirty = ref<boolean>(false);
 watch(
@@ -58,6 +60,9 @@ const {
 	surveyId: props.surveyId,
 	existingRow: localRow
 });
+
+// Tooltip nur bei fehlender Rolle polly_deploy
+const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions.missingDeploy")));
 </script>
 
 <template>
@@ -81,6 +86,10 @@ const {
 			</div>
 		</div>
 
+		<Message v-if="!app.canDeploy" severity="info" :closable="false">
+			{{ t("permissions.deployReadOnlyBanner") }}
+		</Message>
+
 		<!-- Error -->
 		<Message v-if="deployError" severity="error" :closable="false">
 			{{ deployError }}
@@ -95,34 +104,40 @@ const {
 
 		<!-- Actions -->
 		<div class="flex flex-wrap gap-3 pt-2">
-			<Button
-				icon="pi pi-send"
-				:label="t('deployment.deployStage')"
-				severity="primary"
-				:loading="isDeploying"
-				:disabled="isDeploying"
-				:aria-label="t('deployment.deployStageAriaLabel')"
-				@click="deployToStage"
-			/>
-			<Button
-				icon="pi pi-cloud-upload"
-				:label="t('deployment.deployProd')"
-				severity="warn"
-				:loading="isDeploying"
-				:disabled="isDeploying || isDraftInProd"
-				:aria-label="t('deployment.deployProdAriaLabel')"
-				@click="deployToProd"
-			/>
-			<Button
-				icon="pi pi-history"
-				:label="t('deployment.rollback')"
-				severity="danger"
-				variant="outlined"
-				:loading="isDeploying"
-				:disabled="isDeploying || !backupSnapshot"
-				:aria-label="t('deployment.rollbackAriaLabel')"
-				@click="rollback"
-			/>
+			<span v-tooltip.top="deployTooltip">
+				<Button
+					icon="pi pi-send"
+					:label="t('deployment.deployStage')"
+					severity="primary"
+					:loading="isDeploying"
+					:disabled="isDeploying || !app.canDeploy"
+					:aria-label="t('deployment.deployStageAriaLabel')"
+					@click="deployToStage"
+				/>
+			</span>
+			<span v-tooltip.top="deployTooltip">
+				<Button
+					icon="pi pi-cloud-upload"
+					:label="t('deployment.deployProd')"
+					severity="warn"
+					:loading="isDeploying"
+					:disabled="isDeploying || isDraftInProd || !app.canDeploy"
+					:aria-label="t('deployment.deployProdAriaLabel')"
+					@click="deployToProd"
+				/>
+			</span>
+			<span v-tooltip.top="deployTooltip">
+				<Button
+					icon="pi pi-history"
+					:label="t('deployment.rollback')"
+					severity="danger"
+					variant="outlined"
+					:loading="isDeploying"
+					:disabled="isDeploying || !backupSnapshot || !app.canDeploy"
+					:aria-label="t('deployment.rollbackAriaLabel')"
+					@click="rollback"
+				/>
+			</span>
 		</div>
 
 		<Message v-if="isDraftInProd" severity="info" :closable="false">
@@ -133,6 +148,7 @@ const {
 		<div v-if="prodSnapshot !== null || stageSnapshot !== null" class="pt-4 border-t border-[var(--p-content-border-color)]">
 			<SurveyQueueMappingForm
 				:surveyId="surveyId"
+				:disabled="!app.canDeploy"
 				v-model:isDirty="isQueueMappingDirty"
 			/>
 		</div>

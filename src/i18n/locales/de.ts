@@ -89,6 +89,13 @@ export const de = {
 		}
 	},
 
+	permissions: {
+		missingWrite: "Keine Berechtigung – Schreibrechte fehlen.",
+		missingDeploy: "Keine Berechtigung – Deployrechte fehlen.",
+		readOnlyBanner: "Nur Lesezugriff: Das Erstellen, Bearbeiten, Klonen und Löschen von Umfragen erfordert Schreibrechte.",
+		deployReadOnlyBanner: "Nur Lesezugriff: Für Deployments, Rollback und Queue-Mapping werden Deployrechte benötigt."
+	},
+
 	surveys: {
 		searchPlaceholder: "Umfrage suchen...",
 		actions: {
@@ -119,6 +126,7 @@ export const de = {
 			unnamedSurvey: "Unbenannte Umfrage",
 			openAriaLabel: "Umfrage öffnen: {title}",
 			edit: "Bearbeiten",
+			view: "Ansehen",
 			emptySearch: "Keine Umfragen für die Suchanfrage gefunden.",
 			empty: "Keine Umfragen vorhanden."
 		}
@@ -152,8 +160,8 @@ export const de = {
 			surveyTitle: "Titel der Umfrage",
 			technicalName: "Technischer Name (Automatisch aus Titel & ID)",
 			description: "Beschreibung",
-			greeting: "Begrüßungsnachricht (Greeting)",
-			closing: "Verabschiedungsnachricht (Closing)",
+			greeting: "Begrüßungsnachricht",
+			closing: "Verabschiedungsnachricht",
 			placeholders: {
 				title: "z. B. Kundenzufriedenheit 2026",
 				description: "Interne Beschreibung oder Kontext zur Umfrage...",

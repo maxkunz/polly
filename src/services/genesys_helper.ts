@@ -55,8 +55,22 @@ export async function login(
 	app.currentUser = {
 		id: String(user?.id ?? ""),
 		name: String(user?.name ?? ""),
-		email: (user?.email as string | undefined) ?? undefined
+		email: (user?.email as string | undefined) ?? undefined,
+		roles: await loadCurrentUserRoles()
 	};
+}
+
+// Lädt die Rollennamen des eingeloggten Users. Schlägt das fehl (z. B. fehlender
+// OAuth-Scope), gibt es keine Rollen – der User arbeitet dann nur lesend.
+async function loadCurrentUserRoles(): Promise<string[]> {
+	try {
+		const me = await getApp().genesys.usersApi.getUsersMe({ expand: ["authorization"] });
+		const roles: Array<{ name?: string }> = me?.authorization?.roles ?? [];
+		return roles.map(role => String(role?.name ?? "")).filter(Boolean);
+	} catch (error) {
+		console.warn("Could not load Genesys roles of current user, falling back to read-only.", error);
+		return [];
+	}
 }
 
 export async function getLockRow(

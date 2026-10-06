@@ -6,6 +6,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, resolveDataTableId } from "@/services/surveyService";
 import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
+import { useAppStore } from "@/stores/appStore";
 
 export interface SurveySaveActionsOptions {
 	draftSurvey: Ref<Survey | null>;
@@ -33,12 +34,15 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const toast = useToast();
 	const confirm = useConfirm();
 	const { t } = useI18n();
+	const app = useAppStore();
 
 	const isSaving = ref<boolean>(false);
 	const isDeleting = ref<boolean>(false);
 	const saveAttempted = ref<boolean>(false);
 
 	async function handleSave() {
+		// Zweite Absicherung neben den deaktivierten Buttons
+		if (!app.canWrite) return;
 		saveAttempted.value = true;
 		if (!options.isValid.value || !options.draftSurvey.value) {
 			const errors = options.validationErrors.value;
@@ -143,6 +147,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	}
 
 	function handleDelete() {
+		if (!app.canWrite) return;
 		const title = options.draftSurvey.value?.title || options.surveyId;
 		confirm.require({
 			header: t("surveyEditor.deleteConfirm.header"),

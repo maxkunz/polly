@@ -2,10 +2,13 @@
 import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import Tag from "primevue/tag";
+import { computed } from "vue";
+import { useAppStore } from "@/stores/appStore";
 
 const { t } = useI18n();
+const app = useAppStore();
 
-withDefaults(
+const props = withDefaults(
 	defineProps<{
 		isDirty: boolean;
 		isSaving: boolean;
@@ -31,6 +34,10 @@ const emit = defineEmits<{
 	(e: "delete"): void;
 	(e: "clone"): void;
 }>();
+
+// Tooltips nur bei fehlender Rolle, sonst undefined (kein leerer Tooltip)
+const writeTooltip = computed(() => (props.disabled && !app.canWrite ? t("permissions.missingWrite") : undefined));
+const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions.missingDeploy")));
 </script>
 
 <template>
@@ -59,56 +66,62 @@ const emit = defineEmits<{
 				:disabled="!isDirty || isSaving || isDeleting || disabled"
 				@click="emit('discard')"
 			/>
-			<Button
-				v-if="!isNew"
-				size="small"
-				severity="danger"
-				icon="pi pi-trash"
-				:label="t('surveyEditor.toolbar.delete')"
-				:loading="isDeleting"
-				:disabled="isSaving || isDeleting || disabled"
-				:aria-label="t('surveyEditor.toolbar.deleteAriaLabel')"
-				@click="emit('delete')"
-			/>
-			<Button
-				v-if="!isNew"
-				size="small"
-				severity="info"
-				icon="pi pi-clone"
-				:label="t('surveyEditor.toolbar.clone')"
-				:disabled="isDirty || isSaving || isDeleting || disabled"
-				:aria-label="t('surveyEditor.toolbar.cloneAriaLabel')"
-				@click="emit('clone')"
-			/>
-			<Button
-				v-if="!isNew"
-				size="small"
-				severity="info"
-				icon="pi pi-cloud-upload"
-				:label="t('surveyEditor.toolbar.deploy')"
-				:disabled="isDirty || isSaving || isDeleting || disabled"
-				:aria-label="t('surveyEditor.toolbar.deployAriaLabel')"
-				@click="emit('deploy')"
-			/>
+			<span v-if="!isNew" v-tooltip.top="writeTooltip">
+				<Button
+					size="small"
+					severity="danger"
+					icon="pi pi-trash"
+					:label="t('surveyEditor.toolbar.delete')"
+					:loading="isDeleting"
+					:disabled="isSaving || isDeleting || disabled"
+					:aria-label="t('surveyEditor.toolbar.deleteAriaLabel')"
+					@click="emit('delete')"
+				/>
+			</span>
+			<span v-if="!isNew" v-tooltip.top="writeTooltip">
+				<Button
+					size="small"
+					severity="info"
+					icon="pi pi-clone"
+					:label="t('surveyEditor.toolbar.clone')"
+					:disabled="isDirty || isSaving || isDeleting || disabled"
+					:aria-label="t('surveyEditor.toolbar.cloneAriaLabel')"
+					@click="emit('clone')"
+				/>
+			</span>
+			<!-- Deploy hängt an polly_deploy, nicht am Read-only-Modus des Editors -->
+			<span v-if="!isNew" v-tooltip.top="deployTooltip">
+				<Button
+					size="small"
+					severity="info"
+					icon="pi pi-cloud-upload"
+					:label="t('surveyEditor.toolbar.deploy')"
+					:disabled="isDirty || isSaving || isDeleting || !app.canDeploy"
+					:aria-label="t('surveyEditor.toolbar.deployAriaLabel')"
+					@click="emit('deploy')"
+				/>
+			</span>
 			<Button
 				v-if="!isNew"
 				size="small"
 				severity="info"
 				icon="pi pi-chart-bar"
 				:label="t('surveyEditor.toolbar.report')"
-				:disabled="isDirty || isSaving || isDeleting || disabled"
+				:disabled="isDirty || isSaving || isDeleting"
 				:aria-label="t('surveyEditor.toolbar.reportAriaLabel')"
 				@click="emit('report')"
 			/>
-			<Button
-				size="small"
-				severity="success"
-				icon="pi pi-save"
-				:loading="isSaving"
-				:label="t('surveyEditor.toolbar.save')"
-				:disabled="disabled || !isDirty || isDeleting"
-				@click="emit('save')"
-			/>
+			<span v-tooltip.top="writeTooltip">
+				<Button
+					size="small"
+					severity="success"
+					icon="pi pi-save"
+					:loading="isSaving"
+					:label="t('surveyEditor.toolbar.save')"
+					:disabled="disabled || !isDirty || isDeleting"
+					@click="emit('save')"
+				/>
+			</span>
 		</div>
 	</div>
 </template>
