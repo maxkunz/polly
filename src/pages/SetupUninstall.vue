@@ -75,6 +75,7 @@ const exitUninstall = () => {
         app.initialized = false;
         const url = new URL(window.location.href);
         url.searchParams.delete("datatable_id");
+        url.searchParams.delete("mapping_datatable_id");
         window.location.assign(url.toString());
     } else {
         router.replace({ name: "dashboard", query: router.currentRoute.value.query });

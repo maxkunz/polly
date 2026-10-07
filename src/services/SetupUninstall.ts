@@ -18,7 +18,8 @@ export async function runFullDelete(
   const domainName = setup?.domainName || window.location.origin;
   const oauthFrontendId = setup?.oauthFrontend?.id || setup?.oauthFrontendId;
   const integrationAppId = setup?.integrationApp?.id;
-  const dataTableId = setup?.dataTable?.id;
+  const datatableId = setup?.dataTable?.id;
+  const mappingDataTableId = setup?.mappingDataTable?.id;
   const backendGroupId = setup?.backendGroup?.id;
   const backendRoleId = setup?.backendRole?.id;
   const backendAuthClientId = setup?.backendAuth?.clientId;
@@ -115,9 +116,14 @@ export async function runFullDelete(
     //   }
     // }
 
-    if (dataTableId) {
-      onProgress(`Deleting data table ${dataTableId}...`);
-      await deleteDataTable(dataTableId);
+    if (mappingDataTableId) {
+      onProgress(`Deleting mapping data table ${mappingDataTableId}...`);
+      await deleteDataTable(mappingDataTableId);
+    }
+
+    if (datatableId) {
+      onProgress(`Deleting data table ${datatableId}...`);
+      await deleteDataTable(datatableId);
     }
 
     if (divisionId && divisionCreatedBySetup) {
@@ -155,6 +161,7 @@ function buildSetupModeLink(domainName: string, clientId: string, launchUrl?: st
     url.searchParams.set("client_id", clientId);
   }
   url.searchParams.delete("datatable_id");
+  url.searchParams.delete("mapping_datatable_id");
   return url.toString();
 }
 

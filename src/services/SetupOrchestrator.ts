@@ -19,6 +19,7 @@ type SetupMeta = {
   backendAuth: { clientId: string; tokenUrl: string };
   backendClient: { id: string; name: string };
   dataTable: { id: string; name: string };
+  mappingDataTable: { id: string; name: string };
   dataActionIntegration: { id: string; name: string };
   dataAction: { id: string; name: string };
   installedAt: string;
@@ -36,6 +37,7 @@ export async function runFullProvisioning(
   params: {
     clientId: string;
     datatableId: string;
+    mappingDataTableId: string;
   };
 }> {
   const apiLinks = new platformClient.OAuthApi();
@@ -48,7 +50,8 @@ export async function runFullProvisioning(
 
   const names = {
     division: `${projectTag}_division`,
-    dataTable: `${projectTag}_questions`,
+    dataTable: `${projectTag}_polly_surveys`,
+    mappingDataTable: `${projectTag}_polly_mapping`,
     backendGroup: `${projectTag}_backend_group`,
     backendRole: `${projectTag}_backend_role`,
     backendClient: `${projectTag}_backend_client`,
@@ -72,12 +75,17 @@ export async function runFullProvisioning(
     : await createNewDivision(names.division, projectTag, onProgress);
 
   onProgress(`Preparing data table ${names.dataTable}...`);
-  const dataTable = await createDataTable(names.dataTable, buildQuestionTableSchema(), targetDivision.id);
-  const dataTableId = dataTable.id;
+  const dataTable = await createDataTable(names.dataTable, buildSurveyTableSchema(), targetDivision.id);
+  const datatableId = dataTable.id;
 
-  await addDataTableRow(dataTableId, buildEmptyQuestionRow("__lock"));
-  await addDataTableRow(dataTableId, buildMetaRow({ appTitle: projectTag, setup: null }));
-  onProgress(`Data table created (${dataTableId})`);
+  await addDataTableRow(datatableId, buildEmptySurveyRow("__lock"));
+  await addDataTableRow(datatableId, buildMetaRow({ appTitle: projectTag, setup: null }));
+  onProgress(`Data table created (${datatableId})`);
+
+  onProgress(`Preparing data table ${names.mappingDataTable}...`);
+  const mappingDataTable = await createDataTable(names.mappingDataTable, buildMappingTableSchema(), targetDivision.id);
+  const mappingDataTableId = mappingDataTable.id;
+  onProgress(`Mapping data table created (${mappingDataTableId})`);
 
   onProgress("Preparing backend role from template...");
   const roleTemplateResponse = await fetch("/permissionsStructure.json");
@@ -162,7 +170,7 @@ export async function runFullProvisioning(
       genesysRegion: "mypurecloud.de",
       genesysClientId: backendClient.id,
       genesysClientSecret: backendClient.secret,
-      allowedDataTableIds: [dataTableId],
+      allowedDataTableIds: [datatableId, mappingDataTableId],
     }),
   });
 
@@ -170,7 +178,7 @@ export async function runFullProvisioning(
     throw new Error("Backend onboarding completion failed.");
   }
 
-  const launchUrl = buildLaunchUrl(appUrl, gcContext, oauthFrontendId, dataTableId);
+  const launchUrl = buildLaunchUrl(appUrl, gcContext, oauthFrontendId, datatableId, mappingDataTableId);
 
   onProgress("Updating frontend OAuth redirect URL...");
   const frontendOAuth = await getOAuthClientWithID(oauthFrontendId);
@@ -219,13 +227,14 @@ export async function runFullProvisioning(
     backendRole: { id: backendRole.id, name: names.backendRole },
     backendAuth: { clientId: backendAuth.clientId, tokenUrl },
     backendClient: { id: backendClient.id, name: names.backendClient },
-    dataTable: { id: dataTableId, name: names.dataTable },
+    dataTable: { id: datatableId, name: names.dataTable },
+    mappingDataTable: { id: mappingDataTableId, name: names.mappingDataTable },
     dataActionIntegration: { id: dataActionIntegration.id, name: names.dataActionIntegration },
     dataAction: { id: dataAction.id, name: names.dataAction },
     installedAt: new Date().toISOString(),
   };
 
-  await updateDataTableRow(dataTableId, "__meta", buildMetaRow({ appTitle: projectTag, setup: setupMeta }));
+  await updateDataTableRow(datatableId, "__meta", buildMetaRow({ appTitle: projectTag, setup: setupMeta }));
   onProgress("Setup metadata stored in __meta.");
   onProgress("Installation complete.");
 
@@ -233,7 +242,8 @@ export async function runFullProvisioning(
     integrationUrl: launchUrl,
     params: {
       clientId: oauthFrontendId,
-      datatableId: dataTableId,
+      datatableId,
+      mappingDataTableId,
     },
   };
 }
@@ -249,48 +259,52 @@ async function createNewDivision(name: string, projectTag: string, onProgress: (
   };
 }
 
-function buildQuestionTableSchema() {
+function buildSurveyTableSchema() {
   return {
     $schema: "http://json-schema.org/draft-04/schema#",
     type: "object",
     required: ["key"],
     properties: {
       key: { title: "key", type: "string", $id: "/properties/key" },
-      meta: { title: "meta", type: "string", $id: "/properties/meta" },
-      name: { title: "name", type: "string", $id: "/properties/name" },
-      prompt: { title: "prompt", type: "string", $id: "/properties/prompt" },
-      reprompt: { title: "reprompt", type: "string", $id: "/properties/reprompt" },
-      min_value: { title: "min_value", type: "string", $id: "/properties/min_value" },
-      max_value: { title: "max_value", type: "string", $id: "/properties/max_value" },
-      enabled: { title: "enabled", type: "string", $id: "/properties/enabled" },
+      Draft: { title: "Draft", type: "string", $id: "/properties/Draft", default: "{}" },
+      Stage: { title: "Stage", type: "string", $id: "/properties/Stage", default: "{}" },
+      Prod: { title: "Prod", type: "string", $id: "/properties/Prod", default: "{}" },
+      Backup: { title: "Backup", type: "string", $id: "/properties/Backup", default: "{}" },
+      lock: { title: "lock", type: "string", $id: "/properties/lock", default: JSON.stringify({ locked_by: "", locked_since: "" }) },
     },
     additionalProperties: false,
   };
 }
 
-function buildEmptyQuestionRow(key: string) {
+function buildMappingTableSchema() {
+  return {
+    $schema: "http://json-schema.org/draft-04/schema#",
+    type: "object",
+    required: ["key"],
+    properties: {
+      key: { title: "QueueName", type: "string", $id: "/properties/key" },
+      DeliveryRate: { title: "DeliveryRate", type: "integer", $id: "/properties/DeliveryRate" },
+      SurveyId: { title: "SurveyId", type: "string", $id: "/properties/SurveyId" },
+    },
+    additionalProperties: false,
+  };
+}
+
+function buildEmptySurveyRow(key: string) {
   return {
     key,
-    meta: "",
-    name: "",
-    prompt: "",
-    reprompt: "",
-    min_value: "",
-    max_value: "",
-    enabled: "",
+    Draft: "{}",
+    Stage: "{}",
+    Prod: "{}",
+    Backup: "{}",
+    lock: JSON.stringify({ locked_by: "", locked_since: "" }),
   };
 }
 
 function buildMetaRow(meta: Record<string, unknown>) {
   return {
-    key: "__meta",
-    meta: JSON.stringify(meta),
-    name: "",
-    prompt: "",
-    reprompt: "",
-    min_value: "",
-    max_value: "",
-    enabled: "",
+    ...buildEmptySurveyRow("__meta"),
+    Draft: JSON.stringify(meta),
   };
 }
 
@@ -316,7 +330,8 @@ function buildLaunchUrl(
   appUrl: URL,
   launchContext: { gcHostOrigin: string; gcTargetEnv: string },
   clientId: string,
-  datatableId?: string
+  datatableId?: string,
+  mappingDataTableId?: string
 ) {
   const url = new URL(appUrl.toString());
   url.hash = "";
@@ -325,6 +340,9 @@ function buildLaunchUrl(
   url.searchParams.set("client_id", clientId);
   if (datatableId) {
     url.searchParams.set("datatable_id", datatableId);
+  }
+  if (mappingDataTableId) {
+    url.searchParams.set("mapping_datatable_id", mappingDataTableId);
   }
   return url.toString();
 }

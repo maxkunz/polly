@@ -55,7 +55,6 @@ export const useAppStore = defineStore("app", {
 
 		clientId: null as string | null,
 		datatableId: null as string | null,
-		dataTableId: null as string | null,
 		mappingDataTableId: null as string | null,
 		devView: false,
 
@@ -104,11 +103,11 @@ export const useAppStore = defineStore("app", {
 		},
 
 		async ensureDataTableId(): Promise<string> {
-			if (this.dataTableId) {
-				return this.dataTableId;
+			if (this.datatableId) {
+				return this.datatableId;
 			}
-			this.dataTableId = await this.findDataTableIdByName(POLLY_DATA_TABLE_NAME);
-			return this.dataTableId;
+			this.datatableId = await this.findDataTableIdByName(POLLY_DATA_TABLE_NAME);
+			return this.datatableId;
 		},
 
 		async ensureMappingDataTableId(): Promise<string> {
@@ -166,6 +165,7 @@ export const useAppStore = defineStore("app", {
 			this.clientId = params.get("client_id");
 			// Ein expliziter Einstieg ohne Tabelle muss auch nach einer Installation ins Setup führen.
 			this.datatableId = params.get("datatable_id");
+			this.mappingDataTableId = params.get("mapping_datatable_id");
 
 			if (this.clientId) sessionStorage.setItem("gc_client_id", this.clientId);
 			if (this.datatableId)
