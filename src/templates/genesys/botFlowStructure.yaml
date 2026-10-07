@@ -274,38 +274,14 @@ botFlow:
           noValue: true
         isInput: true
         isOutput: true
-    - decimalVariable:
+    - stringVariable:
         name: Slot.nps
         initialValue:
           noValue: true
         isInput: true
         isOutput: true
     - stringVariable:
-        name: Slot.nps1
-        initialValue:
-          noValue: true
-        isInput: true
-        isOutput: true
-    - decimalVariable:
         name: Slot.rating
-        initialValue:
-          noValue: true
-        isInput: true
-        isOutput: true
-    - stringVariable:
-        name: Slot.rating_2
-        initialValue:
-          noValue: true
-        isInput: true
-        isOutput: true
-    - stringVariable:
-        name: Slot.rating1
-        initialValue:
-          noValue: true
-        isInput: true
-        isOutput: true
-    - stringVariable:
-        name: Slot.rating2
         initialValue:
           noValue: true
         isInput: true
@@ -608,11 +584,11 @@ botFlow:
                           - string:
                               variable: Flow.flow_next_question_id
                               value:
-                                exp: "if (ToInt(Slot.rating2) == ToInt(Task.rating_equals_value),\n    Task.rating_equals_next_question_id\n    ,\n    if (ToInt(Slot.rating2) < ToInt(Task.rating_less_than_value),\n        Task.rating_less_than_next_question_id\n        ,\n        if (ToInt(Slot.rating2) > ToInt(Task.rating_greater_than_value),\n            Task.rating_greater_than_next_question_id\n            ,\n            Flow.question_default_next_id\n        )\n    )\n)"
+                                exp: "if (ToInt(Slot.rating) == ToInt(Task.rating_equals_value),\n    Task.rating_equals_next_question_id\n    ,\n    if (ToInt(Slot.rating) < ToInt(Task.rating_less_than_value),\n        Task.rating_less_than_next_question_id\n        ,\n        if (ToInt(Slot.rating) > ToInt(Task.rating_greater_than_value),\n            Task.rating_greater_than_next_question_id\n            ,\n            Flow.question_default_next_id\n        )\n    )\n)"
                           - string:
                               variable: Flow.question_answer
                               value:
-                                exp: Slot.rating2
+                                exp: Slot.rating
                 maxNoInputs:
                   enabled: true
                   actions:
@@ -839,7 +815,7 @@ botFlow:
                           - string:
                               variable: Flow.flow_next_question_id
                               value:
-                                exp: "if (ToInt(Slot.nps1) == ToInt(Task.nps_equals_value),\n    Task.nps_equals_next_question_id,\n    if (ToInt(Slot.nps1) < ToInt(Task.nps_less_than_value),\n        Task.nps_less_than_next_question_id,\n        if (ToInt(Slot.nps1) > ToInt(Task.nps_greater_than_value),\n            Task.nps_greater_than_next_question_id,\n            Flow.question_default_next_id\n        )\n    )\n)"
+                                exp: "if (ToInt(Slot.nps) == ToInt(Task.nps_equals_value),\n    Task.nps_equals_next_question_id,\n    if (ToInt(Slot.nps) < ToInt(Task.nps_less_than_value),\n        Task.nps_less_than_next_question_id,\n        if (ToInt(Slot.nps) > ToInt(Task.nps_greater_than_value),\n            Task.nps_greater_than_next_question_id,\n            Flow.question_default_next_id\n        )\n    )\n)"
                           - string:
                               variable: Flow.question_answer
                               value:

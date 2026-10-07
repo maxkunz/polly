@@ -184,7 +184,6 @@
       </div>
     </div>
 
-    <Toast />
   </div>
 </template>
 
@@ -201,7 +200,6 @@ import InputText from "primevue/inputtext";
 import Select from "primevue/select";
 import ToggleSwitch from "primevue/toggleswitch";
 import Button from "primevue/button";
-import Toast from "primevue/toast";
 import { hasSetupResources, runFullProvisioning } from "@/services/SetupOrchestrator";
 import { runFullDelete } from "@/services/SetupUninstall";
 import { getErrorMessage } from "@/services/genesys/retry";

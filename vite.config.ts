@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api/archy-upload": {
-        target: "https://dev.ora.atip.cloud",
+        target: "https://setup-overhaul.d77tgb2vnvp15.amplifyapp.com",
         changeOrigin: true,
         secure: true,
       },

@@ -115,17 +115,9 @@ inboundCall:
                         noValue: true
                       Slot.nps:
                         noValue: true
-                      Slot.rating1:
-                        noValue: true
-                      Slot.nps1:
-                        noValue: true
-                      Slot.rating2:
-                        noValue: true
                       Slot.choice_type_test:
                         noValue: true
                       Slot.comment:
-                        noValue: true
-                      Slot.rating_2:
                         noValue: true
                       Flow.inbound_test:
                         noValue: true
@@ -140,17 +132,9 @@ inboundCall:
                         noValue: true
                       Slot.nps:
                         noValue: true
-                      Slot.rating1:
-                        noValue: true
-                      Slot.nps1:
-                        noValue: true
-                      Slot.rating2:
-                        noValue: true
                       Slot.choice_type_test:
                         noValue: true
                       Slot.comment:
-                        noValue: true
-                      Slot.rating_2:
                         noValue: true
                       Flow.inbound_test:
                         noValue: true
@@ -163,7 +147,7 @@ inboundCall:
           type: bot
           defaultLanguage: de-de
           variables:
-            - decimalVariable:
+            - stringVariable:
                 name: Slot.rating
                 isInput: true
                 isOutput: true
@@ -171,20 +155,8 @@ inboundCall:
                 name: Slot.choice
                 isInput: true
                 isOutput: true
-            - decimalVariable:
+            - stringVariable:
                 name: Slot.nps
-                isInput: true
-                isOutput: true
-            - stringVariable:
-                name: Slot.rating1
-                isInput: true
-                isOutput: true
-            - stringVariable:
-                name: Slot.nps1
-                isInput: true
-                isOutput: true
-            - stringVariable:
-                name: Slot.rating2
                 isInput: true
                 isOutput: true
             - stringVariable:
@@ -193,10 +165,6 @@ inboundCall:
                 isOutput: true
             - stringVariable:
                 name: Slot.comment
-                isInput: true
-                isOutput: true
-            - stringVariable:
-                name: Slot.rating_2
                 isInput: true
                 isOutput: true
             - stringVariable:

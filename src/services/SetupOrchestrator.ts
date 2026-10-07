@@ -180,6 +180,10 @@ export async function runFullProvisioning(
 
     await addDataTableRow(datatableId, buildEmptySurveyRow("__lock"));
     await addDataTableRow(datatableId, buildMetaRow({ appTitle: projectTag, setup: null }));
+    await addDataTableRow(datatableId, {
+      ...buildEmptySurveyRow("survey_list"),
+      Draft: "[]",
+    });
     onProgress(`Data table created (${datatableId})`);
 
     onProgress(`Preparing data table ${names.mappingDataTable}...`);
