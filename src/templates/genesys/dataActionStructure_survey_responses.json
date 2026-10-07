@@ -1,8 +1,9 @@
 {
   "config": {
+    "timeoutSeconds": 60,
     "request": {
       "requestType": "POST",
-      "requestTemplate": "{\"conversationId\":\"$esc.jsonString($input.conversationId)\",\"surveyId\":\"$esc.jsonString($input.surveyId)\"\n#if($input.surveyName)\n,\"surveyName\":\"$esc.jsonString($input.surveyName)\"\n#end\n#if($input.surveyVersion)\n,\"surveyVersion\":$input.surveyVersion\n#end\n#if($input.questionName)\n,\"questionName\":\"$esc.jsonString($input.questionName)\"\n#end\n#if($input.questionType)\n,\"questionType\":\"$esc.jsonString($input.questionType)\"\n#end\n#if($input.value)\n#if($input.questionType == \"rating\" || $input.questionType == \"nps\" || $input.questionType == \"yes_no\")\n,\"value\":$input.value\n#else\n,\"value\":\"$esc.jsonString($input.value)\"\n#end\n#end\n#if($input.isCompleted)\n,\"isCompleted\":$input.isCompleted\n#end\n}",
+      "requestTemplate": "{\n  \"conversationId\": \"${input.conversationId}\",\n  \"surveyId\": \"${input.surveyId}\",\n  \"surveyName\": \"${input.surveyName}\",\n  \"surveyVersion\": ${input.surveyVersion},\n  \"questionName\": \"${input.questionName}\",\n  \"questionType\": \"${input.questionType}\",\n  \"value\": \"${input.value}\",\n  \"isCompleted\": ${input.isCompleted}\n}",
       "requestUrlTemplate": "{{DOMAIN_NAME}}/api/survey-responses",
       "headers": {
         "Content-Type": "application/json",
@@ -10,17 +11,9 @@
       }
     },
     "response": {
-      "translationMap": {
-        "message": "$.message",
-        "status": "$.session.status",
-        "responseId": "$.session.responseId"
-      },
-      "translationMapDefaults": {
-        "message": "''",
-        "status": "''",
-        "responseId": "''"
-      },
-      "successTemplate": "{\"message\": \"$message\", \"status\": \"$status\", \"responseId\": \"$responseId\"}"
+      "translationMap": {},
+      "translationMapDefaults": {},
+      "successTemplate": "${rawResult}"
     }
   },
   "contract": {
@@ -36,18 +29,13 @@
           "questionType": { "type": "string" },
           "value": { "type": "string" },
           "isCompleted": { "type": "boolean" }
-        },
-        "required": ["conversationId", "surveyId"]
+        }
       }
     },
     "output": {
       "successSchema": {
         "type": "object",
-        "properties": {
-          "message": { "type": "string" },
-          "status": { "type": "string" },
-          "responseId": { "type": "string" }
-        }
+        "properties": {}
       }
     }
   }

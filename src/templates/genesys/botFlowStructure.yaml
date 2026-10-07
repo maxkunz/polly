@@ -1,0 +1,1457 @@
+botFlow:
+  name: {{BOTFLOW_NAME}}
+  description: Bot Flow for Polly
+  division: {{DIVISION_NAME}}
+  startUpRef: "/botFlow/bots/bot[Default Bot_10]"
+  defaultLanguage: de-de
+  supportedLanguages:
+    de-de:
+      defaultLanguageSkill:
+        noValue: true
+      speechToText:
+        engine:
+          name: Microsoft Azure
+          defaultEngine: true
+  variables:
+    - stringVariable:
+        name: Flow.data_table_value
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.data_table_value_draft
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.data_table_value_prod
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.data_table_value_stage
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - booleanVariable:
+        name: Flow.flow_is_finished
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.flow_next_question_id
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringCollectionVariable:
+        name: Flow.flow_rating_values
+        initialValue:
+          lit:
+            - lit: "0"
+            - lit: "1"
+            - lit: "2"
+            - lit: "3"
+            - lit: "4"
+            - lit: "5"
+            - lit: "6"
+            - lit: "7"
+            - lit: "8"
+        isInput: false
+        isOutput: false
+    - jsonVariable:
+        name: Flow.flow_reporting_question_result
+        initialValue:
+          lit: "{}"
+        isInput: false
+        isOutput: false
+    - jsonCollectionVariable:
+        name: Flow.flow_reporting_question_results
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - jsonVariable:
+        name: Flow.flow_reporting_result
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.inbound_called_address
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: false
+    - stringVariable:
+        name: Flow.inbound_queue_name
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: false
+    - stringVariable:
+        name: Flow.inbound_test
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - integerVariable:
+        name: Flow.loop_counter
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.mapped_survey_id
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - jsonVariable:
+        name: Flow.question
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_answer
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_default_next_id
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_id
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringCollectionVariable:
+        name: Flow.question_labels
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - integerVariable:
+        name: Flow.question_loop_counter
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - booleanVariable:
+        name: Flow.question_mandatory
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_name
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_prompt
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_reprompt
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringCollectionVariable:
+        name: Flow.question_synonyms
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.question_type
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - jsonVariable:
+        name: Flow.survey
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_closing
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_created_at
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_description
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_greeting
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_id
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_name
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - integerVariable:
+        name: Flow.survey_question_count
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - jsonCollectionVariable:
+        name: Flow.survey_questions
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_title
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_updated_at
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Flow.survey_version
+        initialValue:
+          noValue: true
+        isInput: false
+        isOutput: false
+    - stringVariable:
+        name: Slot.choice
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - stringVariable:
+        name: Slot.choice_type_test
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - stringVariable:
+        name: Slot.comment
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - decimalVariable:
+        name: Slot.nps
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - stringVariable:
+        name: Slot.nps1
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - decimalVariable:
+        name: Slot.rating
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - stringVariable:
+        name: Slot.rating_2
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - stringVariable:
+        name: Slot.rating1
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+    - stringVariable:
+        name: Slot.rating2
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
+  settingsActionDefaults:
+    askForIntent:
+      voiceEndOfInputTimeout:
+        lit:
+          seconds: 1
+    askForSlot:
+      voiceEndOfInputTimeout:
+        lit:
+          seconds: 1
+    askForBoolean:
+      voiceEndOfInputTimeout:
+        lit:
+          seconds: 1
+    loopAnythingElse:
+      voiceEndOfInputTimeout:
+        lit:
+          seconds: 1
+  settingsErrorHandling:
+    errorHandling:
+      exit:
+        none: true
+    enableAgentEscalation:
+      lit: true
+    errorEventHandover:
+      exp: "MakeCommunication(\n  \"Leider ist ein Fehler aufgetreten. Bitte warten Sie kurz, ich werde Sie zu einer Person durchstellen, die Ihnen helfen kann.\")"
+    agentEscalationConfirmation:
+      exp: "MakeCommunication(\n  \"Sie möchten mit einem Berater sprechen. Ist das richtig?\")"
+    agentEscalationHandover:
+      exp: "MakeCommunication(\n  \"Bitte warten Sie kurz, ich werde Sie durchstellen.\")"
+    recognitionFailureEventHandover:
+      exp: "MakeCommunication(\n  \"Ich kann Sie leider nur schlecht verstehen. Bitte warten Sie kurz, ich werde Sie zu einer Person durchstellen, die Ihnen helfen kann.\")"
+    recognitionFailureEventHandling:
+      exit:
+        none: true
+    agentEscalationHandling:
+      exit:
+        none: true
+  settingsPrompts:
+    ensureAudioInPrompts: false
+    promptMediaToValidate:
+      - mediaType: audio
+      - mediaType: tts
+  tasks:
+    - task:
+        name: yes_no_question
+        refId: yes_no_question_15
+        actions:
+          - updateData:
+              name: update data before yes-no question
+              statements:
+                - string:
+                    variable: Flow.flow_next_question_id
+                    value:
+                      exp: Flow.question_default_next_id
+                - json:
+                    variable: Flow.flow_reporting_question_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_question_result, "id", Flow.question_id)
+                - json:
+                    variable: Flow.flow_reporting_question_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_question_result, "name", Flow.question_name)
+                - string:
+                    variable: Flow.question_answer
+                    value:
+                      exp: NOT_SET
+          - askForBoolean:
+              name: ask for yes-no
+              question:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
+              noInput:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              noMatch:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              voiceEndOfInputTimeout:
+                noValue: true
+              outputs:
+                "yes":
+                  actions:
+                    - updateData:
+                        name: update after yes-no after yes
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (ToString(Flow.question.options.yes_next_question_id) == \"null\", \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.yes_next_question_id)\n)"
+                          - json:
+                              variable: Flow.flow_reporting_question_result
+                              value:
+                                exp: SetJsonObjectProperty(Flow.flow_reporting_question_result, "result", "yes")
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                lit: yes
+                "no":
+                  actions:
+                    - updateData:
+                        name: update after yes-no after no
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (ToString(Flow.question.options.no_next_question_id) == \"null\", \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.no_next_question_id)\n)"
+                          - json:
+                              variable: Flow.flow_reporting_question_result
+                              value:
+                                exp: SetJsonObjectProperty(Flow.flow_reporting_question_result, "result", "no")
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                lit: no
+                maxNoInputs:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: Call Task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                maxNoMatches:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: Call Task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+          - updateData:
+              name: Update Data after yesno question
+              statements:
+                - string:
+                    variable: Flow.flow_next_question_id
+                    value:
+                      exp: "if (Flow.flow_next_question_id == \"null\",\n\tNOT_SET\n\t,\n\tFlow.flow_next_question_id\n)"
+          - endTask:
+              name: End Task
+              outputPath:
+                name: default
+    - task:
+        name: goodbye_and_exit
+        refId: goodbye_and_exit_17
+        actions:
+          - communicate:
+              name: goodbye prompt
+              communication:
+                exp: "MakeCommunication(\n  \"Vielen Dank, dass sie sich Zeit für uns genommen haben.\")"
+          - exitBotFlow:
+              name: Exit Bot Flow
+    - task:
+        name: question_loop
+        refId: question_loop_29
+        actions:
+          - loop:
+              name: Question Loop
+              currentIndex:
+                var: Flow.question_loop_counter
+              loopCount:
+                exp: Flow.survey_question_count
+              outputs:
+                loop:
+                  actions:
+                    - updateData:
+                        name: Update Data
+                        statements:
+                          - json:
+                              variable: Flow.question
+                              value:
+                                exp: Flow.survey_questions[Flow.question_loop_counter]
+                    - decision:
+                        name: Decision
+                        condition:
+                          exp: ToString(Flow.question.id) == Flow.flow_next_question_id
+                        outputs:
+                          "yes":
+                            actions:
+                              - loopExit:
+                                  name: Exit Loop
+          - endTask:
+              name: End Task
+              outputPath:
+                name: default
+    - task:
+        name: rating_question
+        refId: rating_question_46
+        variables:
+          - stringVariable:
+              name: Task.rating_equals_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.rating_equals_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - stringVariable:
+              name: Task.rating_greater_than_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.rating_greater_than_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - stringVariable:
+              name: Task.rating_less_than_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.rating_less_than_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.rating_max_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.rating_min_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+        actions:
+          - updateData:
+              name: update data before rating question
+              statements:
+                - integer:
+                    variable: Task.rating_min_value
+                    value:
+                      exp: ToInt(Flow.question.options.min_value)
+                - integer:
+                    variable: Task.rating_max_value
+                    value:
+                      exp: ToInt(Flow.question.options.max_value)
+                - integer:
+                    variable: Task.rating_equals_value
+                    value:
+                      exp: ToInt(Flow.question.conditional_next_question[0].value)
+                - integer:
+                    variable: Task.rating_less_than_value
+                    value:
+                      exp: ToInt(Flow.question.conditional_next_question[1].value)
+                - integer:
+                    variable: Task.rating_greater_than_value
+                    value:
+                      exp: ToInt(Flow.question.conditional_next_question[2].value)
+                - string:
+                    variable: Task.rating_equals_next_question_id
+                    value:
+                      exp: ToString(Flow.question.conditional_next_question[0].next_question_id)
+                - string:
+                    variable: Task.rating_less_than_next_question_id
+                    value:
+                      exp: ToString(Flow.question.conditional_next_question[1].next_question_id)
+                - string:
+                    variable: Task.rating_greater_than_next_question_id
+                    value:
+                      exp: ToString(Flow.question.conditional_next_question[2].next_question_id)
+                - stringCollection:
+                    variable: Flow.flow_rating_values
+                    value:
+                      exp: "Split(\n  Replace(\n    Replace(\n      Replace(\n        ToString(GetJsonObjectProperty(Flow.question.options, \"values\")), \n        \"[\", \"\"\n      ), \n      \"]\", \"\"\n    ), \n    \"\\\"\", \"\"\n  ), \n  \",\"\n)"
+                - string:
+                    variable: Flow.question_answer
+                    value:
+                      exp: NOT_SET
+          - askForSlot:
+              name: ask for rating
+              slot:
+                name: rating
+              question:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
+              customValidation:
+                noValue: true
+              confirmationMode:
+                lit: never
+              noInput:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              noMatch:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              voiceEndOfInputTimeout:
+                noValue: true
+              outputs:
+                default:
+                  actions:
+                    - updateData:
+                        name: update after rating question
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (ToInt(Slot.rating2) == ToInt(Task.rating_equals_value),\n    Task.rating_equals_next_question_id\n    ,\n    if (ToInt(Slot.rating2) < ToInt(Task.rating_less_than_value),\n        Task.rating_less_than_next_question_id\n        ,\n        if (ToInt(Slot.rating2) > ToInt(Task.rating_greater_than_value),\n            Task.rating_greater_than_next_question_id\n            ,\n            Flow.question_default_next_id\n        )\n    )\n)"
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                exp: Slot.rating2
+                maxNoInputs:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call Task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                maxNoMatches:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call Task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                skipResponseCapture:
+                  enabled: false
+          - endTask:
+              name: End Rating Task
+              outputPath:
+                name: default
+    - task:
+        name: choice_question
+        refId: choice_question_50
+        variables:
+          - stringVariable:
+              name: Task.choice_default_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.choice_label_index
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - stringCollectionVariable:
+              name: Task.choice_next_question_ids
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+        actions:
+          - updateData:
+              name: update data before choice question
+              statements:
+                - string:
+                    variable: Flow.question_answer
+                    value:
+                      exp: NOT_SET
+                - stringCollection:
+                    variable: Task.choice_next_question_ids
+                    value:
+                      exp: "Split(\n  Replace(\n    Replace(\n      Replace(\n        ToString(GetJsonObjectProperty(Flow.question, \"next_question_ids\")), \n        \"[\", \"\"\n      ), \n      \"]\", \"\"\n    ), \n    \"\\\"\", \"\"\n  ), \n  \",\"\n)"
+                - string:
+                    variable: Task.choice_default_next_question_id
+                    value:
+                      exp: Flow.question_default_next_id
+                - stringCollection:
+                    variable: Flow.question_labels
+                    value:
+                      exp: "Split(\n  Replace(\n    Replace(\n      Replace(\n        ToString(GetJsonObjectProperty(Flow.question, \"labels\")), \n        \"[\", \"\"\n      ), \n      \"]\", \"\"\n    ), \n    \"\\\"\", \"\"\n  ), \n  \",\"\n)"
+                - stringCollection:
+                    variable: Flow.question_synonyms
+                    value:
+                      exp: "Split(\n  Replace(\n    Replace(\n      Replace(\n        Replace(\n          Replace(\n            ToString(GetJsonObjectProperty(Flow.question, \"synonyms\")),\n            \"[\", \"\"\n          ), \n          \"]\", \"\"\n        ), \n        \"\\\"\", \"\"\n      ),\n      \",\", \"|\"\n    ),\n    \";\", \",\"\n  ), \n  \"|\"\n)"
+          - askForSlot:
+              name: ask choice
+              slot:
+                name: choice
+              question:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
+              customValidation:
+                noValue: true
+              confirmationMode:
+                lit: never
+              customizeNoInput:
+                noInputReprompts:
+                  lit: []
+              noMatch:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              voiceEndOfInputTimeout:
+                noValue: true
+              outputs:
+                default:
+                  actions:
+                    - updateData:
+                        name: udate data after choice question
+                        statements:
+                          - integer:
+                              variable: Task.choice_label_index
+                              value:
+                                exp: FindFirst(Flow.question_labels, Slot.choice)
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if(Task.choice_next_question_ids[Task.choice_label_index] == \"null\"\n\t, \n\tNOT_SET\n\t, \n\tTask.choice_next_question_ids[Task.choice_label_index]\n)"
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if(IsNotSetOrEmpty(Flow.flow_next_question_id), \n\tFlow.question_default_next_id\n\t, \n\tFlow.flow_next_question_id\n)\n"
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if(IsNotSetOrEmpty(Flow.flow_next_question_id)\n\t,\n\tNOT_SET\n\t, \n\tFlow.flow_next_question_id\n)"
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                exp: Slot.choice
+                maxNoInputs:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                maxNoMatches:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                skipResponseCapture:
+                  enabled: false
+          - endTask:
+              name: End Task
+              outputPath:
+                name: default
+    - task:
+        name: nps_question
+        refId: nps_question_53
+        variables:
+          - stringVariable:
+              name: Task.nps_equals_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.nps_equals_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - stringVariable:
+              name: Task.nps_greater_than_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.nps_greater_than_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - stringVariable:
+              name: Task.nps_less_than_next_question_id
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+          - integerVariable:
+              name: Task.nps_less_than_value
+              initialValue:
+                noValue: true
+              isInput: false
+              isOutput: false
+        actions:
+          - updateData:
+              name: update data before nps question
+              statements:
+                - string:
+                    variable: Flow.question_answer
+                    value:
+                      exp: NOT_SET
+                - integer:
+                    variable: Task.nps_equals_value
+                    value:
+                      exp: ToInt(Flow.question.conditional_next_question[0].value)
+                - integer:
+                    variable: Task.nps_less_than_value
+                    value:
+                      exp: ToInt(Flow.question.conditional_next_question[1].value)
+                - integer:
+                    variable: Task.nps_greater_than_value
+                    value:
+                      exp: ToInt(Flow.question.conditional_next_question[2].value)
+                - string:
+                    variable: Task.nps_equals_next_question_id
+                    value:
+                      exp: ToString(Flow.question.conditional_next_question[0].next_question_id)
+                - string:
+                    variable: Task.nps_less_than_next_question_id
+                    value:
+                      exp: ToString(Flow.question.conditional_next_question[1].next_question_id)
+                - string:
+                    variable: Task.nps_greater_than_next_question_id
+                    value:
+                      exp: ToString(Flow.question.conditional_next_question[2].next_question_id)
+          - askForSlot:
+              name: ask for nps
+              slot:
+                name: nps
+              question:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
+              customValidation:
+                noValue: true
+              confirmationMode:
+                lit: never
+              noInput:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              noMatch:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              voiceEndOfInputTimeout:
+                noValue: true
+              outputs:
+                default:
+                  actions:
+                    - updateData:
+                        name: update data after NPS question
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (Flow.question_default_next_id == \"null\",\n    NOT_SET\n    ,\n    Flow.question_default_next_id\n)"
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (ToInt(Slot.nps1) == ToInt(Task.nps_equals_value),\n    Task.nps_equals_next_question_id,\n    if (ToInt(Slot.nps1) < ToInt(Task.nps_less_than_value),\n        Task.nps_less_than_next_question_id,\n        if (ToInt(Slot.nps1) > ToInt(Task.nps_greater_than_value),\n            Task.nps_greater_than_next_question_id,\n            Flow.question_default_next_id\n        )\n    )\n)"
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                exp: ToString(Slot.nps)
+                maxNoInputs:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                maxNoMatches:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                skipResponseCapture:
+                  enabled: false
+          - endTask:
+              name: End Task
+              outputPath:
+                name: default
+    - task:
+        name: comment_question
+        refId: comment_question_81
+        actions:
+          - updateData:
+              name: update date before comment question
+              statements:
+                - string:
+                    variable: Flow.question_answer
+                    value:
+                      exp: NOT_SET
+          - askForSlot:
+              name: Ask for Slot
+              slot:
+                name: comment
+              question:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
+              customValidation:
+                noValue: true
+              confirmationMode:
+                lit: never
+              noInput:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              noMatch:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              voiceEndOfInputTimeout:
+                lit:
+                  seconds: 1
+              outputs:
+                default:
+                  actions:
+                    - updateData:
+                        name: Update Data
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (Flow.question_default_next_id == \"null\",\n    NOT_SET\n    ,\n    Flow.question_default_next_id\n)"
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                exp: Slot.comment
+                maxNoInputs:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                maxNoMatches:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: call task check mandatory question
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                skipResponseCapture:
+                  enabled: false
+          - endTask:
+              name: End Task
+              outputPath:
+                name: default
+    - task:
+        name: check_mandatory_question
+        refId: check_mandatory_question_104
+        actions:
+          - decision:
+              name: Decision
+              condition:
+                exp: Flow.question_mandatory == true
+              outputs:
+                "yes":
+                  actions:
+                    - callTask:
+                        name: Call Task
+                        targetTaskRef: "/botFlow/tasks/task[goodbye_and_exit_17]"
+                "no":
+                  actions:
+                    - updateData:
+                        name: Update after rating NI
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: Flow.question_default_next_id
+          - endTask:
+              name: End Task
+              outputPath:
+                name: default
+    - task:
+        name: error_and_exit
+        refId: error_and_exit_120
+        actions:
+          - communicate:
+              name: Communicate
+              communication:
+                exp: "MakeCommunication(\n  \"Oh, da ist etwas schief gegangen.\")"
+          - exitBotFlow:
+              name: Exit Bot Flow
+  settingsBotFlow:
+    voiceProcessingPrompt:
+      lit:
+        name: PromptSystem.connecting_vibe
+    initialPlaybackDelay:
+      lit:
+        ms: 250
+    minimumPlaybackTime:
+      lit:
+        seconds: 1
+    dynamicSlotTypes:
+      - dynamicSlotType:
+          name: choice_type
+          values:
+            exp: Flow.question_labels
+          synonyms:
+            exp: Flow.question_synonyms
+      - dynamicSlotType:
+          name: rating_type
+          values:
+            exp: Flow.flow_rating_values
+          synonyms:
+            noValue: true
+      - dynamicSlotType:
+          name: yes_no_type
+          values:
+            lit:
+              - lit: ja
+              - lit: nein
+          synonyms:
+            lit:
+              - lit: yes, jo, jup, Genau, stimmt, klar, sicher, 1
+              - lit: no, nop, nee, 2
+  settingsUserInput:
+    enableBargeIn:
+      lit: true
+    enableAutomaticQuickReplies:
+      lit: true
+    noMatchesMax:
+      lit: 2
+    noInputsMax:
+      lit: 2
+    noInputsTimeout:
+      lit:
+        seconds: 7
+    speechToTextSpeechDetectionSensitivity:
+      noValue: true
+    speechToTextMaxSpeechTimeout:
+      noValue: true
+    speechToTextAdvancedConfiguration:
+      noValue: true
+    enableIntentClassificationHinting:
+      lit: false
+    interDigitTimeout:
+      lit:
+        seconds: 3
+    dtmfTerminatingCharacter:
+      noValue: true
+    confirmationRejectionsMax:
+      lit: 3
+    collectionLowConfidenceThreshold:
+      lit: 20
+    collectionHighConfidenceThreshold:
+      lit: 70
+    confirmationLowConfidenceThreshold:
+      lit: 40
+    noMatchApology:
+      exp: "MakeCommunication(\n  ToCommunication(NOT_SET))"
+    noInputApology:
+      exp: "MakeCommunication(\n  ToCommunication(NOT_SET))"
+    noToConfirmationApology:
+      exp: "MakeCommunication(\n  \"Mir ist ein Fehler unterlaufen.\")"
+    confirmationNoMatchApology:
+      exp: "MakeCommunication(\n  \"Bitte antworten Sie mit 'Ja' oder 'Nein'.\")"
+    confirmationNoInputApology:
+      exp: "MakeCommunication(\n  \"Ich habe Sie leider nicht gehört. Bitte antworten Sie mit 'Ja' oder 'Nein'.\")"
+  settingsKnowledge:
+    none: true
+  bots:
+    - bot:
+        name: Default Bot
+        refId: Default Bot_10
+        actions:
+          - updateData:
+              name: Update Data
+              statements:
+                - string:
+                    variable: Flow.inbound_called_address
+                    value:
+                      exp: if(IsNotSetOrEmpty(Flow.inbound_called_address), "+496956516", Flow.inbound_called_address)
+          - dataTableLookup:
+              name: Data Table Lookup
+              lookupValue:
+                exp: if(IsNotSetOrEmpty(Flow.inbound_queue_name), Flow.inbound_called_address, Flow.inbound_queue_name)
+              dataTable:
+                {{MAPPING_DATA_TABLE_NAME}}:
+                  foundOutputs:
+                    DeliveryRate:
+                      noValue: true
+                    SurveyId:
+                      var: Flow.mapped_survey_id
+                  failureOutputs:
+                    errorType:
+                      noValue: true
+                    errorMessage:
+                      noValue: true
+              outputs:
+                notFound:
+                  actions:
+                    - callTask:
+                        name: Call Task
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                failure:
+                  actions:
+                    - callTask:
+                        name: Call Task
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+          - dataTableLookup:
+              name: data table lookup
+              lookupValue:
+                exp: "\"survey_\" + Flow.mapped_survey_id"
+              dataTable:
+                {{DATA_TABLE_NAME}}:
+                  foundOutputs:
+                    Draft:
+                      var: Flow.data_table_value_draft
+                    Stage:
+                      var: Flow.data_table_value_stage
+                    Prod:
+                      var: Flow.data_table_value_prod
+                    Backup:
+                      noValue: true
+                    lock:
+                      noValue: true
+                  failureOutputs:
+                    errorType:
+                      noValue: true
+                    errorMessage:
+                      noValue: true
+              outputs:
+                found:
+                  actions:
+                    - updateData:
+                        name: parse survey
+                        statements:
+                          - string:
+                              variable: Flow.data_table_value
+                              value:
+                                exp: if(IsNotSetOrEmpty(Flow.inbound_queue_name), Flow.data_table_value_stage, Flow.data_table_value_prod)
+                          - json:
+                              variable: Flow.survey
+                              value:
+                                exp: ToJson(Flow.data_table_value)
+                          - jsonCollection:
+                              variable: Flow.survey_questions
+                              value:
+                                exp: ToJsonCollection(Flow.survey.questions)
+                          - integer:
+                              variable: Flow.survey_question_count
+                              value:
+                                exp: count(Flow.survey_questions)
+                          - string:
+                              variable: Flow.survey_id
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "id"))
+                          - string:
+                              variable: Flow.survey_title
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "title"))
+                          - string:
+                              variable: Flow.survey_name
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "name"))
+                          - string:
+                              variable: Flow.survey_description
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "description"))
+                          - string:
+                              variable: Flow.survey_greeting
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "greeting_prompt"))
+                          - string:
+                              variable: Flow.survey_closing
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "closing_prompt"))
+                          - string:
+                              variable: Flow.survey_created_at
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "created_at"))
+                          - string:
+                              variable: Flow.survey_updated_at
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "updated_at"))
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "start_question_id"))
+                          - string:
+                              variable: Flow.survey_version
+                              value:
+                                exp: ToString(GetJsonObjectProperty(Flow.survey, "version"))
+                notFound:
+                  actions:
+                    - callTask:
+                        name: call error task
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                failure:
+                  actions:
+                    - callTask:
+                        name: call error task
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+          - communicate:
+              name: welcome
+              communication:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.survey_greeting))"
+          - updateData:
+              name: init reporting
+              statements:
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: "JsonParse(\n  \"{}\"\n)"
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "id", Flow.survey_id)
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "name", Flow.survey_name)
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "title", Flow.survey_title)
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "created_at", Flow.survey_created_at)
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "updated_at", Flow.survey_updated_at)
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "version", toInt(Flow.survey_version))
+                - json:
+                    variable: Flow.flow_reporting_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_result, "question_results", Flow.flow_reporting_question_results)
+          - setParticipantData:
+              name: Set Participant Data
+              attributes:
+                - attribute:
+                    name:
+                      lit: reporting_results
+                    value:
+                      exp: ToString(Flow.flow_reporting_result)
+          - loop:
+              name: loop over questions
+              currentIndex:
+                var: Flow.loop_counter
+              loopCount:
+                exp: Flow.survey_question_count
+              outputs:
+                loop:
+                  actions:
+                    - callTask:
+                        name: get question
+                        targetTaskRef: "/botFlow/tasks/task[question_loop_29]"
+                        outputs:
+                          default:
+                            actions:
+                              - updateData:
+                                  name: update question data
+                                  statements:
+                                    - string:
+                                        variable: Flow.question_id
+                                        value:
+                                          exp: ToString(Flow.question.id)
+                                    - string:
+                                        variable: Flow.question_name
+                                        value:
+                                          exp: ToString(Flow.question.name)
+                                    - string:
+                                        variable: Flow.question_type
+                                        value:
+                                          exp: ToString(Flow.question.type)
+                                    - string:
+                                        variable: Flow.question_prompt
+                                        value:
+                                          exp: ToString(Flow.question.prompt)
+                                    - string:
+                                        variable: Flow.question_reprompt
+                                        value:
+                                          exp: ToString(Flow.question.reprompt)
+                                    - boolean:
+                                        variable: Flow.question_mandatory
+                                        value:
+                                          exp: ToBool(Flow.question.mandatory)
+                                    - string:
+                                        variable: Flow.question_default_next_id
+                                        value:
+                                          exp: ToString(Flow.question.default_next_question_id)
+                    - switch:
+                        name: question type switch
+                        evaluate:
+                          firstTrue:
+                            default:
+                              actions:
+                                - callTask:
+                                    name: comment
+                                    targetTaskRef: "/botFlow/tasks/task[comment_question_81]"
+                                    outputs:
+                                      default:
+                                        actions:
+                                          - clearSlot:
+                                              name: Clear Slot
+                                              slots:
+                                                - slot:
+                                                    name: comment
+                            cases:
+                              - case:
+                                  value:
+                                    exp: Flow.question_type == "choice"
+                                  actions:
+                                    - callTask:
+                                        name: choice
+                                        targetTaskRef: "/botFlow/tasks/task[choice_question_50]"
+                                        outputs:
+                                          default:
+                                            actions:
+                                              - clearSlot:
+                                                  name: Clear Slot
+                                                  slots:
+                                                    - slot:
+                                                        name: choice
+                              - case:
+                                  value:
+                                    exp: Flow.question_type == "rating"
+                                  actions:
+                                    - callTask:
+                                        name: rating
+                                        targetTaskRef: "/botFlow/tasks/task[rating_question_46]"
+                                        outputs:
+                                          default:
+                                            actions:
+                                              - clearSlot:
+                                                  name: Clear Slot
+                                                  slots:
+                                                    - slot:
+                                                        name: rating
+                              - case:
+                                  value:
+                                    exp: Flow.question_type == "yes_no"
+                                  actions:
+                                    - callTask:
+                                        name: yes no
+                                        targetTaskRef: "/botFlow/tasks/task[yes_no_question_15]"
+                              - case:
+                                  value:
+                                    exp: Flow.question_type == "nps"
+                                  actions:
+                                    - callTask:
+                                        name: nps
+                                        targetTaskRef: "/botFlow/tasks/task[nps_question_53]"
+                                        outputs:
+                                          default:
+                                            actions:
+                                              - clearSlot:
+                                                  name: Clear Slot
+                                                  slots:
+                                                    - slot:
+                                                        name: nps
+                    - updateData:
+                        name: update date after question
+                        statements:
+                          - boolean:
+                              variable: Flow.flow_is_finished
+                              value:
+                                exp: IsNotSetOrEmpty(Flow.flow_next_question_id) or Flow.flow_next_question_id == "null"
+                    - callData:
+                        name: submit results
+                        timeout:
+                          lit:
+                            minutes: 1
+                        category:
+                          {{INTEGRATION_NAME}}:
+                            dataAction:
+                              {{DA_PREFIX}}_submit_survey_response:
+                                inputs:
+                                  conversationId:
+                                    exp: Session.ConversationId
+                                  surveyId:
+                                    exp: Flow.survey_id
+                                  surveyName:
+                                    exp: Flow.survey_name
+                                  surveyVersion:
+                                    exp: ToInt(Flow.survey_version)
+                                  questionName:
+                                    exp: Flow.question_name
+                                  questionType:
+                                    exp: Flow.question_type
+                                  value:
+                                    exp: if(IsNotSetOrEmpty(Flow.question_answer), "not answered", Flow.question_answer)
+                                  isCompleted:
+                                    exp: Flow.flow_is_finished
+                                failureOutputs:
+                                  errorCode:
+                                    noValue: true
+                                  status:
+                                    noValue: true
+                                  correlationId:
+                                    noValue: true
+                                  entityId:
+                                    noValue: true
+                                  entityName:
+                                    noValue: true
+                                  userMessage:
+                                    noValue: true
+                                  userParamsMessage:
+                                    noValue: true
+                                  userParams.key:
+                                    noValue: true
+                                  userParams.value:
+                                    noValue: true
+                                  details.errorCode:
+                                    noValue: true
+                                  details.fieldName:
+                                    noValue: true
+                                  details.entityId:
+                                    noValue: true
+                                  details.entityName:
+                                    noValue: true
+                        outputs:
+                          failure:
+                            actions:
+                              - callTask:
+                                  name: Call Task
+                                  targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                          timeout:
+                            actions:
+                              - callTask:
+                                  name: Call Task
+                                  targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                    - decision:
+                        name: exit loop decision
+                        condition:
+                          exp: Flow.flow_is_finished
+                        outputs:
+                          "yes":
+                            actions:
+                              - loopExit:
+                                  name: Exit Loop
+          - communicate:
+              name: Communicate
+              communication:
+                exp: "MakeCommunication(\n  \"Vielen Dank, dass sie sich Zeit für uns genommen haben.\")"
+          - exitBotFlow:
+              name: Exit Bot Flow
+  settingsNaturalLanguageUnderstanding:
+    nluDomainVersion:
+      intents: []
+      entities:
+        - name: choice
+          type: choice_type
+        - name: comment
+          type: "builtin:any"
+        - name: nps
+          type: nps_type
+        - name: rating
+          type: rating_type
+      entityTypes:
+        - name: choice_type
+          description: The description of the Entity Type "choice_type"
+          mechanism:
+            type: DynamicList
+        - name: nps_type
+          description: The description of the Entity Type "nps_type"
+          mechanism:
+            type: Regex
+            restricted: true
+            items:
+              - value: 10|[0-9]
+                synonyms: []
+        - name: rating_type
+          description: The description of the Entity Type "rating_type"
+          mechanism:
+            type: DynamicList
+        - name: yes_no_type
+          description: The description of the Entity Type "yes_no_type"
+          mechanism:
+            type: DynamicList
+      language: de-de
+      languageVersions: {}
+    mutedUtterances: []
