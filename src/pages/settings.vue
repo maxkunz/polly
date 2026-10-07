@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 
@@ -12,6 +12,7 @@ import { useAppStore } from "@/stores/appStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
 import { setLocale, type SupportedLocale } from "@/i18n";
+import { startBotFlowUpdate, startInboundFlowUpdate } from "@/services/SetupExportFlow";
 
 const app = useAppStore();
 const router = useRouter();
@@ -36,6 +37,26 @@ const selectedLocale = computed<SupportedLocale>({
 });
 
 const setup = computed(() => app.domain.meta.setup ?? null);
+const isExporting = ref(false);
+
+async function exportTemplateConfig() {
+	if (!app.devView || isExporting.value) return;
+	isExporting.value = true;
+	try {
+		const currentSetup = setup.value;
+		if (!currentSetup?.botFlow?.id || !currentSetup.botFlow.name || !currentSetup.inboundFlow?.id || !currentSetup.inboundFlow.name) {
+			throw new Error("Botflow oder Inbound-Flow fehlen in den Setup-Metadaten.");
+		}
+		await startBotFlowUpdate(currentSetup.botFlow.id, currentSetup.botFlow.name);
+		await startInboundFlowUpdate(currentSetup.inboundFlow.id, currentSetup.inboundFlow.name);
+		alert("Botflow und Inbound-Flow wurden mit Platzhaltern exportiert.");
+	} catch (error: any) {
+		console.error("Flow-Export fehlgeschlagen:", error);
+		alert(error?.message || "Fehler beim Flow-Export.");
+	} finally {
+		isExporting.value = false;
+	}
+}
 
 const setupRows = computed(() => {
 	const currentSetup = setup.value;
@@ -136,12 +157,25 @@ function startUninstall() {
 							<div class="text-sm text-[var(--p-text-muted-color)]">
 								{{ t("settings.setup.uninstallHint") }}
 							</div>
-							<Button
-								:label="t('settings.setup.uninstall')"
-								icon="pi pi-trash"
-								severity="danger"
-								@click="startUninstall"
-							/>
+							<div class="flex items-center gap-2">
+								<Button
+									v-if="app.devView"
+									label="Flow-Templates exportieren"
+									icon="pi pi-download"
+									severity="secondary"
+									text
+									size="small"
+									:loading="isExporting"
+									:disabled="isExporting"
+									@click="exportTemplateConfig"
+								/>
+								<Button
+									:label="t('settings.setup.uninstall')"
+									icon="pi pi-trash"
+									severity="danger"
+									@click="startUninstall"
+								/>
+							</div>
 						</div>
 					</div>
 				</template>
