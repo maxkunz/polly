@@ -84,12 +84,21 @@ export const appTheme = definePreset(Aura, {
 					},
 					outlined: {
 						secondary: { color: '{surface.600}' },
-						danger: { color: '{red.600}' }
+						danger: { color: '{red.700}' }
 					},
 					text: {
 						secondary: { color: '{surface.600}' },
-						danger: { color: '{red.600}' }
+						danger: { color: '{red.700}' }
 					}
+				}
+			}
+		},
+		// SelectButton (z. B. Auslieferungsrate): nicht gewählte Optionen sonst nur ~4.3:1
+		togglebutton: {
+			colorScheme: {
+				light: {
+					root: { color: '{surface.600}' },
+					icon: { color: '{surface.600}' }
 				}
 			}
 		},
