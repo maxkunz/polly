@@ -1,12 +1,16 @@
 import platformClient from "purecloud-platform-client-v2";
 import { createDivision } from "@/services/genesys/division";
-import { createDataTable, addDataTableRow, updateDataTableRow } from "@/services/genesys/dataTable";
+import { createDataTable, addDataTableRow, updateDataTableRow, findDataTableByName } from "@/services/genesys/dataTable";
 import { createIntegrationOfType, createDataAction, enableIntegration, getIntegrationWithID, applyDomainDatActPlaceholder } from "@/services/genesys/dataAction";
 import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/services/genesys/groups";
 import { updateIntegrationProperties } from "@/services/genesys/auth";
 import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import { getGenesysRegion } from "@/services/genesysRegion";
+
+// createdBySetup: false, wenn eine bereits vorhandene Tabelle gleichen Namens übernommen wurde
+// (wird dann beim Uninstall nicht gelöscht)
+type SetupDataTable = { id: string; name: string; createdBySetup: boolean };
 
 type SetupMeta = {
   projectTag: string;
@@ -20,6 +24,8 @@ type SetupMeta = {
   backendAuth: { clientId: string; tokenUrl: string };
   backendClient: { id: string; name: string };
   dataTable: { id: string; name: string };
+  surveyDataTable: SetupDataTable;
+  mappingDataTable: SetupDataTable;
   dataActionIntegration: { id: string; name: string };
   dataAction: { id: string; name: string };
   installedAt: string;
@@ -31,6 +37,8 @@ export async function runFullProvisioning(
   oauthFrontendId: string,
   divisionId: string,
   divisionName: string,
+  surveyDataTableName: string,
+  mappingDataTableName: string,
   onProgress: (msg: string) => void
 ): Promise<{
   integrationUrl: string;
@@ -45,6 +53,15 @@ export async function runFullProvisioning(
   const projectTag = projectName.trim().replace(/[^A-Za-z0-9_-]/g, "");
   if (!projectTag) {
     throw new Error("Project tag is required.");
+  }
+
+  const surveyTableName = surveyDataTableName.trim();
+  const mappingTableName = mappingDataTableName.trim();
+  if (!surveyTableName || !mappingTableName) {
+    throw new Error("Survey and mapping data table names are required.");
+  }
+  if (surveyTableName === mappingTableName) {
+    throw new Error("Survey and mapping data table names must differ.");
   }
 
   const names = {
@@ -79,6 +96,20 @@ export async function runFullProvisioning(
   await addDataTableRow(dataTableId, buildEmptyQuestionRow("__lock"));
   await addDataTableRow(dataTableId, buildMetaRow({ appTitle: projectTag, setup: null }));
   onProgress(`Data table created (${dataTableId})`);
+
+  const surveyDataTable = await ensureDataTable(
+    surveyTableName,
+    buildSurveyTableSchema(),
+    targetDivision.id,
+    onProgress,
+    (id) => addDataTableRow(id, buildSurveyListRow())
+  );
+  const mappingDataTable = await ensureDataTable(
+    mappingTableName,
+    buildMappingTableSchema(),
+    targetDivision.id,
+    onProgress
+  );
 
   onProgress("Preparing backend role from template...");
   const roleTemplateResponse = await fetch("/permissionsStructure.json");
@@ -163,7 +194,7 @@ export async function runFullProvisioning(
       genesysRegion: getGenesysRegion(),
       genesysClientId: backendClient.id,
       genesysClientSecret: backendClient.secret,
-      allowedDataTableIds: [dataTableId],
+      allowedDataTableIds: [dataTableId, surveyDataTable.id, mappingDataTable.id],
     }),
   });
 
@@ -221,6 +252,8 @@ export async function runFullProvisioning(
     backendAuth: { clientId: backendAuth.clientId, tokenUrl },
     backendClient: { id: backendClient.id, name: names.backendClient },
     dataTable: { id: dataTableId, name: names.dataTable },
+    surveyDataTable,
+    mappingDataTable,
     dataActionIntegration: { id: dataActionIntegration.id, name: names.dataActionIntegration },
     dataAction: { id: dataAction.id, name: names.dataAction },
     installedAt: new Date().toISOString(),
@@ -247,6 +280,75 @@ async function createNewDivision(name: string, projectTag: string, onProgress: (
     id: division.id,
     name,
     createdBySetup: true,
+  };
+}
+
+// Legt die Data Table an oder übernimmt eine bereits vorhandene Tabelle mit exakt diesem Namen
+// (z. B. bei Neuinstallation über bestehende Umfragen). Das Schema einer übernommenen Tabelle wird nicht geprüft.
+async function ensureDataTable(
+  name: string,
+  schema: object,
+  divisionId: string,
+  onProgress: (msg: string) => void,
+  initRows?: (id: string) => Promise<unknown>
+): Promise<SetupDataTable> {
+  const existing = await findDataTableByName(name);
+  if (existing) {
+    onProgress(`Using existing data table ${name} (${existing.id})`);
+    return { id: existing.id, name, createdBySetup: false };
+  }
+
+  onProgress(`Creating data table ${name}...`);
+  const created = await createDataTable(name, schema, divisionId);
+  if (initRows) {
+    await initRows(created.id);
+  }
+  onProgress(`Data table created (${created.id})`);
+  return { id: created.id, name, createdBySetup: true };
+}
+
+// Spalten siehe documentation/datatablerow_survey_entry.md
+function buildSurveyTableSchema() {
+  return {
+    $schema: "http://json-schema.org/draft-04/schema#",
+    type: "object",
+    required: ["key"],
+    properties: {
+      key: { title: "key", type: "string", $id: "/properties/key" },
+      Draft: { title: "Draft", type: "string", $id: "/properties/Draft" },
+      Stage: { title: "Stage", type: "string", $id: "/properties/Stage" },
+      Prod: { title: "Prod", type: "string", $id: "/properties/Prod" },
+      Backup: { title: "Backup", type: "string", $id: "/properties/Backup" },
+      lock: { title: "lock", type: "string", $id: "/properties/lock" },
+    },
+    additionalProperties: false,
+  };
+}
+
+// survey_list wird beim Speichern nur aktualisiert (PUT), muss also von Anfang an existieren
+function buildSurveyListRow() {
+  return {
+    key: "survey_list",
+    Draft: "[]",
+    Stage: "{}",
+    Prod: "{}",
+    Backup: "{}",
+    lock: JSON.stringify({ locked_by: "", locked_since: "" }),
+  };
+}
+
+// Spalten siehe documentation/datatablerow_queue_mapping.md
+function buildMappingTableSchema() {
+  return {
+    $schema: "http://json-schema.org/draft-04/schema#",
+    type: "object",
+    required: ["key"],
+    properties: {
+      key: { title: "QueueName", type: "string", $id: "/properties/key" },
+      SurveyId: { title: "SurveyId", type: "string", $id: "/properties/SurveyId" },
+      DeliveryRate: { title: "DeliveryRate", type: "integer", $id: "/properties/DeliveryRate" },
+    },
+    additionalProperties: false,
   };
 }
 

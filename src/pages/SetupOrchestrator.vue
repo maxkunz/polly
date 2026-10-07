@@ -50,6 +50,27 @@
                 </div>
 
                 <div class="form-section">
+                  <label class="section-label">{{ t("setup.step1.surveyDataTable") }}</label>
+                  <InputText
+                    v-model="surveyDataTableName"
+                    :disabled="isWorking"
+                    :invalid="!surveyDataTableName.trim() || tableNamesCollide"
+                    class="full-width-input"
+                  />
+                </div>
+
+                <div class="form-section">
+                  <label class="section-label">{{ t("setup.step1.mappingDataTable") }}</label>
+                  <InputText
+                    v-model="mappingDataTableName"
+                    :disabled="isWorking"
+                    :invalid="!mappingDataTableName.trim() || tableNamesCollide"
+                    class="full-width-input"
+                  />
+                  <small class="field-hint">{{ tableNamesCollide ? t("setup.step1.dataTableNamesCollide") : t("setup.step1.dataTableHint") }}</small>
+                </div>
+
+                <div class="form-section">
                   <label class="section-label">{{ t("setup.step1.integration") }}</label>
                   <Select
                     v-model="selectedIntegrationId"
@@ -133,6 +154,16 @@
                   <div class="summary-title">{{ t("setup.step2.division") }}</div>
                   <div class="summary-value">{{ divisionSummary }}</div>
                 </div>
+
+                <div class="summary-card">
+                  <div class="summary-title">{{ t("setup.step2.surveyDataTable") }}</div>
+                  <div class="summary-value">{{ surveyDataTableName.trim() }}</div>
+                </div>
+
+                <div class="summary-card">
+                  <div class="summary-title">{{ t("setup.step2.mappingDataTable") }}</div>
+                  <div class="summary-value">{{ mappingDataTableName.trim() }}</div>
+                </div>
               </div>
 
               <div class="step-actions">
@@ -168,12 +199,15 @@ import { getAllIntegrations } from "@/services/genesys/dataAction";
 import { getAllClients } from "@/services/genesys/oauth_backend";
 import { getListDivisions } from "@/services/genesys/division";
 import { useAppStore } from "@/stores/appStore";
+import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
 
 const app = useAppStore();
 const toast = useToast();
 const { t } = useI18n();
 
 const projectName = ref("");
+const surveyDataTableName = ref(POLLY_DATA_TABLE_NAME);
+const mappingDataTableName = ref(POLLY_MAPPING_DATA_TABLE_NAME);
 const isWorking = ref(false);
 const logs = ref<string[]>([]);
 const hasError = ref(false);
@@ -191,8 +225,13 @@ const selectedOAuthId = ref("");
 const selectedDivisionId = ref("");
 const useExistingDivision = ref(false);
 
+const tableNamesCollide = computed(
+  () => surveyDataTableName.value.trim() !== "" && surveyDataTableName.value.trim() === mappingDataTableName.value.trim()
+);
+
 const canNext = computed(() => {
   if (!projectName.value.trim()) return false;
+  if (!surveyDataTableName.value.trim() || !mappingDataTableName.value.trim() || tableNamesCollide.value) return false;
   if (!selectedIntegrationId.value || !selectedOAuthId.value) return false;
   if (useExistingDivision.value && !selectedDivisionId.value) return false;
   return true;
@@ -260,6 +299,8 @@ async function handleStart() {
       selectedOAuthId.value,
       selectedDivisionId.value,
       selectedDivisionName.value,
+      surveyDataTableName.value,
+      mappingDataTableName.value,
       (msg) => {
         logs.value.push(msg);
         if (msg.toLowerCase().includes("error")) {
@@ -411,6 +452,13 @@ async function startApp() {
 
 .full-width-input {
   width: 100%;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .toggle-row {

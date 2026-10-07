@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
-import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
+import { OneRowDataTable, findDataTableByName } from "@/services/genesys/dataTable";
 import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
 
@@ -128,21 +128,28 @@ export const useAppStore = defineStore("app", {
 
 		async findDataTableIdByName(name: string): Promise<string> {
 			this.initGenesysClients();
-			const res = await listDataTables(name);
-			const entities = res?.entities || res || [];
-			console.log("datatables found: ", entities);
-			const targetTable = entities.find((t: any) => t.name === name);
-			if (!targetTable || !targetTable.id) {
+			const table = await findDataTableByName(name);
+			if (!table) {
 				throw new Error(`Data table '${name}' not found.`);
 			}
-			return targetTable.id;
+			return table.id;
+		},
+
+		// Umfrage- und Mapping-Tabelle kommen aus meta.setup (Namen im Setup wählbar).
+		// Installationen ohne diese Einträge fallen auf die festen Namen aus surveyConstants zurück.
+		async resolveSetupDataTableId(setupKey: "surveyDataTable" | "mappingDataTable", fallbackName: string): Promise<string> {
+			const entry = this.domain.meta.setup?.[setupKey];
+			if (entry?.id) {
+				return entry.id;
+			}
+			return await this.findDataTableIdByName(entry?.name || fallbackName);
 		},
 
 		async ensureDataTableId(): Promise<string> {
 			if (this.dataTableId) {
 				return this.dataTableId;
 			}
-			this.dataTableId = await this.findDataTableIdByName(POLLY_DATA_TABLE_NAME);
+			this.dataTableId = await this.resolveSetupDataTableId("surveyDataTable", POLLY_DATA_TABLE_NAME);
 			return this.dataTableId;
 		},
 
@@ -150,7 +157,7 @@ export const useAppStore = defineStore("app", {
 			if (this.mappingDataTableId) {
 				return this.mappingDataTableId;
 			}
-			this.mappingDataTableId = await this.findDataTableIdByName(POLLY_MAPPING_DATA_TABLE_NAME);
+			this.mappingDataTableId = await this.resolveSetupDataTableId("mappingDataTable", POLLY_MAPPING_DATA_TABLE_NAME);
 			return this.mappingDataTableId;
 		},
 

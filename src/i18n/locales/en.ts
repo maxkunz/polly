@@ -486,6 +486,8 @@ export const en: MessageSchema = {
 				backendAuth: "Backend Auth",
 				backendClient: "Backend Client",
 				dataTable: "Data Table",
+				surveyDataTable: "Survey data table",
+				mappingDataTable: "Queue mapping data table",
 				dataActionIntegration: "Data Action Integration",
 				dataAction: "Data Action",
 				installedAt: "Installed At"
@@ -517,16 +519,22 @@ export const en: MessageSchema = {
 			useExistingDivision: "Use existing division",
 			createNewDivision: "Create new division",
 			divisionPlaceholder: "Select a division",
+			surveyDataTable: "Survey data table",
+			mappingDataTable: "Queue mapping data table",
+			dataTableHint: "Full names of the data tables. If a table with this name already exists, it is reused and not deleted on uninstall.",
+			dataTableNamesCollide: "The two data tables need different names.",
 			next: "Next"
 		},
 		step2: {
 			title: "Summary",
-			description: "A data table, a backend OAuth client and a data action for the rating answers will be created.",
+			description: "The data tables, a backend OAuth client and a data action for the rating answers will be created.",
 			project: "Project",
 			appIntegration: "App Integration",
 			oauthClient: "OAuth Client",
 			division: "Division",
 			newDivision: "New: {name}_division",
+			surveyDataTable: "Survey data table",
+			mappingDataTable: "Queue mapping data table",
 			back: "Back",
 			start: "Start installation"
 		},

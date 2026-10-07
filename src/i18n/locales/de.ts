@@ -484,6 +484,8 @@ export const de = {
 				backendAuth: "Backend-Auth",
 				backendClient: "Backend-Client",
 				dataTable: "Data Table",
+				surveyDataTable: "Data Table Umfragen",
+				mappingDataTable: "Data Table Queue-Mapping",
 				dataActionIntegration: "Data-Action-Integration",
 				dataAction: "Data Action",
 				installedAt: "Installiert am"
@@ -515,16 +517,22 @@ export const de = {
 			useExistingDivision: "Bestehende Division verwenden",
 			createNewDivision: "Neue Division erzeugen",
 			divisionPlaceholder: "Division auswählen",
+			surveyDataTable: "Data Table Umfragen",
+			mappingDataTable: "Data Table Queue-Mapping",
+			dataTableHint: "Vollständige Namen der Data Tables. Existiert bereits eine Tabelle mit diesem Namen, wird sie übernommen und beim Deinstallieren nicht gelöscht.",
+			dataTableNamesCollide: "Die beiden Data Tables brauchen unterschiedliche Namen.",
 			next: "Weiter"
 		},
 		step2: {
 			title: "Zusammenfassung",
-			description: "Es werden eine Data Table, ein Backend-OAuth-Client und eine Data Action für die Bewertungsantworten angelegt.",
+			description: "Es werden die Data Tables, ein Backend-OAuth-Client und eine Data Action für die Bewertungsantworten angelegt.",
 			project: "Projekt",
 			appIntegration: "App-Integration",
 			oauthClient: "OAuth-Client",
 			division: "Division",
 			newDivision: "Neu: {name}_division",
+			surveyDataTable: "Data Table Umfragen",
+			mappingDataTable: "Data Table Queue-Mapping",
 			back: "Zurück",
 			start: "Installation starten"
 		},

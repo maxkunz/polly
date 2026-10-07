@@ -20,6 +20,9 @@ export async function runFullDelete(
   const oauthFrontendId = setup?.oauthFrontend?.id || setup?.oauthFrontendId;
   const integrationAppId = setup?.integrationApp?.id;
   const dataTableId = setup?.dataTable?.id;
+  // Nur löschen, was das Setup selbst angelegt hat (übernommene Tabellen bleiben bestehen)
+  const surveyDataTableId = setup?.surveyDataTable?.createdBySetup ? setup.surveyDataTable.id : undefined;
+  const mappingDataTableId = setup?.mappingDataTable?.createdBySetup ? setup.mappingDataTable.id : undefined;
   const backendGroupId = setup?.backendGroup?.id;
   const backendRoleId = setup?.backendRole?.id;
   const backendAuthClientId = setup?.backendAuth?.clientId;
@@ -115,6 +118,16 @@ export async function runFullDelete(
     //     throw new Error("Backend onboarding delete failed.");
     //   }
     // }
+
+    if (surveyDataTableId) {
+      onProgress(`Deleting survey data table ${surveyDataTableId}...`);
+      await deleteDataTable(surveyDataTableId);
+    }
+
+    if (mappingDataTableId) {
+      onProgress(`Deleting mapping data table ${mappingDataTableId}...`);
+      await deleteDataTable(mappingDataTableId);
+    }
 
     if (dataTableId) {
       onProgress(`Deleting data table ${dataTableId}...`);

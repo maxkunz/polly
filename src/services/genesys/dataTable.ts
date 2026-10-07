@@ -75,6 +75,14 @@ export async function listDataTables(nameFilter: string = "") {
     };
     return architectApi.getFlowsDatatables(opts);
 }
+
+// Sucht eine Data Table mit exakt diesem Namen (der Namensfilter der API matcht auch Teilstrings)
+export async function findDataTableByName(name: string): Promise<{ id: string; name: string } | null> {
+    const res = await listDataTables(name);
+    const entities = res?.entities || res || [];
+    const match = entities.find((t: any) => t?.name === name && t?.id);
+    return match ? { id: match.id, name: match.name } : null;
+}
 // GET COLUMNS / SCHEMA OF DATATABLE
 
 export async function getDataTableColumns(datatableId: string) {
