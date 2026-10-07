@@ -489,6 +489,7 @@ export const de = {
 		logHeader: "Deployment Logs",
 		startApp: "App starten",
 		backToConfig: "Zurück zur Konfiguration",
+		rollback: "Rollback",
 		steps: {
 			installation: "Installation",
 			summary: "Zusammenfassung"
@@ -510,7 +511,7 @@ export const de = {
 		},
 		step2: {
 			title: "Zusammenfassung",
-			description: "Es werden eine Data Table, ein Backend-OAuth-Client und eine Data Action für die Bewertungsantworten angelegt.",
+			description: "Es werden zwei Data Tables, ein Bot-Flow, ein Inbound-Flow, ein Backend-OAuth-Client und eine Data Action für die Umfrageantworten angelegt.",
 			project: "Projekt",
 			appIntegration: "App-Integration",
 			oauthClient: "OAuth-Client",
@@ -523,7 +524,10 @@ export const de = {
 			successSummary: "Erfolg",
 			successDetail: "Setup abgeschlossen.",
 			errorSummary: "Fehler",
-			errorDetail: "Setup fehlgeschlagen. Bitte Logs prüfen."
+			errorDetail: "Setup fehlgeschlagen. Bitte Logs prüfen.",
+			rollbackSummary: "Rollback erfolgreich",
+			rollbackDetail: "Die bereits angelegten Ressourcen wurden entfernt.",
+			rollbackErrorSummary: "Rollback fehlgeschlagen"
 		}
 	},
 
@@ -531,10 +535,11 @@ export const de = {
 		heroTitle: "Projekt deinstallieren",
 		stepTitle: "Installierte Ressourcen entfernen",
 		installationLabel: "Installation:",
-		warning: "Diese Aktion entfernt die durch das Setup erzeugten Ressourcen aus Genesys Cloud. Dazu gehören Data Table, Backend OAuth Client und Data Action Integration. Möchtest du fortfahren?",
+		warning: "Diese Aktion entfernt die durch das Setup erzeugten Genesys-Ressourcen, darunter beide Flows, beide Data Tables, die Data Action und den Backend-OAuth-Client. Der Backend-Tenant wird zur späteren Admin-Bereinigung als gelöscht markiert. Möchtest du fortfahren?",
 		logHeader: "SYSTEM TERMINAL - UNINSTALL_LOG",
 		cancel: "Abbrechen",
 		remove: "Installation entfernen",
+		retry: "Erneut versuchen",
 		back: "Zurück zum Menü",
 		finish: "Fertig",
 		toast: {

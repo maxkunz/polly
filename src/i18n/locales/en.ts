@@ -491,6 +491,7 @@ export const en: MessageSchema = {
 		logHeader: "Deployment Logs",
 		startApp: "Start app",
 		backToConfig: "Back to configuration",
+		rollback: "Rollback",
 		steps: {
 			installation: "Installation",
 			summary: "Summary"
@@ -512,7 +513,7 @@ export const en: MessageSchema = {
 		},
 		step2: {
 			title: "Summary",
-			description: "A data table, a backend OAuth client and a data action for the rating answers will be created.",
+			description: "Two data tables, a bot flow, an inbound flow, a backend OAuth client and a data action for survey answers will be created.",
 			project: "Project",
 			appIntegration: "App Integration",
 			oauthClient: "OAuth Client",
@@ -525,7 +526,10 @@ export const en: MessageSchema = {
 			successSummary: "Success",
 			successDetail: "Setup completed.",
 			errorSummary: "Error",
-			errorDetail: "Setup failed. Please check the logs."
+			errorDetail: "Setup failed. Please check the logs.",
+			rollbackSummary: "Rollback completed",
+			rollbackDetail: "The resources already created have been removed.",
+			rollbackErrorSummary: "Rollback failed"
 		}
 	},
 
@@ -533,10 +537,11 @@ export const en: MessageSchema = {
 		heroTitle: "Uninstall project",
 		stepTitle: "Remove installed resources",
 		installationLabel: "Installation:",
-		warning: "This action removes the resources created by the setup from Genesys Cloud. This includes the data table, backend OAuth client and data action integration. Do you want to continue?",
+		warning: "This action removes the Genesys resources created by the setup, including both flows, both data tables, the data action and backend OAuth client. The backend tenant is marked as deleted for later admin cleanup. Do you want to continue?",
 		logHeader: "SYSTEM TERMINAL - UNINSTALL_LOG",
 		cancel: "Cancel",
 		remove: "Remove installation",
+		retry: "Retry",
 		back: "Back to menu",
 		finish: "Finish",
 		toast: {

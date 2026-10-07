@@ -165,17 +165,21 @@ async function loadTenantByBackendClientId(backendClientId: string) {
 }
 
 async function loadTenantByTenantId(tenantId: string) {
-  const res = await ddb.send(
-    new QueryCommand({
+  let lastEvaluatedKey: Record<string, any> | undefined;
+  do {
+    const res = await ddb.send(new QueryCommand({
       TableName: TENANTS_TABLE_NAME,
       IndexName: "byTenantId",
       KeyConditionExpression: "#pk = :pk",
-      ExpressionAttributeNames: { "#pk": "tenantId" },
-      ExpressionAttributeValues: { ":pk": tenantId },
-      Limit: 1,
-    })
-  );
-  return res.Items?.[0] as Record<string, any> | undefined;
+      FilterExpression: "#status = :status",
+      ExpressionAttributeNames: { "#pk": "tenantId", "#status": "status" },
+      ExpressionAttributeValues: { ":pk": tenantId, ":status": "APPROVED" },
+      ExclusiveStartKey: lastEvaluatedKey,
+    }));
+    if (res.Items?.length) return res.Items[0] as Record<string, any>;
+    lastEvaluatedKey = res.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+  return undefined;
 }
 
 function pickGenesysClientId(data: any): string {
@@ -276,9 +280,9 @@ export async function loadTenantContextFromCognito(
 
 export async function resolveTenantFromGenesysToken(
   event: AnyApiGwEvent,
-  opts: { requireApproved?: boolean } = {}
+  opts: { requireApproved?: boolean; skipTenantLookup?: boolean } = {}
 ): Promise<{ context?: TenantContext; error?: string }> {
-  if (!TENANTS_TABLE_NAME) return { error: "TENANTS_TABLE_NAME not configured" };
+  if (!opts.skipTenantLookup && !TENANTS_TABLE_NAME) return { error: "TENANTS_TABLE_NAME not configured" };
 
   const token = getAuthorizationToken(event);
   if (!token) return { error: "Missing Authorization bearer token" };
@@ -293,6 +297,16 @@ export async function resolveTenantFromGenesysToken(
   
   const tenantId = validation.clientId ?? "";
   if (!tenantId) return { error: "Genesys token missing clientId" };
+
+  if (opts.skipTenantLookup) {
+    return {
+      context: {
+        tenantId,
+        genesysRegion: region,
+        source: "genesys",
+      },
+    };
+  }
 
   const item = await loadTenantByTenantId(tenantId);
   if (!item) {
@@ -318,7 +332,7 @@ export async function resolveTenantFromGenesysToken(
 
 export async function resolveTenantContext(
   event: AnyApiGwEvent,
-  opts: { requireApproved?: boolean } = {}
+  opts: { requireApproved?: boolean; skipTenantLookup?: boolean } = {}
 ): Promise<{ context?: TenantContext; error?: string }> {
   const token = getAuthorizationToken(event);
   if (!token) return { error: "Missing Authorization bearer token" };

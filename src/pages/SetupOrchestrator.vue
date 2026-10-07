@@ -11,15 +11,16 @@
       <div v-if="showLogs" class="log-container shadow-soft">
         <div class="log-header">{{ t("setup.logHeader") }}</div>
 
-        <div class="log-content">
-          <div v-for="(log, i) in logs" :key="i" class="log-line" :class="{ 'err-text': log.toLowerCase().includes('error') }">
-            <span class="log-time">[{{ new Date().toLocaleTimeString() }}]</span> {{ log }}
+        <div ref="logContent" class="log-content">
+          <div v-for="(log, i) in logs" :key="i" class="log-line" :class="{ 'err-text': log.message.includes('--ERROR--') }">
+            <span class="log-time">[{{ log.time }}]</span> {{ log.message }}
           </div>
         </div>
 
         <div class="log-actions">
           <Button v-if="setupComplete" :label="t('setup.startApp')" @click="startApp" />
-          <Button v-if="hasError && !isWorking" :label="t('setup.backToConfig')" severity="secondary" @click="goBackToConfig" />
+          <Button v-if="canRollback && !isWorking" :label="t('setup.rollback')" severity="danger" @click="handleRollback" />
+          <Button v-if="(hasError || rollbackFinished) && !canRollback && !isWorking" :label="t('setup.backToConfig')" severity="secondary" @click="goBackToConfig" />
         </div>
       </div>
 
@@ -150,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "primevue/usetoast";
 import Stepper from "primevue/stepper";
@@ -163,7 +164,9 @@ import Select from "primevue/select";
 import ToggleSwitch from "primevue/toggleswitch";
 import Button from "primevue/button";
 import Toast from "primevue/toast";
-import { runFullProvisioning } from "@/services/SetupOrchestrator";
+import { hasSetupResources, runFullProvisioning } from "@/services/SetupOrchestrator";
+import { runFullDelete } from "@/services/SetupUninstall";
+import { getErrorMessage } from "@/services/genesys/retry";
 import { getAllIntegrations } from "@/services/genesys/dataAction";
 import { getAllClients } from "@/services/genesys/oauth_backend";
 import { getListDivisions } from "@/services/genesys/division";
@@ -175,12 +178,22 @@ const { t } = useI18n();
 
 const projectName = ref("");
 const isWorking = ref(false);
-const logs = ref<string[]>([]);
+const logs = ref<Array<{ message: string; time: string }>>([]);
+const logContent = ref<HTMLElement | null>(null);
 const hasError = ref(false);
 const activeStep = ref("1");
 const showLogs = ref(false);
 const setupComplete = ref(false);
 const setupIntegrationUrl = ref("");
+const rollbackFinished = ref(false);
+const canRollback = computed(() => hasError.value && hasSetupResources(app.domain.meta.setup));
+
+function addLog(message: string) {
+  logs.value.push({ message, time: new Date().toLocaleTimeString() });
+  void nextTick(() => {
+    if (logContent.value) logContent.value.scrollTop = logContent.value.scrollHeight;
+  });
+}
 
 const allIntegrations = ref<any[]>([]);
 const allOAuths = ref<any[]>([]);
@@ -198,7 +211,7 @@ const canNext = computed(() => {
   return true;
 });
 
-const canStart = computed(() => canNext.value);
+const canStart = computed(() => canNext.value && !canRollback.value);
 
 const selectedIntegrationName = computed(() => {
   return allIntegrations.value.find((item) => item.id === selectedIntegrationId.value)?.name || "";
@@ -240,18 +253,21 @@ onMounted(async () => {
     allDivisions.value = divisions.sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
   } catch (err) {
     console.error("Failed to load setup data", err);
-    logs.value.push("Error: Could not load setup data.");
+    addLog(`--ERROR-- Could not load setup data: ${getErrorMessage(err)}`);
   } finally {
     isWorking.value = false;
   }
 });
 
 async function handleStart() {
+  if (!canStart.value || isWorking.value) return;
   isWorking.value = true;
   hasError.value = false;
   logs.value = [];
   showLogs.value = true;
   setupComplete.value = false;
+  setupIntegrationUrl.value = "";
+  rollbackFinished.value = false;
 
   try {
     const result = await runFullProvisioning(
@@ -260,12 +276,7 @@ async function handleStart() {
       selectedOAuthId.value,
       selectedDivisionId.value,
       selectedDivisionName.value,
-      (msg) => {
-        logs.value.push(msg);
-        if (msg.toLowerCase().includes("error")) {
-          hasError.value = true;
-        }
-      }
+      addLog
     );
 
     setupIntegrationUrl.value = result.integrationUrl;
@@ -280,7 +291,8 @@ async function handleStart() {
   } catch (err) {
     console.error(err);
     hasError.value = true;
-    logs.value.push("--ERROR-- Setup failed.");
+    const message = `--ERROR-- Setup failed: ${getErrorMessage(err)}`;
+    if (logs.value[logs.value.length - 1]?.message !== message) addLog(message);
     toast.add({
       severity: "error",
       summary: t("setup.toast.errorSummary"),
@@ -293,9 +305,33 @@ async function handleStart() {
 }
 
 function goBackToConfig() {
+  if (canRollback.value) return;
   showLogs.value = false;
   hasError.value = false;
   setupComplete.value = false;
+  rollbackFinished.value = false;
+  app.domain.meta.setup = null;
+}
+
+async function handleRollback() {
+  if (!canRollback.value || isWorking.value) return;
+  isWorking.value = true;
+  addLog("Starting rollback of partially created resources...");
+  try {
+    await runFullDelete(app.domain.meta.setup, addLog, toast, { rollback: true });
+    app.domain.meta.setup = null;
+    hasError.value = false;
+    rollbackFinished.value = true;
+    setupIntegrationUrl.value = "";
+    toast.add({ severity: "success", summary: t("setup.toast.rollbackSummary"), detail: t("setup.toast.rollbackDetail"), life: 4000 });
+  } catch (err) {
+    hasError.value = true;
+    rollbackFinished.value = false;
+    addLog(`--ERROR-- Rollback failed: ${getErrorMessage(err)}`);
+    toast.add({ severity: "error", summary: t("setup.toast.rollbackErrorSummary"), detail: getErrorMessage(err), life: 5000 });
+  } finally {
+    isWorking.value = false;
+  }
 }
 
 async function startApp() {

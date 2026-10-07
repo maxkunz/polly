@@ -4,6 +4,7 @@ import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, listDataTables } from "@/services/genesys/dataTable";
 import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
 import { getGenesysRegion } from "@/services/genesys/region";
+import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 
 import { Domain } from "@/domain/Domain";
 import type { QuestionAnswerStats } from "@/services/genesys_helper";
@@ -67,6 +68,7 @@ export const useAppStore = defineStore("app", {
 			if (!this.genesys.client) {
 				this.genesys.client = (platformClient as any).ApiClient.instance;
 			}
+			enableGenesysRequestRetry(this.genesys.client);
 			if (!this.genesys.architectApi) {
 				this.genesys.architectApi = new (platformClient as any).ArchitectApi();
 			}

@@ -13,7 +13,8 @@ export async function updateIntegrationProperties(
   awsClientId: string, 
   awsClientSecret: string, 
   tokenUrl: string,
-  onProgress: (msg: string) => void 
+  onProgress: (msg: string) => void,
+  onCredentialCreated?: (id: string) => void
 ) {
   const { integrationsApi } = useAppStore().genesys;
 
@@ -41,6 +42,7 @@ export async function updateIntegrationProperties(
       
     // UUID ->
     const credentialUuid = createdCreds.id;
+    onCredentialCreated?.(credentialUuid);
     onProgress(`Credentials created! UUID: ${credentialUuid}`);
   
 
