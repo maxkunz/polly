@@ -58,6 +58,50 @@ export const appTheme = definePreset(Aura, {
 			chip: {
 				borderRadius: '9999px'
 			}
+		},
+		// Barrierefreiheit (WCAG AA, Kontrast ≥ 4.5:1): Aura nutzt für farbige Buttons
+		// und Messages zu helle Töne, daher hier jeweils 1–2 Stufen dunkler.
+		button: {
+			colorScheme: {
+				light: {
+					root: {
+						info: {
+							background: '{sky.700}', hoverBackground: '{sky.800}', activeBackground: '{sky.900}',
+							borderColor: '{sky.700}', hoverBorderColor: '{sky.800}', activeBorderColor: '{sky.900}'
+						},
+						success: {
+							background: '{green.700}', hoverBackground: '{green.800}', activeBackground: '{green.900}',
+							borderColor: '{green.700}', hoverBorderColor: '{green.800}', activeBorderColor: '{green.900}'
+						},
+						warn: {
+							background: '{orange.700}', hoverBackground: '{orange.800}', activeBackground: '{orange.900}',
+							borderColor: '{orange.700}', hoverBorderColor: '{orange.800}', activeBorderColor: '{orange.900}'
+						},
+						danger: {
+							background: '{red.600}', hoverBackground: '{red.700}', activeBackground: '{red.800}',
+							borderColor: '{red.600}', hoverBorderColor: '{red.700}', activeBorderColor: '{red.800}'
+						}
+					},
+					outlined: {
+						secondary: { color: '{surface.600}' },
+						danger: { color: '{red.600}' }
+					},
+					text: {
+						secondary: { color: '{surface.600}' },
+						danger: { color: '{red.600}' }
+					}
+				}
+			}
+		},
+		message: {
+			colorScheme: {
+				light: {
+					info: { color: '{blue.700}' },
+					success: { color: '{green.700}' },
+					warn: { color: '{yellow.800}' },
+					error: { color: '{red.700}' }
+				}
+			}
 		}
 
     },
