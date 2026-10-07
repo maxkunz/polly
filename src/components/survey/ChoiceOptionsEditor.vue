@@ -115,7 +115,7 @@ function updateOptionInput(opt: ChoiceOptionLabel, value: string | undefined): v
 				<small
 					v-if="showValidation && duplicates.has(optIdx)"
 					:id="`${idPrefix}_${optIdx}_dup`"
-					class="block ml-8 text-xs text-red-500"
+					class="block ml-8 text-xs text-red-700"
 				>
 					{{ t("choiceOptions.duplicate", { number: optIdx + 1, otherNumber: duplicates.get(optIdx)! + 1 }) }}
 				</small>

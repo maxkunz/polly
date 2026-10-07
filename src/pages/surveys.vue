@@ -387,6 +387,8 @@ onBeforeUnmount(() => {
 				:title="isNewSurvey ? t('surveys.newSurveyTitle') : (isCloneSurvey ? t('surveys.cloneSurveyTitle') : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title)))"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
+				titleTag="h1"
+				titleId="page-title"
 			/>
 		</div>
 
@@ -428,7 +430,7 @@ onBeforeUnmount(() => {
 				aria-live="polite"
 			>
 				<ProgressSpinner style="width: 44px; height: 44px" strokeWidth="4" />
-				<span class="text-sm font-medium text-[var(--p-text-muted-color)]">
+				<span class="text-sm font-medium text-[var(--p-surface-600)]">
 					{{ t("surveys.detail.loading") }}
 				</span>
 			</div>

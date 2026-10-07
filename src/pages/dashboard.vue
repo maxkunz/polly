@@ -44,7 +44,11 @@ const columnModules = (column: number) =>
 					v-for="module in columnModules(column)"
 					:key="module.key"
 					class="w-full cursor-pointer transition-transform transition-shadow hover:-translate-y-1.5 hover:shadow-lg"
+					role="link"
+					tabindex="0"
 					@click="navigateTo(module.key)"
+					@keydown.enter="navigateTo(module.key)"
+					@keydown.space.prevent="navigateTo(module.key)"
 				>
 					<template #title>
 						<div class="mb-2 -ml-8 -mt-8">

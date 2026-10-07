@@ -6,8 +6,12 @@ const property = withDefaults(defineProps<{
 	iconKey: string;
 	color?: string;
 	size?: "compact" | "normal";
+	/** Element des Titels, z. B. "h1" für die Seitenüberschrift (Barrierefreiheit) */
+	titleTag?: string;
+	titleId?: string;
 }>(), {
-	color: "#6B7280"
+	color: "#6B7280",
+	titleTag: "div"
 });
 
 </script>
@@ -34,7 +38,9 @@ const property = withDefaults(defineProps<{
 		</div>
 
 		<!-- Title -->
-		<div
+		<component
+			:is="property.titleTag"
+			:id="property.titleId"
 			class="-ml-4 pl-6 px-4 py-2 rounded-lg font-semibold shadow-md leading-none"
 			:class="property.size === 'compact' ? 'text-lg' : 'text-xl'"
 			:style="{
@@ -43,7 +49,7 @@ const property = withDefaults(defineProps<{
 			}"
 		>
 			{{ property.title }}
-		</div>
+		</component>
 	</div>
 </template>
 

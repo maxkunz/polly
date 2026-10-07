@@ -81,7 +81,7 @@ const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions
 				/>
 				<h2 class="text-base font-semibold text-[var(--p-text-color)]">
 					{{ survey.title || survey.name }}
-					<span class="text-[var(--p-text-muted-color)] font-normal">(v{{ survey.version ?? 1 }})</span>
+					<span class="text-[var(--p-surface-600)] font-normal">(v{{ survey.version ?? 1 }})</span>
 				</h2>
 			</div>
 		</div>

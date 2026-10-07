@@ -465,7 +465,9 @@ export const de = {
 
 	app: {
 		initErrorSummary: "Fehler",
-		initErrorFallback: "Initialisierung fehlgeschlagen."
+		initErrorFallback: "Initialisierung fehlgeschlagen.",
+		sidebarCollapse: "Seitenleiste einklappen",
+		sidebarExpand: "Seitenleiste ausklappen"
 	},
 
 	settings: {

@@ -56,7 +56,7 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 					role="status"
 					aria-live="polite"
 					class="text-xs flex items-center gap-2 mt-0.5"
-					:class="totalQuestionsCount >= 20 ? 'text-red-500 font-bold' : 'text-[var(--p-text-muted-color)]'"
+					:class="totalQuestionsCount >= 20 ? 'text-red-700 font-bold' : 'text-[var(--p-surface-600)]'"
 				>
 					<span>{{ t("surveyQuestions.countStatus", { count: totalQuestionsCount }) }}</span>
 					<span v-if="totalQuestionsCount >= 20" class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">

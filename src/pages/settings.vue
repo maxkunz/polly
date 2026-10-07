@@ -90,6 +90,7 @@ function startUninstall() {
 				:title="moduleMeta.title"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
+				titleTag="h1"
 			/>
 		</div>
 
@@ -98,11 +99,13 @@ function startUninstall() {
 				<template #title>{{ t("language.title") }}</template>
 				<template #content>
 					<div class="max-w-xs">
-						<label for="app-language-select" class="block text-sm font-medium mb-1">
+						<!-- Kein <label for>: Select rendert kein Formularelement, Verknüpfung über aria-labelledby -->
+						<div id="app-language-select-label" class="block text-sm font-medium mb-1">
 							{{ t("language.label") }}
-						</label>
+						</div>
 						<Select
 							id="app-language-select"
+							ariaLabelledby="app-language-select-label"
 							v-model="selectedLocale"
 							:options="languageOptions"
 							optionLabel="label"

@@ -467,7 +467,9 @@ export const en: MessageSchema = {
 
 	app: {
 		initErrorSummary: "Error",
-		initErrorFallback: "Initialization failed."
+		initErrorFallback: "Initialization failed.",
+		sidebarCollapse: "Collapse sidebar",
+		sidebarExpand: "Expand sidebar"
 	},
 
 	settings: {

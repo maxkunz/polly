@@ -169,9 +169,9 @@ function handleSave(): void {
 					<!-- Delivery Rate Selection -->
 					<div class="space-y-2 bg-[var(--p-surface-50)] p-4 rounded-xl border border-[var(--p-content-border-color)]">
 						<div class="flex items-center justify-between">
-							<label for="queue-delivery-rate-select" class="text-sm font-medium text-[var(--p-text-color)]">
+							<span class="text-sm font-medium text-[var(--p-text-color)]">
 								{{ t("queueMapping.deliveryRateLabel") }}
-							</label>
+							</span>
 							<span class="text-sm font-semibold font-mono px-2.5 py-0.5 rounded bg-[var(--p-primary-color)] text-white">
 								{{ deliveryRate }} %
 							</span>

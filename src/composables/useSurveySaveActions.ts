@@ -131,6 +131,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			acceptLabel: t("surveyEditor.discardConfirm.acceptLabel"),
 			rejectLabel: t("surveyEditor.discardConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
+			// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+			defaultFocus: "reject",
 			accept: () => {
 				options.reset();
 				saveAttempted.value = false;
@@ -158,6 +160,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			acceptLabel: t("surveyEditor.deleteConfirm.acceptLabel"),
 			rejectLabel: t("surveyEditor.deleteConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
+			// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+			defaultFocus: "reject",
 			accept: async () => {
 				isDeleting.value = true;
 				try {
