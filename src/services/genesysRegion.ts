@@ -7,6 +7,7 @@ const REGION_STORAGE_KEY = "gc_region";
 const KNOWN_REGIONS = new Set<string>(
 	Object.values((platformClient as any).PureCloudRegionHosts ?? {}) as string[]
 );
+KNOWN_REGIONS.add("edee1.eusc-pure.cloud");
 
 let activeRegion: string | null = null;
 

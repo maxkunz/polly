@@ -1,12 +1,13 @@
 import platformClient from "purecloud-platform-client-v2";
 import { createDivision } from "@/services/genesys/division";
-import { createDataTable, addDataTableRow, updateDataTableRow, findDataTableByName } from "@/services/genesys/dataTable";
+import { createDataTable, addDataTableRow, updateDataTableRow } from "@/services/genesys/dataTable";
 import { createIntegrationOfType, createDataAction, enableIntegration, getIntegrationWithID, applyDomainDatActPlaceholder } from "@/services/genesys/dataAction";
 import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/services/genesys/groups";
 import { updateIntegrationProperties } from "@/services/genesys/auth";
 import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import { makeJobForFlow, flowFetch } from "@/services/genesys/botFlow";
 import { useAppStore } from "@/stores/appStore";
+import { getGenesysRegion } from "@/services/genesysRegion";
 import { getErrorMessage } from "@/services/genesys/retry";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
@@ -67,8 +68,6 @@ export async function runFullProvisioning(
   oauthFrontendId: string,
   divisionId: string,
   divisionName: string,
-  surveyDataTableName: string,
-  mappingDataTableName: string,
   onProgress: (msg: string) => void
 ): Promise<{
   integrationUrl: string;
@@ -99,15 +98,6 @@ export async function runFullProvisioning(
   const projectTag = projectName.trim().replace(/[^A-Za-z0-9_-]/g, "");
   if (!projectTag) {
     throw new Error("Project tag is required.");
-  }
-
-  const surveyTableName = surveyDataTableName.trim();
-  const mappingTableName = mappingDataTableName.trim();
-  if (!surveyTableName || !mappingTableName) {
-    throw new Error("Survey and mapping data table names are required.");
-  }
-  if (surveyTableName === mappingTableName) {
-    throw new Error("Survey and mapping data table names must differ.");
   }
 
   const names = {

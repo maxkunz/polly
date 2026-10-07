@@ -4,6 +4,7 @@ import { Meta } from "@/domain/Meta";
 import { Questions } from "@/domain/Questions";
 import type { LockObject, LockRow } from "@/services/lockingService";
 import { genesysAuthStoragePrefix } from "@/services/genesys/region";
+import { getGenesysRegion } from "@/services/genesysRegion";
 
 export type QuestionAnswerStats = {
 	tenantId: string;

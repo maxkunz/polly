@@ -74,7 +74,6 @@ const setupRows = computed(() => {
 		{ label: t("settings.setup.fields.backendAuth"), value: formatBackendAuth(currentSetup.backendAuth) },
 		{ label: t("settings.setup.fields.backendClient"), value: formatResource(currentSetup.backendClient) },
 		{ label: t("settings.setup.fields.dataTable"), value: formatResource(currentSetup.dataTable) },
-		{ label: t("settings.setup.fields.surveyDataTable"), value: formatResource(currentSetup.surveyDataTable) },
 		{ label: t("settings.setup.fields.mappingDataTable"), value: formatResource(currentSetup.mappingDataTable) },
 		{ label: t("settings.setup.fields.dataActionIntegration"), value: formatResource(currentSetup.dataActionIntegration) },
 		{ label: t("settings.setup.fields.dataAction"), value: formatResource(currentSetup.dataAction) },

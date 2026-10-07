@@ -139,9 +139,9 @@ export const useAppStore = defineStore("app", {
 			return table.id;
 		},
 
-		// Umfrage- und Mapping-Tabelle kommen aus meta.setup (Namen im Setup wählbar).
+		// Umfrage- und Mapping-Tabelle kommen aus meta.setup.
 		// Installationen ohne diese Einträge fallen auf die festen Namen aus surveyConstants zurück.
-		async resolveSetupDataTableId(setupKey: "surveyDataTable" | "mappingDataTable", fallbackName: string): Promise<string> {
+		async resolveSetupDataTableId(setupKey: "dataTable" | "mappingDataTable", fallbackName: string): Promise<string> {
 			const entry = this.domain.meta.setup?.[setupKey];
 			if (entry?.id) {
 				return entry.id;
@@ -153,8 +153,8 @@ export const useAppStore = defineStore("app", {
 			if (this.datatableId) {
 				return this.datatableId;
 			}
-			this.dataTableId = await this.resolveSetupDataTableId("surveyDataTable", POLLY_DATA_TABLE_NAME);
-			return this.dataTableId;
+			this.datatableId = await this.resolveSetupDataTableId("dataTable", POLLY_DATA_TABLE_NAME);
+			return this.datatableId;
 		},
 
 		async ensureMappingDataTableId(): Promise<string> {
