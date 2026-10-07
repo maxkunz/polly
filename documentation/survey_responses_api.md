@@ -51,7 +51,8 @@ Jeder Request muss authentifiziert sein. Die Tenant-Zuordnung (`tenantId`) erfol
 ### Authentifizierungsarten
 1. **Genesys Cloud Flow (Bearer Token):**
    - Header: `Authorization: Bearer <GENESYS_BEARER_TOKEN>`
-   - Header: `x-genesys-region: <REGION>` (z. B. `mypurecloud.de` oder `mypurecloud.com`, Standard: `mypurecloud.de`)
+   - Header: `x-genesys-region: <REGION>` (z. B. `mypurecloud.de` oder `usw2.pure.cloud`). Fehlt der Header, gilt die Backend-Umgebungsvariable `GENESYS_REGION` bzw. `mypurecloud.de`.
+   - Erlaubt sind nur die bekannten Genesys-Cloud-Regionen (`amplify/functions/shared/genesys_regions.ts`, entspricht `PureCloudRegionHosts` des Genesys-SDK). Andere Werte werden mit `401` (`Unsupported Genesys region`) abgelehnt, ohne dass das Backend den Host aufruft.
 2. **Cognito User Pool (Admin/Web-UI):**
    - Header: `Authorization: Bearer <COGNITO_ACCESS_TOKEN>`
    - Es wird ausschließlich ein **Access Token** akzeptiert (`token_use: "access"`); ein Cognito **ID Token** (`token_use: "id"`) wird abgelehnt.

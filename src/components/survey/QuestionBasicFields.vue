@@ -50,7 +50,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 			<div class="md:col-span-4">
 				<label :for="nameId" class="block text-xs font-medium text-[var(--p-text-muted-color)] mb-1">
 					{{ t("surveyQuestionFields.technicalName") }}
-					<span class="text-[10px] text-amber-600 block">{{ t("surveyQuestionFields.technicalNameHintShort") }}</span>
+					<span class="text-[11px] text-amber-700 block">{{ t("surveyQuestionFields.technicalNameHintShort") }}</span>
 				</label>
 				<InputText
 					:id="nameId"
@@ -64,12 +64,15 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 			</div>
 
 			<div class="md:col-span-5">
-				<label :for="typeId" class="block text-xs font-medium mb-1">
-					{{ t("surveyQuestionFields.type") }} <span class="text-red-500" aria-hidden="true">*</span>
-					<span v-if="isSaved" class="text-[10px] text-amber-600 block">{{ t("surveyQuestionFields.typeSavedHint") }}</span>
-				</label>
+				<!-- Kein <label for>: Select rendert kein Formularelement, Verknüpfung über aria-labelledby -->
+				<div :id="`${typeId}_label`" class="block text-xs font-medium mb-1">
+					{{ t("surveyQuestionFields.type") }} <span class="text-red-700" aria-hidden="true">*</span>
+					<span v-if="isSaved" class="text-[11px] text-amber-700 block">{{ t("surveyQuestionFields.typeSavedHint") }}</span>
+				</div>
 				<Select
 					:inputId="typeId"
+					:ariaLabelledby="`${typeId}_label`"
+					:pt="{ label: { 'aria-required': 'true' } }"
 					:modelValue="question.type"
 					:options="questionTypeOptions"
 					optionLabel="label"
@@ -97,10 +100,11 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 		<!-- Question Title -->
 		<div>
 			<label :for="titleId" class="block text-sm font-medium mb-1">
-				{{ t("surveyQuestionFields.title") }} <span class="text-red-500" aria-hidden="true">*</span>
+				{{ t("surveyQuestionFields.title") }} <span class="text-red-700" aria-hidden="true">*</span>
 			</label>
 			<InputText
 				:id="titleId"
+				aria-required="true"
 				v-model="question.title"
 				class="w-full"
 				:placeholder="t('surveyQuestionFields.titlePlaceholder')"

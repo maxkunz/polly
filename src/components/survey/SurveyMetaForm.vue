@@ -43,14 +43,15 @@ const computedTechnicalName = computed(() => {
 			</h2>
 		</template>
 		<template #content>
-			<form class="space-y-4" @submit.prevent="emit('save')">
+			<form class="space-y-4" @submit.prevent="!disabled && emit('save')">
 				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					<div class="md:col-span-8">
 						<label :for="surveyTitleId" class="block text-sm font-medium mb-1">
-							{{ t("surveyEditor.meta.surveyTitle") }} <span class="text-red-500" aria-hidden="true">*</span>
+							{{ t("surveyEditor.meta.surveyTitle") }} <span class="text-red-700" aria-hidden="true">*</span>
 						</label>
 						<InputText
 							:id="surveyTitleId"
+							aria-required="true"
 							v-model="survey.title"
 							class="w-full"
 							:placeholder="t('surveyEditor.meta.placeholders.title')"

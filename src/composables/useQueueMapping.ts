@@ -3,6 +3,7 @@ import type { Ref, ComputedRef } from "vue";
 import type { QueueMappingData, QueueMappingEntry, QueueConflict } from "@/domain/queueMapping/queueMappingTypes";
 import { fetchQueueMapping, saveQueueMapping } from "@/services/surveyService";
 import { i18n } from "@/i18n";
+import { useAppStore } from "@/stores/appStore";
 
 export interface UseQueueMappingOptions {
 	surveyId: string;
@@ -116,6 +117,9 @@ export function useQueueMapping({
 	}
 
 	async function executeSave(): Promise<boolean> {
+		const app = useAppStore();
+		await app.refreshRoles();
+		if (!app.canDeploy) return false;
 		isSaving.value = true;
 		saveError.value = null;
 

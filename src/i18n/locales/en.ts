@@ -91,6 +91,14 @@ export const en: MessageSchema = {
 		}
 	},
 
+	permissions: {
+		missingWrite: "Not permitted – write permission is missing.",
+		missingDeploy: "Not permitted – deploy permission is missing.",
+		missingExport: "Not permitted – permission to export results is missing.",
+		readOnlyBanner: "Read-only access: creating, editing, cloning and deleting surveys requires write permission.",
+		deployReadOnlyBanner: "Read-only access: deployments, rollback and queue mapping require deploy permission."
+	},
+
 	surveys: {
 		searchPlaceholder: "Search survey...",
 		actions: {
@@ -121,6 +129,7 @@ export const en: MessageSchema = {
 			unnamedSurvey: "Unnamed survey",
 			openAriaLabel: "Open survey: {title}",
 			edit: "Edit",
+			view: "View",
 			emptySearch: "No surveys found for this search.",
 			empty: "No surveys available."
 		}
@@ -458,7 +467,9 @@ export const en: MessageSchema = {
 
 	app: {
 		initErrorSummary: "Error",
-		initErrorFallback: "Initialization failed."
+		initErrorFallback: "Initialization failed.",
+		sidebarCollapse: "Collapse sidebar",
+		sidebarExpand: "Expand sidebar"
 	},
 
 	settings: {
@@ -477,6 +488,8 @@ export const en: MessageSchema = {
 				backendAuth: "Backend Auth",
 				backendClient: "Backend Client",
 				dataTable: "Data Table",
+				surveyDataTable: "Survey data table",
+				mappingDataTable: "Queue mapping data table",
 				dataActionIntegration: "Data Action Integration",
 				dataAction: "Data Action",
 				installedAt: "Installed At"
@@ -532,16 +545,22 @@ export const en: MessageSchema = {
 			useExistingDivision: "Use existing division",
 			createNewDivision: "Create new division",
 			divisionPlaceholder: "Select a division",
+			surveyDataTable: "Survey data table",
+			mappingDataTable: "Queue mapping data table",
+			dataTableHint: "Full names of the data tables. If a table with this name already exists, it is reused and not deleted on uninstall.",
+			dataTableNamesCollide: "The two data tables need different names.",
 			next: "Next"
 		},
 		step2: {
 			title: "Summary",
-			description: "Two data tables, a bot flow, an inbound flow, a backend OAuth client and a data action for survey answers will be created.",
+			description: "The data tables, a backend OAuth client and a data action for the rating answers will be created.",
 			project: "Project",
 			appIntegration: "App Integration",
 			oauthClient: "OAuth Client",
 			division: "Division",
 			newDivision: "New: {name}_division",
+			surveyDataTable: "Survey data table",
+			mappingDataTable: "Queue mapping data table",
 			back: "Back",
 			start: "Start installation"
 		},

@@ -27,6 +27,8 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { resolveTenantContext } from "../shared/tenant_auth";
 
+import { isGenesysRegion, normalizeGenesysRegion } from "../shared/genesys_regions";
+
 const TENANTS_TABLE_NAME = process.env.TENANTS_TABLE_NAME!;
 const USER_POOL_ID = process.env.USER_POOL_ID!;
 const RESOURCE_SERVER_IDENTIFIER = process.env.RESOURCE_SERVER_IDENTIFIER!; // e.g. "backend"
@@ -335,6 +337,10 @@ async function completeRoute(event: AnyApiGwEvent): Promise<AnyResult> {
         "backendClientId, genesysRegion, genesysClientId, genesysClientSecret are required",
     });
   }
+  if (!isGenesysRegion(body.genesysRegion)) {
+    return json(400, { message: "Unsupported genesysRegion" });
+  }
+  const genesysRegion = normalizeGenesysRegion(body.genesysRegion);
 
   const now = new Date().toISOString();
 
@@ -419,7 +425,7 @@ async function completeRoute(event: AnyApiGwEvent): Promise<AnyResult> {
       UpdateExpression:
         "SET genesysRegion = :r, genesysClientId = :cid, genesysSecretArn = :arn, allowedDataTableIds = :dt, updatedAt = :u",
       ExpressionAttributeValues: {
-        ":r": body.genesysRegion,
+        ":r": genesysRegion,
         ":cid": body.genesysClientId,
         ":arn": secretArn!,
         ":dt": body.allowedDataTableIds ?? [],

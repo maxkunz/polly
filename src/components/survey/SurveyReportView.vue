@@ -16,6 +16,7 @@ import {
 	type ReportSummary
 } from "@/services/surveyReportService";
 import { downloadBlob } from "@/utils/download";
+import { useAppStore } from "@/stores/appStore";
 
 const props = defineProps<{
 	survey: Survey;
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const vTooltip = Tooltip;
+const app = useAppStore();
 
 const SUMMARY_DEBOUNCE_MS = 400;
 const LIVE_REFRESH_MS = 60_000;
@@ -151,6 +153,7 @@ const progressPercent = computed(() => {
 
 const canDownload = computed(
 	() =>
+		app.canExport &&
 		isRangeValid.value &&
 		!isLoadingSummary.value &&
 		!isDownloading.value &&
@@ -273,6 +276,7 @@ function scheduleSummary(): void {
 }
 
 async function handleDownload(): Promise<void> {
+	await app.refreshRoles();
 	if (!canDownload.value) return;
 	const controller = new AbortController();
 	downloadAbort = controller;
@@ -336,7 +340,7 @@ onBeforeUnmount(() => {
 				/>
 				<h2 class="text-base font-semibold text-[var(--p-text-color)]">
 					{{ survey.title || survey.name }}
-					<span class="text-[var(--p-text-muted-color)] font-normal">(v{{ survey.version ?? 1 }})</span>
+					<span class="text-[var(--p-surface-600)] font-normal">(v{{ survey.version ?? 1 }})</span>
 				</h2>
 			</div>
 		</div>
@@ -352,7 +356,7 @@ onBeforeUnmount(() => {
 		<div class="space-y-3">
 			<div class="flex flex-wrap items-end gap-4">
 				<div class="flex flex-col gap-1">
-					<label for="report-from" class="text-sm text-[var(--p-text-muted-color)]">{{ t("report.from") }}</label>
+					<label for="report-from" class="text-sm text-[var(--p-surface-600)]">{{ t("report.from") }}</label>
 					<DatePicker
 						v-model="fromDate"
 						inputId="report-from"
@@ -363,7 +367,7 @@ onBeforeUnmount(() => {
 					/>
 				</div>
 				<div class="flex flex-col gap-1">
-					<label for="report-to" class="text-sm text-[var(--p-text-muted-color)]">{{ t("report.to") }}</label>
+					<label for="report-to" class="text-sm text-[var(--p-surface-600)]">{{ t("report.to") }}</label>
 					<DatePicker
 						v-model="toDate"
 						inputId="report-to"
@@ -374,10 +378,11 @@ onBeforeUnmount(() => {
 					/>
 				</div>
 				<div class="flex flex-col gap-1">
-					<label for="report-version" class="text-sm text-[var(--p-text-muted-color)]">{{ t("report.version") }}</label>
+					<span id="report-version-label" class="text-sm text-[var(--p-surface-600)]">{{ t("report.version") }}</span>
 					<Select
 						v-model="versionSelectValue"
 						inputId="report-version"
+						ariaLabelledby="report-version-label"
 						:options="versionOptions"
 						optionLabel="label"
 						optionValue="value"
@@ -398,7 +403,7 @@ onBeforeUnmount(() => {
 					@click="applyQuickRange(quick.range)"
 				/>
 			</div>
-			<p class="text-xs text-[var(--p-text-muted-color)]">{{ t("report.hint") }}</p>
+			<p class="text-xs text-[var(--p-surface-600)]">{{ t("report.hint") }}</p>
 		</div>
 
 		<!-- Vorschau -->
@@ -407,16 +412,16 @@ onBeforeUnmount(() => {
 				{{ t("report.summary.title") }}
 				<i
 					v-if="isLiveRefreshing"
-					class="pi pi-sync pi-spin text-xs text-[var(--p-text-muted-color)]"
+					class="pi pi-sync pi-spin text-xs text-[var(--p-surface-600)]"
 					:title="t('report.summary.liveUpdating')"
 					:aria-label="t('report.summary.liveUpdating')"
 				/>
 			</h3>
-			<p v-if="isLoadingSummary" class="text-sm text-[var(--p-text-muted-color)]">
+			<p v-if="isLoadingSummary" class="text-sm text-[var(--p-surface-600)]">
 				<i class="pi pi-spin pi-spinner mr-1" aria-hidden="true" />
 				{{ t("report.summary.loading", { sessions: summary?.sessions ?? 0 }) }}
 			</p>
-			<p v-else-if="summary && summary.sessions === 0" class="text-sm text-[var(--p-text-muted-color)]">
+			<p v-else-if="summary && summary.sessions === 0" class="text-sm text-[var(--p-surface-600)]">
 				{{ t("report.summary.empty") }}
 			</p>
 			<dl
@@ -427,7 +432,7 @@ onBeforeUnmount(() => {
 				<div>
 					<dt
 						v-tooltip.top="t('report.summary.tooltips.sessions')"
-						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+						class="text-[var(--p-surface-600)] inline-flex items-center gap-1 cursor-help"
 					>
 						{{ t("report.summary.sessions") }}
 						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
@@ -437,7 +442,7 @@ onBeforeUnmount(() => {
 				<div>
 					<dt
 						v-tooltip.top="t('report.summary.tooltips.completed')"
-						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+						class="text-[var(--p-surface-600)] inline-flex items-center gap-1 cursor-help"
 					>
 						{{ t("report.summary.completed") }}
 						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
@@ -447,7 +452,7 @@ onBeforeUnmount(() => {
 				<div>
 					<dt
 						v-tooltip.top="t('report.summary.tooltips.partial')"
-						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+						class="text-[var(--p-surface-600)] inline-flex items-center gap-1 cursor-help"
 					>
 						{{ t("report.summary.partial") }}
 						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
@@ -457,7 +462,7 @@ onBeforeUnmount(() => {
 				<div>
 					<dt
 						v-tooltip.top="t('report.summary.tooltips.timedOut')"
-						class="text-[var(--p-text-muted-color)] inline-flex items-center gap-1 cursor-help"
+						class="text-[var(--p-surface-600)] inline-flex items-center gap-1 cursor-help"
 					>
 						{{ t("report.summary.timedOut") }}
 						<i class="pi pi-info-circle text-xs" aria-hidden="true" />
@@ -470,14 +475,16 @@ onBeforeUnmount(() => {
 		<!-- Download -->
 		<div class="space-y-3 pt-2">
 			<div class="flex flex-wrap gap-3">
-				<Button
-					icon="pi pi-download"
-					:label="t('report.download')"
-					:aria-label="t('report.downloadAriaLabel')"
-					:loading="isDownloading"
-					:disabled="!canDownload"
-					@click="handleDownload"
-				/>
+				<span v-tooltip.top="app.canExport ? undefined : t('permissions.missingExport')">
+					<Button
+						icon="pi pi-download"
+						:label="t('report.download')"
+						:aria-label="t('report.downloadAriaLabel')"
+						:loading="isDownloading"
+						:disabled="!canDownload"
+						@click="handleDownload"
+					/>
+				</span>
 				<Button
 					v-if="isDownloading"
 					severity="secondary"
@@ -489,7 +496,7 @@ onBeforeUnmount(() => {
 			</div>
 			<div v-if="isDownloading && downloadProgress" class="space-y-1">
 				<ProgressBar :value="progressPercent" />
-				<p class="text-xs text-[var(--p-text-muted-color)]">
+				<p class="text-xs text-[var(--p-surface-600)]">
 					{{ t("report.progress", { sessions: downloadProgress.sessions, rows: downloadProgress.rows }) }}
 				</p>
 			</div>

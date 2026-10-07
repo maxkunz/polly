@@ -1,7 +1,7 @@
 # Mapping Umfrage zu Queue(s)
 
 Eine Umfrage kann beliebig vielen Queues zugeordnet werden.
-Dazu gibt es eine eigene Genesys Data Table `POLLY_MAPPING_DATA_TABLE_NAME` (`constants/surveyConstants.ts`, aktuell `Bund_KSC_Atip_Polly_Mapping`) - im Gegensatz zu den Umfragen selbst (siehe `datatablerow_survey_entry.md`) liegt das Mapping nicht als JSON-String in einer Zeile der Umfrage-Tabelle, sondern jede Queue ist eine eigene Zeile dieser Tabelle. Das erlaubt dem Architect Flow einen direkten Lookup über den Queue-Namen, ohne JSON parsen zu müssen.
+Dazu gibt es eine eigene Genesys Data Table. Ihr Name wird im Setup frei gewählt (vorbelegt mit `POLLY_MAPPING_DATA_TABLE_NAME` aus `constants/surveyConstants.ts`, aktuell `Bund_KSC_Atip_Polly_Mapping`), ID und Name stehen danach in `meta.setup.mappingDataTable` der `__meta`-Zeile. Installationen ohne diesen Eintrag suchen die Tabelle über den Konstantennamen - im Gegensatz zu den Umfragen selbst (siehe `datatablerow_survey_entry.md`) liegt das Mapping nicht als JSON-String in einer Zeile der Umfrage-Tabelle, sondern jede Queue ist eine eigene Zeile dieser Tabelle. Das erlaubt dem Architect Flow einen direkten Lookup über den Queue-Namen, ohne JSON parsen zu müssen.
 
 ## Spalten
 

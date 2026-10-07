@@ -61,6 +61,8 @@ function confirmDelete() {
 		acceptLabel: t("surveyFollowUp.deleteConfirm.acceptLabel"),
 		rejectLabel: t("surveyFollowUp.deleteConfirm.rejectLabel"),
 		acceptClass: "p-button-danger",
+		// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+		defaultFocus: "reject",
 		accept: () => {
 			emit("remove");
 		}
@@ -108,10 +110,11 @@ function confirmDelete() {
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 				<div class="md:col-span-2">
 					<label :for="titleId" class="block text-xs font-medium mb-1">
-						{{ t("surveyFollowUp.title") }} <span class="text-red-500" aria-hidden="true">*</span>
+						{{ t("surveyFollowUp.title") }} <span class="text-red-700" aria-hidden="true">*</span>
 					</label>
 					<InputText
 						:id="titleId"
+						aria-required="true"
 						v-model="followUp.question.title"
 						class="w-full text-sm"
 						:placeholder="t('surveyFollowUp.titlePlaceholder')"
@@ -122,12 +125,15 @@ function confirmDelete() {
 				</div>
 
 				<div>
-					<label :for="typeId" class="block text-xs font-medium mb-1">
-						{{ t("surveyFollowUp.type") }} <span class="text-red-500" aria-hidden="true">*</span>
-						<span v-if="isSaved" class="text-[10px] text-amber-600 block">{{ t("surveyFollowUp.typeSavedHint") }}</span>
-					</label>
+					<!-- Kein <label for>: Select rendert kein Formularelement, Verknüpfung über aria-labelledby -->
+					<div :id="`${typeId}_label`" class="block text-xs font-medium mb-1">
+						{{ t("surveyFollowUp.type") }} <span class="text-red-700" aria-hidden="true">*</span>
+						<span v-if="isSaved" class="text-[11px] text-amber-700 block">{{ t("surveyFollowUp.typeSavedHint") }}</span>
+					</div>
 					<Select
 						:inputId="typeId"
+						:ariaLabelledby="`${typeId}_label`"
+						:pt="{ label: { 'aria-required': 'true' } }"
 						:modelValue="followUp.question.type"
 						:options="followUpQuestionTypeOptions"
 						optionLabel="label"

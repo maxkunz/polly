@@ -89,6 +89,14 @@ export const de = {
 		}
 	},
 
+	permissions: {
+		missingWrite: "Keine Berechtigung – Schreibrechte fehlen.",
+		missingDeploy: "Keine Berechtigung – Deployrechte fehlen.",
+		missingExport: "Keine Berechtigung – Rechte zum Export der Ergebnisse fehlen.",
+		readOnlyBanner: "Nur Lesezugriff: Das Erstellen, Bearbeiten, Klonen und Löschen von Umfragen erfordert Schreibrechte.",
+		deployReadOnlyBanner: "Nur Lesezugriff: Für Deployments, Rollback und Queue-Mapping werden Deployrechte benötigt."
+	},
+
 	surveys: {
 		searchPlaceholder: "Umfrage suchen...",
 		actions: {
@@ -119,6 +127,7 @@ export const de = {
 			unnamedSurvey: "Unbenannte Umfrage",
 			openAriaLabel: "Umfrage öffnen: {title}",
 			edit: "Bearbeiten",
+			view: "Ansehen",
 			emptySearch: "Keine Umfragen für die Suchanfrage gefunden.",
 			empty: "Keine Umfragen vorhanden."
 		}
@@ -152,8 +161,8 @@ export const de = {
 			surveyTitle: "Titel der Umfrage",
 			technicalName: "Technischer Name (Automatisch aus Titel & ID)",
 			description: "Beschreibung",
-			greeting: "Begrüßungsnachricht (Greeting)",
-			closing: "Verabschiedungsnachricht (Closing)",
+			greeting: "Begrüßungsnachricht",
+			closing: "Verabschiedungsnachricht",
 			placeholders: {
 				title: "z. B. Kundenzufriedenheit 2026",
 				description: "Interne Beschreibung oder Kontext zur Umfrage...",
@@ -456,7 +465,9 @@ export const de = {
 
 	app: {
 		initErrorSummary: "Fehler",
-		initErrorFallback: "Initialisierung fehlgeschlagen."
+		initErrorFallback: "Initialisierung fehlgeschlagen.",
+		sidebarCollapse: "Seitenleiste einklappen",
+		sidebarExpand: "Seitenleiste ausklappen"
 	},
 
 	settings: {
@@ -475,6 +486,8 @@ export const de = {
 				backendAuth: "Backend-Auth",
 				backendClient: "Backend-Client",
 				dataTable: "Data Table",
+				surveyDataTable: "Data Table Umfragen",
+				mappingDataTable: "Data Table Queue-Mapping",
 				dataActionIntegration: "Data-Action-Integration",
 				dataAction: "Data Action",
 				installedAt: "Installiert am"
@@ -530,16 +543,22 @@ export const de = {
 			useExistingDivision: "Bestehende Division verwenden",
 			createNewDivision: "Neue Division erzeugen",
 			divisionPlaceholder: "Division auswählen",
+			surveyDataTable: "Data Table Umfragen",
+			mappingDataTable: "Data Table Queue-Mapping",
+			dataTableHint: "Vollständige Namen der Data Tables. Existiert bereits eine Tabelle mit diesem Namen, wird sie übernommen und beim Deinstallieren nicht gelöscht.",
+			dataTableNamesCollide: "Die beiden Data Tables brauchen unterschiedliche Namen.",
 			next: "Weiter"
 		},
 		step2: {
 			title: "Zusammenfassung",
-			description: "Es werden zwei Data Tables, ein Bot-Flow, ein Inbound-Flow, ein Backend-OAuth-Client und eine Data Action für die Umfrageantworten angelegt.",
+			description: "Es werden die Data Tables, ein Backend-OAuth-Client und eine Data Action für die Bewertungsantworten angelegt.",
 			project: "Projekt",
 			appIntegration: "App-Integration",
 			oauthClient: "OAuth-Client",
 			division: "Division",
 			newDivision: "Neu: {name}_division",
+			surveyDataTable: "Data Table Umfragen",
+			mappingDataTable: "Data Table Queue-Mapping",
 			back: "Zurück",
 			start: "Installation starten"
 		},

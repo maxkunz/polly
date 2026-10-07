@@ -6,6 +6,7 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, resolveDataTableId } from "@/services/surveyService";
 import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
+import { useAppStore } from "@/stores/appStore";
 
 export interface SurveySaveActionsOptions {
 	draftSurvey: Ref<Survey | null>;
@@ -33,12 +34,16 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const toast = useToast();
 	const confirm = useConfirm();
 	const { t } = useI18n();
+	const app = useAppStore();
 
 	const isSaving = ref<boolean>(false);
 	const isDeleting = ref<boolean>(false);
 	const saveAttempted = ref<boolean>(false);
 
 	async function handleSave() {
+		// Zweite Absicherung neben den deaktivierten Buttons
+		await app.refreshRoles();
+		if (!app.canWrite) return;
 		saveAttempted.value = true;
 		if (!options.isValid.value || !options.draftSurvey.value) {
 			const errors = options.validationErrors.value;
@@ -126,6 +131,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			acceptLabel: t("surveyEditor.discardConfirm.acceptLabel"),
 			rejectLabel: t("surveyEditor.discardConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
+			// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+			defaultFocus: "reject",
 			accept: () => {
 				options.reset();
 				saveAttempted.value = false;
@@ -142,7 +149,9 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 		});
 	}
 
-	function handleDelete() {
+	async function handleDelete() {
+		await app.refreshRoles();
+		if (!app.canWrite) return;
 		const title = options.draftSurvey.value?.title || options.surveyId;
 		confirm.require({
 			header: t("surveyEditor.deleteConfirm.header"),
@@ -151,6 +160,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			acceptLabel: t("surveyEditor.deleteConfirm.acceptLabel"),
 			rejectLabel: t("surveyEditor.deleteConfirm.rejectLabel"),
 			acceptClass: "p-button-danger",
+			// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+			defaultFocus: "reject",
 			accept: async () => {
 				isDeleting.value = true;
 				try {

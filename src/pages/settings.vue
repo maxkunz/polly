@@ -74,6 +74,8 @@ const setupRows = computed(() => {
 		{ label: t("settings.setup.fields.backendAuth"), value: formatBackendAuth(currentSetup.backendAuth) },
 		{ label: t("settings.setup.fields.backendClient"), value: formatResource(currentSetup.backendClient) },
 		{ label: t("settings.setup.fields.dataTable"), value: formatResource(currentSetup.dataTable) },
+		{ label: t("settings.setup.fields.surveyDataTable"), value: formatResource(currentSetup.surveyDataTable) },
+		{ label: t("settings.setup.fields.mappingDataTable"), value: formatResource(currentSetup.mappingDataTable) },
 		{ label: t("settings.setup.fields.dataActionIntegration"), value: formatResource(currentSetup.dataActionIntegration) },
 		{ label: t("settings.setup.fields.dataAction"), value: formatResource(currentSetup.dataAction) },
 		{ label: t("settings.setup.fields.installedAt"), value: currentSetup.installedAt ?? "—" }
@@ -109,6 +111,7 @@ function startUninstall() {
 				:title="moduleMeta.title"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
+				titleTag="h1"
 			/>
 		</div>
 
@@ -117,11 +120,13 @@ function startUninstall() {
 				<template #title>{{ t("language.title") }}</template>
 				<template #content>
 					<div class="max-w-xs">
-						<label for="app-language-select" class="block text-sm font-medium mb-1">
+						<!-- Kein <label for>: Select rendert kein Formularelement, Verknüpfung über aria-labelledby -->
+						<div id="app-language-select-label" class="block text-sm font-medium mb-1">
 							{{ t("language.label") }}
-						</label>
+						</div>
 						<Select
 							id="app-language-select"
+							ariaLabelledby="app-language-select-label"
 							v-model="selectedLocale"
 							:options="languageOptions"
 							optionLabel="label"

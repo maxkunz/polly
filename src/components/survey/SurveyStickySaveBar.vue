@@ -24,10 +24,10 @@ const emit = defineEmits<{
 <template>
 	<div class="sticky bottom-4 z-20 bg-[var(--p-surface-0)]/90 backdrop-blur-md p-4 rounded-2xl shadow-lg border border-[var(--p-content-border-color)] flex items-center justify-between gap-4">
 		<div class="text-xs text-[var(--p-text-muted-color)]">
-			<span v-if="isDirty" class="font-medium text-amber-600">
+			<span v-if="isDirty" class="font-medium text-amber-700">
 				{{ t("surveyEditor.stickyBar.unsaved") }}
 			</span>
-			<span v-else class="text-emerald-600">
+			<span v-else class="text-emerald-700">
 				{{ t("surveyEditor.stickyBar.allSaved") }}
 			</span>
 		</div>

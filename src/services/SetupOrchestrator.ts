@@ -1,6 +1,6 @@
 import platformClient from "purecloud-platform-client-v2";
 import { createDivision } from "@/services/genesys/division";
-import { createDataTable, addDataTableRow, updateDataTableRow } from "@/services/genesys/dataTable";
+import { createDataTable, addDataTableRow, updateDataTableRow, findDataTableByName } from "@/services/genesys/dataTable";
 import { createIntegrationOfType, createDataAction, enableIntegration, getIntegrationWithID, applyDomainDatActPlaceholder } from "@/services/genesys/dataAction";
 import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/services/genesys/groups";
 import { updateIntegrationProperties } from "@/services/genesys/auth";
@@ -67,6 +67,8 @@ export async function runFullProvisioning(
   oauthFrontendId: string,
   divisionId: string,
   divisionName: string,
+  surveyDataTableName: string,
+  mappingDataTableName: string,
   onProgress: (msg: string) => void
 ): Promise<{
   integrationUrl: string;
@@ -97,6 +99,15 @@ export async function runFullProvisioning(
   const projectTag = projectName.trim().replace(/[^A-Za-z0-9_-]/g, "");
   if (!projectTag) {
     throw new Error("Project tag is required.");
+  }
+
+  const surveyTableName = surveyDataTableName.trim();
+  const mappingTableName = mappingDataTableName.trim();
+  if (!surveyTableName || !mappingTableName) {
+    throw new Error("Survey and mapping data table names are required.");
+  }
+  if (surveyTableName === mappingTableName) {
+    throw new Error("Survey and mapping data table names must differ.");
   }
 
   const names = {
@@ -512,7 +523,7 @@ function resolveAppUrl(rawUrl?: string) {
 function getLaunchContext() {
   const params = new URLSearchParams(window.location.search);
   return {
-    gcHostOrigin: params.get("gcHostOrigin") || "https://apps.mypurecloud.de",
+    gcHostOrigin: params.get("gcHostOrigin") || `https://apps.${getGenesysRegion()}`,
     gcTargetEnv: params.get("gcTargetEnv") || "prod",
   };
 }

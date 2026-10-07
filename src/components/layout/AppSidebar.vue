@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 
 import { useUiStore } from "@/stores/uiStore";
 import { useAppStore } from "@/stores/appStore";
@@ -9,6 +10,7 @@ import type { ModuleDefinition, ModuleChild } from "@/app/modules";
 
 import { appIconSet } from "@/components/icons/appIconSet";
 
+const { t } = useI18n();
 const uiStore = useUiStore();
 const appStore = useAppStore();
 const route = useRoute();
@@ -146,13 +148,16 @@ watch(
 			<!-- Collapse Toggle (floated right) -->
 			<button
 				type="button"
-				class="flex items-center justify-center text-surface-500 opacity-60 hover:opacity-100 transition"
+				class="flex items-center justify-center text-[var(--p-app-sidebar-text)] opacity-60 hover:opacity-100 focus-visible:opacity-100 transition"
 				:class="isSidebarCollapsed ? 'w-8 h-8' : 'w-6 h-6'"
+				:aria-label="isSidebarCollapsed ? t('app.sidebarExpand') : t('app.sidebarCollapse')"
+				:aria-expanded="!isSidebarCollapsed"
 				@click="uiStore.toggleSidebar"
 			>
 				<i
 					:class="isSidebarCollapsed ? 'pi pi-chevron-right' : 'pi pi-chevron-left'"
 					class="text-xs"
+					aria-hidden="true"
 				/>
 			</button>
 		</div>
@@ -164,16 +169,21 @@ watch(
 					v-for="module in modulesList"
 					:key="module.key"
 				>
-					<!-- Module row -->
-					<div
-						class="w-full flex items-center px-3 py-2 text-sm rounded-xl transition-colors cursor-pointer
+					<!-- Module row (button für Tastaturbedienung) -->
+					<button
+						type="button"
+						class="w-full flex items-center px-3 py-2 text-sm text-left rounded-xl transition-colors cursor-pointer
 						       app-nav-item app-nav-hover"
 						:class="isActiveRoute(module) && 'app-nav-item-active'"
+						:aria-label="isSidebarCollapsed ? module.title : undefined"
+						:aria-current="isActiveRoute(module) ? 'page' : undefined"
+						:aria-expanded="!isSidebarCollapsed && hasSidebarChildren(module) ? openModuleKey === module.key : undefined"
 						@click="handleModuleClick(module)"
 					>
-						<div class="flex items-center gap-2 flex-1">
+						<span class="flex items-center gap-2 flex-1">
 							<component v-if="appIconSet[module.key]"
 								:is="appIconSet[module.key]"
+								aria-hidden="true"
 							/>
 							<span
 								v-if="!isSidebarCollapsed"
@@ -181,7 +191,7 @@ watch(
 							>
 								{{ module.title }}
 							</span>
-						</div>
+						</span>
 
 						<!-- Chevron (children indicator) -->
 						<i
@@ -190,8 +200,9 @@ watch(
 								'pi text-[8px]',
 								openModuleKey === module.key ? 'pi-chevron-down' : 'pi-chevron-right'
 							]"
+							aria-hidden="true"
 						/>
-					</div>
+					</button>
 
 					<!-- Children -->
 					<ul
@@ -211,6 +222,7 @@ watch(
 								class="w-full text-left text-xs px-2 py-1 rounded-lg truncate
 								       app-subitem app-nav-hover"
 								:class="isActiveChild(child) && 'app-subitem-active'"
+								:aria-current="isActiveChild(child) ? 'page' : undefined"
 								@click="handleChildClick(module, child)"
 							>
 								{{ child.label }}

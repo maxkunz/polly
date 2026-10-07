@@ -42,6 +42,8 @@ function confirmDelete() {
 		acceptLabel: t("surveyQuestion.deleteConfirm.acceptLabel"),
 		rejectLabel: t("surveyQuestion.deleteConfirm.rejectLabel"),
 		acceptClass: "p-button-danger",
+		// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+		defaultFocus: "reject",
 		accept: () => {
 			emit("delete");
 		}

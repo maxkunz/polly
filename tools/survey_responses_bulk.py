@@ -10,11 +10,16 @@ Verwendung:
   export GENESYS_TOKEN=<Bearer aus dem Genesys-Portal>
   python3 test/survey_responses_bulk.py umfrage.json [-n ANZAHL_SESSIONS]
   python3 test/survey_responses_bulk.py --surveyid <UUID> [-n ANZAHL_SESSIONS]
+  python3 test/survey_responses_bulk.py --surveytitle "<Titel>" [-n ANZAHL_SESSIONS]
 
 Optionen (jeweils auch per Umgebungsvariable):
   --surveyid              UUID einer Umfrage: statt der JSON-Datei wird das Draft-Feld der
                           Zeile survey_<UUID> aus der Genesys Data Table geladen
                           (siehe documentation/datatablerow_survey_entry.md)
+  --surveytitle           Titel einer Umfrage: die UUID wird über die Zeile survey_list
+                          (siehe documentation/datatablerow_survey_list.md) ermittelt, dann
+                          wie bei --surveyid geladen. Nur eine der drei Quellen (Datei,
+                          --surveyid, --surveytitle) darf angegeben werden.
   --table / DATA_TABLE_NAME
                           Name der Data Table (Default "Polly Mock Surveys")
   -n / SESSIONS           Anzahl Sessions (Default 200)
@@ -24,6 +29,8 @@ Optionen (jeweils auch per Umgebungsvariable):
                           Anteil Sessions ohne Schlusskommentar in % (Default 10)
   --answers               Datei mit Kommentar-Antworten, eine pro Zeile
                           (Default: answers.txt neben dem Skript)
+  -v / --verbose          mehr Infos: Quelle der Umfrage, Fragenbaum, pro Request das
+                          gesendete JSON (formatiert) samt HTTP-Status und Antwortzeit
   API_URL, GENESYS_REGION wie in survey_responses.sh
 
 ACHTUNG: Schreibt echte Daten in die deployte API.
@@ -45,6 +52,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 DEFAULT_API_URL = "https://main.d1a6p4nkkob4i7.amplifyapp.com/api"
 DEFAULT_TABLE_NAME = "Polly Mock Surveys"  # POLLY_DATA_TABLE_NAME in src/constants/surveyConstants.ts
+
+
+VERBOSE = False
+_print_lock = threading.Lock()
+
+
+def vprint(*parts):
+    """Ausgabe nur mit --verbose; als Ganzes gesperrt, damit parallele Sessions nicht vermischen."""
+    if VERBOSE:
+        with _print_lock:
+            print(*parts, flush=True)
 
 
 def env_int(name, default):
@@ -184,6 +202,9 @@ def post(conn, headers, payload, label, stats, stop):
         except Exception as e:  # Netzwerkfehler
             status, text = 0, str(e)
         elapsed = time.monotonic() - start
+        vprint(f"--> {label} (Versuch {attempt})\n"
+               f"{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
+               f"<-- HTTP {status} in {elapsed:.3f} s" + (f" {text}" if status not in (200, 201) else ""))
         if status in (200, 201):
             stats.ok(elapsed)
             return
@@ -276,14 +297,8 @@ def genesys_get(region, token, path, params=None):
         sys.exit(f"Error: Genesys {path} nicht erreichbar: {e.reason}")
 
 
-def load_survey_from_datatable(region, token, table_name, survey_id):
-    """Lädt das Draft-Feld der Zeile survey_<uuid> aus der Genesys Data Table."""
-    res = genesys_get(region, token, "/api/v2/flows/datatables", {"name": table_name, "pageSize": 100})
-    table = next((t for t in (res or {}).get("entities", []) if t.get("name") == table_name), None)
-    if not table:
-        sys.exit(f"Error: Data Table '{table_name}' nicht gefunden")
-    key = f"survey_{survey_id}"
-    row = genesys_get(region, token, f"/api/v2/flows/datatables/{table['id']}/rows/{urllib.parse.quote(key)}",
+def get_row(region, token, table_id, table_name, key):
+    row = genesys_get(region, token, f"/api/v2/flows/datatables/{table_id}/rows/{urllib.parse.quote(key)}",
                       {"showbrief": "false"})
     if row is None:
         sys.exit(f"Error: Zeile '{key}' in Data Table '{table_name}' nicht gefunden")
@@ -291,6 +306,37 @@ def load_survey_from_datatable(region, token, table_name, survey_id):
     if not raw:
         sys.exit(f"Error: Zeile '{key}' hat kein Draft-Feld")
     return json.loads(raw) if isinstance(raw, str) else raw
+
+
+def find_table_id(region, token, table_name):
+    res = genesys_get(region, token, "/api/v2/flows/datatables", {"name": table_name, "pageSize": 100})
+    table = next((t for t in (res or {}).get("entities", []) if t.get("name") == table_name), None)
+    if not table:
+        sys.exit(f"Error: Data Table '{table_name}' nicht gefunden")
+    return table["id"]
+
+
+def find_survey_id_by_title(region, token, table_id, table_name, title):
+    """Sucht die UUID in der Index-Zeile survey_list (Titel, Groß-/Kleinschreibung egal)."""
+    entries = get_row(region, token, table_id, table_name, "survey_list")
+    matches = [e for e in entries if (e.get("title") or "").strip().lower() == title.strip().lower()]
+    if not matches:
+        known = "\n".join(f"  - {e.get('title')} ({e.get('id')})" for e in entries)
+        sys.exit(f"Error: Keine Umfrage mit Titel '{title}' gefunden. Vorhanden:\n{known}")
+    if len(matches) > 1:
+        ids = "\n".join(f"  - {e.get('id')}" for e in matches)
+        sys.exit(f"Error: Titel '{title}' ist nicht eindeutig, bitte --surveyid verwenden:\n{ids}")
+    return matches[0]["id"]
+
+
+def load_survey_from_datatable(region, token, table_name, survey_id=None, title=None):
+    """Lädt das Draft-Feld der Zeile survey_<uuid> aus der Genesys Data Table
+    (die UUID kommt direkt oder wird über den Titel aus survey_list ermittelt)."""
+    table_id = find_table_id(region, token, table_name)
+    if survey_id is None:
+        survey_id = find_survey_id_by_title(region, token, table_id, table_name, title)
+        vprint(f"==== Titel '{title}' -> Umfrage-ID {survey_id} ====")
+    return get_row(region, token, table_id, table_name, f"survey_{survey_id}")
 
 
 # ---------------------------------------------------------------- Main
@@ -303,14 +349,20 @@ def main():
     ap = argparse.ArgumentParser(description="Zufällige Umfrage-Sessions an die survey_responses-API senden")
     ap.add_argument("survey", nargs="?", help="JSON-Datei mit der Umfrage-Definition")
     ap.add_argument("--surveyid", help="Umfrage-UUID: Draft aus der Genesys Data Table laden statt JSON-Datei")
+    ap.add_argument("--surveytitle", help="Umfrage-Titel: Draft aus der Genesys Data Table laden (UUID über survey_list)")
     ap.add_argument("--table", default=os.environ.get("DATA_TABLE_NAME", DEFAULT_TABLE_NAME),
                     help="Name der Data Table (nur mit --surveyid)")
     ap.add_argument("-n", "--sessions", type=int, default=env_int("SESSIONS", 200))
     ap.add_argument("-p", "--parallel", type=int, default=env_int("PARALLEL", 10))
     ap.add_argument("--abort-pct", type=float, default=env_int("ABORT_PCT", 15))
     ap.add_argument("--skip-comment-pct", type=float, default=env_int("SKIP_COMMENT_PCT", 10))
+    ap.add_argument("-v", "--verbose", action="store_true", help="Details und gesendetes JSON pro Request ausgeben")
     ap.add_argument("--answers", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "answers.txt"))
     args = ap.parse_args()
+    global VERBOSE
+    VERBOSE = args.verbose
+    if [bool(args.survey), bool(args.surveyid), bool(args.surveytitle)].count(True) != 1:
+        ap.error("genau eine Quelle angeben: JSON-Datei, --surveyid oder --surveytitle")
 
     token = os.environ.get("GENESYS_TOKEN", "")
     if not token:
@@ -318,15 +370,14 @@ def main():
                  "Example: export GENESYS_TOKEN=<GENESYS_BEARER_TOKEN>")
 
     region = os.environ.get("GENESYS_REGION", "mypurecloud.de")
-    if args.surveyid:
-        source = f"Data Table '{args.table}', survey_{args.surveyid}"
-        survey = load_survey_from_datatable(region, token, args.table, args.surveyid)
+    if args.surveyid or args.surveytitle:
+        source = f"Data Table '{args.table}', " + (f"survey_{args.surveyid}" if args.surveyid
+                                                   else f"Titel '{args.surveytitle}'")
+        survey = load_survey_from_datatable(region, token, args.table, args.surveyid, args.surveytitle)
     elif args.survey:
         source = args.survey
         with open(args.survey, encoding="utf-8") as f:
             survey = json.load(f)
-    else:
-        ap.error("JSON-Datei oder --surveyid angeben")
     for key in ("id", "name", "version", "questions"):
         if key not in survey:
             sys.exit(f"Error: Feld '{key}' fehlt in {source}")
@@ -343,6 +394,9 @@ def main():
         "x-genesys-region": region,
         "Content-Type": "application/json",
     }
+    vprint(f"==== Quelle: {source} | Umfrage-ID: {survey['id']} | Name: {survey['name']} ====")
+    vprint(f"==== Endpoint: {url} | Antworten-Datei: {args.answers} | "
+           f"Kommentar ohne Abschluss: {args.skip_comment_pct:g}% ====")
     run_id = f"bulk-{int(time.time())}"
     answer = make_answer_fn(comments)
     stats = Stats()

@@ -1,5 +1,5 @@
 import { useAppStore } from "@/stores/appStore";
-import { GENESYS_REGION } from "@/constants/genesysConstants";
+import { getGenesysRegion } from "@/services/genesysRegion";
 
 export class PollyApiError extends Error {
 	constructor(
@@ -31,7 +31,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 		headers: {
 			...(init.headers ?? {}),
 			Authorization: `Bearer ${accessToken}`,
-			"x-genesys-region": GENESYS_REGION
+			"x-genesys-region": getGenesysRegion()
 		}
 	});
 

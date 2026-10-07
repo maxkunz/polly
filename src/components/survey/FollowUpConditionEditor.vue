@@ -133,11 +133,14 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 
 		<div class="grid grid-cols-1 gap-3" :class="hasSingleOperator ? '' : 'md:grid-cols-2'">
 			<div v-if="!hasSingleOperator">
-				<label :for="conditionOpId" class="block text-xs font-medium mb-1">
-					{{ t("surveyCondition.operator") }} <span class="text-red-500" aria-hidden="true">*</span>
-				</label>
+				<!-- Kein <label for>: Select rendert kein Formularelement, Verknüpfung über aria-labelledby -->
+				<div :id="`${conditionOpId}_label`" class="block text-xs font-medium mb-1">
+					{{ t("surveyCondition.operator") }} <span class="text-red-700" aria-hidden="true">*</span>
+				</div>
 				<Select
 					:inputId="conditionOpId"
+					:ariaLabelledby="`${conditionOpId}_label`"
+					:pt="{ label: { 'aria-required': 'true' } }"
 					v-model="followUp.condition.operator"
 					:options="operatorOptions"
 					optionLabel="label"
@@ -152,23 +155,25 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 				<small
 					v-if="showValidation && duplicateOperatorMessage"
 					:id="`${conditionOpId}_dup`"
-					class="block mt-1 text-xs text-red-500"
+					class="block mt-1 text-xs text-red-700"
 				>
 					{{ duplicateOperatorMessage }}
 				</small>
 			</div>
 
 			<div>
-				<label :for="conditionValueId" class="block text-xs font-medium mb-1">
+				<div :id="`${conditionValueId}_label`" class="block text-xs font-medium mb-1">
 					<template v-if="isChoiceParent">{{ t("surveyCondition.valueChoice") }}</template>
 					<template v-else>{{ t("surveyCondition.valueOther") }}</template>
-					<span class="text-red-500" aria-hidden="true">*</span>
-				</label>
+					<span class="text-red-700" aria-hidden="true">*</span>
+				</div>
 
 				<!-- Boolean for yes_no -->
 				<template v-if="parentQuestion.type === 'yes_no'">
 					<Select
 						:inputId="conditionValueId"
+						:ariaLabelledby="`${conditionValueId}_label`"
+						:pt="{ label: { 'aria-required': 'true' } }"
 						v-model="followUp.condition.value"
 						:options="booleanOptions"
 						optionLabel="label"
@@ -183,7 +188,7 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					<small
 						v-if="showValidation && duplicateValueMessage"
 						:id="`${conditionValueId}_dup`"
-						class="block mt-1 text-xs text-red-500"
+						class="block mt-1 text-xs text-red-700"
 					>
 						{{ duplicateValueMessage }}
 					</small>
@@ -193,6 +198,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 				<template v-else-if="parentQuestion.type === 'choice'">
 					<Select
 						:inputId="conditionValueId"
+						:ariaLabelledby="`${conditionValueId}_label`"
+						:pt="{ label: { 'aria-required': 'true' } }"
 						v-model="followUp.condition.value"
 						:options="choiceOptionsList"
 						optionLabel="label"
@@ -208,7 +215,7 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					<small
 						v-if="showValidation && duplicateValueMessage"
 						:id="`${conditionValueId}_dup`"
-						class="block mt-1 text-xs text-red-500"
+						class="block mt-1 text-xs text-red-700"
 					>
 						{{ duplicateValueMessage }}
 					</small>
@@ -218,6 +225,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 				<InputNumber
 					v-else
 					:inputId="conditionValueId"
+					:ariaLabelledby="`${conditionValueId}_label`"
+					:pt="{ pcInputText: { root: { 'aria-required': 'true' } } }"
 					v-model="followUp.condition.value as number"
 					inputClass="w-full text-xs"
 					:useGrouping="false"

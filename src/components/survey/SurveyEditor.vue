@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from "vue";
+import { ref, watch, onBeforeUnmount, toRef } from "vue";
+import { useI18n } from "vue-i18n";
+import Message from "primevue/message";
 
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { cloneSurvey } from "@/domain/survey/surveyTypes";
@@ -39,6 +41,8 @@ const emit = defineEmits<{
 	(e: "update:isDirty", isDirty: boolean): void;
 }>();
 
+const { t } = useI18n();
+
 const existingRowRef = ref<Record<string, any> | null>(props.existingRow ?? null);
 
 watch(
@@ -77,6 +81,7 @@ const {
 	existingRow: existingRowRef,
 	isDirty,
 	isNew: props.isNew,
+	readOnly: toRef(props, "disabled"),
 	onRowRefreshed: freshRow => {
 		existingRowRef.value = freshRow;
 	},
@@ -147,6 +152,10 @@ function handleClone() {
 
 <template>
 	<div v-if="draftSurvey" class="space-y-6">
+		<Message v-if="disabled" severity="info" :closable="false">
+			{{ t("permissions.readOnlyBanner") }}
+		</Message>
+
 		<!-- Top Action Header & Breadcrumb -->
 		<SurveyEditorToolbar
 			:isDirty="isDirty"

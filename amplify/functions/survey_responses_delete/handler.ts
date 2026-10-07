@@ -165,7 +165,11 @@ async function requestDeletion(event: AnyApiGwEvent, tenantId: string, source: s
   let token: string;
   try {
     if (source === "genesys") {
-      region = getGenesysRegion(event);
+      const headerRegion = getGenesysRegion(event);
+      if (!headerRegion) {
+        return jsonResponse(400, { message: "Unsupported Genesys region" });
+      }
+      region = headerRegion;
       token = getAuthorizationToken(event);
     } else if (credentials) {
       region = credentials.region;

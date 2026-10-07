@@ -58,8 +58,24 @@ export async function login(
 	app.currentUser = {
 		id: String(user?.id ?? ""),
 		name: String(user?.name ?? ""),
-		email: (user?.email as string | undefined) ?? undefined
+		email: (user?.email as string | undefined) ?? undefined,
+		// Fehler beim Laden ⇒ keine Rollen, der User arbeitet nur lesend
+		roles: (await loadCurrentUserRoles()) ?? []
 	};
+	app.rolesLoadedAt = Date.now();
+}
+
+// Lädt die Rollennamen des eingeloggten Users. Liefert null, wenn der Abruf
+// fehlschlägt (z. B. fehlender OAuth-Scope).
+export async function loadCurrentUserRoles(): Promise<string[] | null> {
+	try {
+		const me = await getApp().genesys.usersApi.getUsersMe({ expand: ["authorization"] });
+		const roles: Array<{ name?: string }> = me?.authorization?.roles ?? [];
+		return roles.map(role => String(role?.name ?? "")).filter(Boolean);
+	} catch (error) {
+		console.warn("Could not load Genesys roles of current user.", error);
+		return null;
+	}
 }
 
 export async function getLockRow(
@@ -252,7 +268,7 @@ export async function getQuestionAnswers(): Promise<QuestionAnswerStats[]> {
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Content-Type": "application/json",
-			"x-genesys-region": "mypurecloud.de"
+			"x-genesys-region": getGenesysRegion()
 		}
 	});
 
