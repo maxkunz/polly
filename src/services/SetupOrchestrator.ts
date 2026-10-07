@@ -177,7 +177,7 @@ export async function runFullProvisioning(
   await apiLinks.putOauthClient(oauthFrontendId, {
     name: frontendOAuth.name,
     registeredRedirectUri: [launchUrl],
-    authorizedGrantType: "TOKEN",
+    authorizedGrantType: "CODE",
     scope: frontendOAuth.scope ?? [
       "integrations",
       "dialog",

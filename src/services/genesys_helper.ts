@@ -3,6 +3,7 @@ import { Domain } from "@/domain/Domain";
 import { Meta } from "@/domain/Meta";
 import { Questions } from "@/domain/Questions";
 import type { LockObject, LockRow } from "@/services/lockingService";
+import { genesysAuthStoragePrefix } from "@/services/genesys/region";
 
 export type QuestionAnswerStats = {
 	tenantId: string;
@@ -31,7 +32,8 @@ export function safeParse<T = unknown>(json: unknown, fallback: T): T {
 
 export async function login(
 	clientId: string | null,
-	redirectUri: string
+	redirectUri: string,
+	region: string
 ): Promise<void> {
 	if (!clientId) {
 		throw new Error("Missing clientId for Genesys login.");
@@ -41,9 +43,10 @@ export async function login(
 	app.initGenesysClients();
 	const genesys = app.genesys;
 
-	genesys.client.setEnvironment("mypurecloud.de");
+	genesys.client.setEnvironment(region);
+	genesys.client.setPersistSettings(true, genesysAuthStoragePrefix(clientId, region));
 
-	await genesys.client.loginImplicitGrant(clientId, redirectUri);
+	await genesys.client.loginPKCEGrant(clientId, redirectUri);
 
 	const accessToken = genesys.client?.authData?.accessToken ?? null;
 	if (accessToken) {

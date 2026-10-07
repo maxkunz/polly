@@ -38,7 +38,7 @@ export async function runFullDelete(
       await apiLinks.putOauthClient(oauthFrontendId, {
         name: frontendOAuth.name,
         registeredRedirectUri: [setupModeLink],
-        authorizedGrantType: "TOKEN",
+        authorizedGrantType: "CODE",
         scope: frontendOAuth.scope ?? [
           "integrations",
           "dialog",
