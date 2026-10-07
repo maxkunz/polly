@@ -490,6 +490,29 @@ export const de = {
 		startApp: "App starten",
 		backToConfig: "Zurück zur Konfiguration",
 		rollback: "Rollback",
+		permissions: {
+			title: "Fehlende Installer-Berechtigungen",
+			description: "Für die Installation und den Rollback werden die folgenden Berechtigungen benötigt.",
+			available: "Vorhanden",
+			missing: "Fehlend",
+			warningTitle: "Einige Setup-Optionen sind eingeschränkt",
+			divisionHint: "Ohne Rechte zum Anlegen und Löschen einer Division kann nur eine bestehende Division verwendet werden.",
+			checkedTitle: "Berechtigungen geprüft",
+			checkedDetail: "Installer-Berechtigungen sind vorhanden.",
+			loadErrorTitle: "Setup-Daten konnten nicht geladen werden",
+			retry: "Erneut versuchen",
+			requirements: {
+				groupsManage: "Gruppen anlegen, lesen und löschen",
+				rolesManage: "Rollen und Grants verwalten",
+				integrationsView: "Integrationen lesen",
+				integrationsManage: "Integrationen und Data Actions verwalten",
+				oauthManage: "OAuth-Clients lesen und ändern",
+				divisionsView: "Divisionen lesen",
+				datatableManage: "Architect Data Tables und Rows verwalten",
+				flowsManage: "Architect Flows verwalten",
+				divisionCreate: "Neue Division anlegen und löschen"
+			}
+		},
 		steps: {
 			installation: "Installation",
 			summary: "Zusammenfassung"

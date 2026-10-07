@@ -492,6 +492,29 @@ export const en: MessageSchema = {
 		startApp: "Start app",
 		backToConfig: "Back to configuration",
 		rollback: "Rollback",
+		permissions: {
+			title: "Missing installer permissions",
+			description: "The following permissions are required for installation and rollback.",
+			available: "Available",
+			missing: "Missing",
+			warningTitle: "Some setup options are restricted",
+			divisionHint: "Without permissions to create and delete a division, only an existing division can be used.",
+			checkedTitle: "Permissions checked",
+			checkedDetail: "Installer permissions are available.",
+			loadErrorTitle: "Setup data could not be loaded",
+			retry: "Retry",
+			requirements: {
+				groupsManage: "Create, view and delete groups",
+				rolesManage: "Manage roles and grants",
+				integrationsView: "View integrations",
+				integrationsManage: "Manage integrations and data actions",
+				oauthManage: "View and modify OAuth clients",
+				divisionsView: "View divisions",
+				datatableManage: "Manage Architect data tables and rows",
+				flowsManage: "Manage Architect flows",
+				divisionCreate: "Create and delete a division"
+			}
+		},
 		steps: {
 			installation: "Installation",
 			summary: "Summary"

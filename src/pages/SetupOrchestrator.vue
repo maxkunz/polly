@@ -25,7 +25,45 @@
       </div>
 
       <div v-else class="input-card shadow-soft scroll-card">
-        <Stepper v-model:value="activeStep" linear class="setup-stepper">
+        <div v-if="setupDataError" class="permission-panel">
+          <div class="permission-panel-header">
+            <h2 class="permission-title">{{ t("setup.permissions.loadErrorTitle") }}</h2>
+            <p class="permission-desc">{{ setupDataError }}</p>
+          </div>
+          <Button :label="t('setup.permissions.retry')" :disabled="isWorking" @click="loadSetupData" />
+        </div>
+
+        <div v-else-if="permissionReport && !permissionReport.baseOk" class="permission-panel">
+          <div class="permission-panel-header">
+            <h2 class="permission-title">{{ t("setup.permissions.title") }}</h2>
+            <p class="permission-desc">{{ t("setup.permissions.description") }}</p>
+          </div>
+          <div v-if="permissionReport.available.length" class="permission-section">
+            <div class="permission-section-title">{{ t("setup.permissions.available") }}</div>
+            <div class="permission-list">
+              <div v-for="item in permissionReport.available" :key="item.id" class="permission-item permission-item-ok">
+                <div class="permission-label">{{ item.label }}</div>
+                <div class="permission-meta">{{ item.permissions.join(", ") }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="permission-section">
+            <div class="permission-section-title">{{ t("setup.permissions.missing") }}</div>
+            <div class="permission-list">
+              <div v-for="item in permissionReport.missing" :key="item.id" class="permission-item permission-item-missing">
+                <div class="permission-label">{{ item.label }}</div>
+                <div class="permission-meta">{{ item.permissions.join(", ") }}</div>
+                <div v-if="item.hint" class="permission-hint">{{ item.hint }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Stepper v-else v-model:value="activeStep" linear class="setup-stepper">
+          <div v-if="createDivisionUnavailable" class="permission-banner permission-banner-warning">
+            <div class="permission-banner-title">{{ t("setup.permissions.warningTitle") }}</div>
+            <div class="permission-banner-text">{{ t("setup.permissions.divisionHint") }}</div>
+          </div>
           <StepList class="setup-step-list">
             <Step value="1">{{ t("setup.steps.installation") }}</Step>
             <Step value="2">{{ t("setup.steps.summary") }}</Step>
@@ -81,7 +119,7 @@
                 <div class="form-section">
                   <label class="section-label">{{ t("setup.step1.division") }}</label>
                   <div class="toggle-row">
-                    <ToggleSwitch v-model="useExistingDivision" @change="handleDivisionToggle" />
+                    <ToggleSwitch v-model="useExistingDivision" :disabled="isWorking || createDivisionUnavailable" @change="handleDivisionToggle" />
                     <span class="toggle-text">
                       {{ useExistingDivision ? t("setup.step1.useExistingDivision") : t("setup.step1.createNewDivision") }}
                     </span>
@@ -151,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "primevue/usetoast";
 import Stepper from "primevue/stepper";
@@ -170,6 +208,7 @@ import { getErrorMessage } from "@/services/genesys/retry";
 import { getAllIntegrations } from "@/services/genesys/dataAction";
 import { getAllClients } from "@/services/genesys/oauth_backend";
 import { getListDivisions } from "@/services/genesys/division";
+import { evaluateSetupPermissions, loadSetupPermissionSnapshot, type SetupPermissionReport, type SetupPermissionSnapshot } from "@/services/setupPermissions";
 import { useAppStore } from "@/stores/appStore";
 
 const app = useAppStore();
@@ -203,8 +242,14 @@ const selectedIntegrationId = ref("");
 const selectedOAuthId = ref("");
 const selectedDivisionId = ref("");
 const useExistingDivision = ref(false);
+const permissionSnapshot = ref<SetupPermissionSnapshot | null>(null);
+const permissionReport = ref<SetupPermissionReport | null>(null);
+const permissionToastShown = ref(false);
+const setupDataError = ref("");
+const createDivisionUnavailable = computed(() => permissionReport.value?.disabledOptions.createDivision ?? false);
 
 const canNext = computed(() => {
+  if (isWorking.value || setupDataError.value || permissionReport.value?.ok !== true) return false;
   if (!projectName.value.trim()) return false;
   if (!selectedIntegrationId.value || !selectedOAuthId.value) return false;
   if (useExistingDivision.value && !selectedDivisionId.value) return false;
@@ -239,9 +284,36 @@ function onProjectTagInput() {
   projectName.value = projectName.value.replace(/[^A-Za-z0-9_-]/g, "");
 }
 
-onMounted(async () => {
+function refreshPermissionReport() {
+  if (!permissionSnapshot.value) return;
+  const context = () => ({ useExistingDivision: useExistingDivision.value });
+  permissionReport.value = evaluateSetupPermissions(permissionSnapshot.value, context());
+  if (createDivisionUnavailable.value) useExistingDivision.value = true;
+  permissionReport.value = evaluateSetupPermissions(permissionSnapshot.value, context());
+  return permissionReport.value;
+}
+
+async function loadSetupData() {
+  if (isWorking.value) return;
   isWorking.value = true;
+  setupDataError.value = "";
+  permissionSnapshot.value = null;
+  permissionReport.value = null;
   try {
+    permissionSnapshot.value = await loadSetupPermissionSnapshot();
+    const report = refreshPermissionReport();
+    if (!report?.baseOk) return;
+
+    if (!permissionToastShown.value) {
+      toast.add({
+        severity: "success",
+        summary: t("setup.permissions.checkedTitle"),
+        detail: t("setup.permissions.checkedDetail"),
+        life: 2500,
+      });
+      permissionToastShown.value = true;
+    }
+
     const [integrations, oauths, divisions] = await Promise.all([
       getAllIntegrations(),
       getAllClients(),
@@ -253,13 +325,25 @@ onMounted(async () => {
     allDivisions.value = divisions.sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
   } catch (err) {
     console.error("Failed to load setup data", err);
-    addLog(`--ERROR-- Could not load setup data: ${getErrorMessage(err)}`);
+    setupDataError.value = getErrorMessage(err);
+    addLog(`--ERROR-- Could not load setup data: ${setupDataError.value}`);
   } finally {
     isWorking.value = false;
   }
-});
+}
+
+// Beim direkten Setup-Einstieg beendet App.vue den Login erst nach dem Mounten dieser Seite.
+watch(
+  [() => app.genesys.accessToken, () => app.currentUser?.id],
+  ([accessToken, userId]) => {
+    if (accessToken && userId && !permissionSnapshot.value) void loadSetupData();
+  },
+  { immediate: true }
+);
+watch(useExistingDivision, refreshPermissionReport);
 
 async function handleStart() {
+  refreshPermissionReport();
   if (!canStart.value || isWorking.value) return;
   isWorking.value = true;
   hasError.value = false;
@@ -407,6 +491,103 @@ async function startApp() {
 
 .setup-step-list {
   margin-bottom: 16px;
+}
+
+.permission-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.permission-panel-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.permission-title {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.permission-desc {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.permission-section {
+  display: grid;
+  gap: 10px;
+}
+
+.permission-section-title {
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.permission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.permission-item {
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.permission-item-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.permission-item-missing {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.permission-label {
+  font-weight: 600;
+  color: #111827;
+}
+
+.permission-meta {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.permission-hint {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: #9a3412;
+}
+
+.permission-banner {
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.permission-banner-warning {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.permission-banner-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #9a3412;
+}
+
+.permission-banner-text {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: #7c2d12;
 }
 
 .step-header {
