@@ -5,9 +5,6 @@ import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { DEFAULT_GENESYS_REGION } from "./src/constants/genesysConstants";
 
-// Importiere Amplify Outputs
-import outputs from "./amplify_outputs.json";
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Region aus GENESYS_REGION (Shell, .env oder Amplify-Hosting-Umgebungsvariable), sonst Default.
@@ -32,7 +29,6 @@ export default defineConfig(({ mode }) => {
           secure: true,
         },
         "/api": {
-          //target: outputs.custom.apiUrl,          // holt url aus amplify_outputs.json
           //target: process.env.AWS_BRANCH ?? "",   // holt url aus env (funktioniert nur in aws?)
           target: "https://v9u2ed8v37.execute-api.eu-central-1.amazonaws.com/",
           changeOrigin: true,
