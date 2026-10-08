@@ -51,7 +51,6 @@ function createPrimeIconComponent(piClass: string, size?: string | number): Func
  */
 export const appIconSet: Record<string, FunctionalComponent> = {
 	dashboard: createHeroIconComponent(HomeIcon),
-	questions: createPrimeIconComponent("pi-list-check"),
 	surveys: createHeroIconComponent(ClipboardDocumentListIcon),
 	settings: createPrimeIconComponent("pi-cog"),
 	add: createHeroIconComponent(PlusIcon),

@@ -14,7 +14,6 @@ import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { Fn, RemovalPolicy, Stack } from "aws-cdk-lib";
 import { auth } from "./auth/resource";
 import { onboarding } from "./functions/onboarding/resource";
-import { questionAnswers } from "./functions/question_answers/resource";
 import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
@@ -46,7 +45,6 @@ const genesysRegion = (process.env.GENESYS_REGION ?? "").trim();
 const backend = defineBackend({
   auth,
   onboarding,
-  questionAnswers,
   surveyResponses,
   surveyResponsesExport,
   surveyResponsesDelete,
@@ -87,13 +85,6 @@ tenantsTable.addGlobalSecondaryIndex({
   indexName: "byTenantId",
   partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
   projectionType: dynamodb.ProjectionType.ALL,
-});
-
-const questionAnswersTable = new dynamodb.Table(stack, "QuestionAnswersTable", {
-  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
-  sortKey: { name: "questionId", type: dynamodb.AttributeType.STRING },
-  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-  removalPolicy: RemovalPolicy.RETAIN,
 });
 
 const surveyResponsesTable = new dynamodb.Table(stack, "SurveyResponsesTable", {
@@ -275,25 +266,6 @@ httpApi.addRoutes({
   path: "/onboarding/delete",
   methods: [apigw.HttpMethod.POST],
   integration: onboardingHttpIntegration,
-});
-
-const questionAnswersLambda = backend.questionAnswers.resources
-  .lambda as lambda.Function;
-
-questionAnswersTable.grantReadWriteData(questionAnswersLambda);
-questionAnswersLambda.addEnvironment(
-  "QUESTION_ANSWERS_TABLE_NAME",
-  questionAnswersTable.tableName,
-);
-attachTenantAuth(questionAnswersLambda);
-
-httpApi.addRoutes({
-  path: "/question-answers",
-  methods: [apigw.HttpMethod.GET, apigw.HttpMethod.POST],
-  integration: new integrations.HttpLambdaIntegration(
-    "QuestionAnswersInteg",
-    questionAnswersLambda,
-  ),
 });
 
 const surveyResponsesLambda = backend.surveyResponses.resources

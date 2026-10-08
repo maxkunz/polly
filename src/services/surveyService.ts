@@ -296,7 +296,7 @@ export async function deleteSurvey(
 }
 
 /**
- * Wandelt eine rohe Zeile der Mapping-Tabelle (Bund_KSC_Atip_Polly_Mapping) in einen
+ * Wandelt eine rohe Zeile der Mapping-Tabelle (<projectTag>_polly_mapping) in einen
  * QueueMappingEntry um. Die Key-Spalte trägt zwar den Titel "QueueName", ihr JSON-Property-
  * Name ist aber wie bei jeder Data-Table-Zeile schlicht "key".
  */

@@ -2,13 +2,11 @@ import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, findDataTableByName } from "@/services/genesys/dataTable";
-import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
 import { getGenesysRegion } from "@/services/genesys/region";
 import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
 
 import { Domain } from "@/domain/Domain";
-import type { QuestionAnswerStats } from "@/services/genesys_helper";
 
 // roles: Namen der Genesys-Rollen des Users (beim Login geladen, Refresh über refreshRoles)
 export type CurrentUser = { id: string; name: string; email?: string; roles: string[] };
@@ -48,7 +46,6 @@ export const useAppStore = defineStore("app", {
 		rolesLoadedAt: 0,
 
 		domain: new Domain(),
-		questionAnswers: {} as Record<string, QuestionAnswerStats>,
 		surveys: [] as any[],
 
 		dropdowns: {} as Record<string, { selected: any }>,
@@ -139,21 +136,23 @@ export const useAppStore = defineStore("app", {
 			return table.id;
 		},
 
-		// Umfrage- und Mapping-Tabelle kommen aus meta.setup.
-		// Installationen ohne diese Einträge fallen auf die festen Namen aus surveyConstants zurück.
-		async resolveSetupDataTableId(setupKey: "dataTable" | "mappingDataTable", fallbackName: string): Promise<string> {
+		// Umfrage- und Mapping-Tabelle kommen aus meta.setup (Namen vom Setup aus dem Projekt-Tag gebildet).
+		async resolveSetupDataTableId(setupKey: "dataTable" | "mappingDataTable"): Promise<string> {
 			const entry = this.domain.meta.setup?.[setupKey];
 			if (entry?.id) {
 				return entry.id;
 			}
-			return await this.findDataTableIdByName(entry?.name || fallbackName);
+			if (entry?.name) {
+				return await this.findDataTableIdByName(entry.name);
+			}
+			throw new Error(`Setup incomplete: meta.setup.${setupKey} is missing. Please run the setup.`);
 		},
 
 		async ensureDataTableId(): Promise<string> {
 			if (this.datatableId) {
 				return this.datatableId;
 			}
-			this.datatableId = await this.resolveSetupDataTableId("dataTable", POLLY_DATA_TABLE_NAME);
+			this.datatableId = await this.resolveSetupDataTableId("dataTable");
 			return this.datatableId;
 		},
 
@@ -161,20 +160,8 @@ export const useAppStore = defineStore("app", {
 			if (this.mappingDataTableId) {
 				return this.mappingDataTableId;
 			}
-			this.mappingDataTableId = await this.resolveSetupDataTableId("mappingDataTable", POLLY_MAPPING_DATA_TABLE_NAME);
+			this.mappingDataTableId = await this.resolveSetupDataTableId("mappingDataTable");
 			return this.mappingDataTableId;
-		},
-
-		async save(): Promise<string> {
-			await genesysHelper.syncConfigurationToGenesys(this.datatableId);
-			return "";
-		},
-
-		async loadQuestionAnswers(): Promise<void> {
-			const items = await genesysHelper.getQuestionAnswers();
-			this.questionAnswers = Object.fromEntries(
-				items.map(item => [item.questionId, item])
-			);
 		},
 
 		async loadSurveys(): Promise<void> {

@@ -26,11 +26,6 @@ export const de = {
 			title: "Dashboard",
 			description: "Übersicht über die verfügbaren Module im Template."
 		},
-		questions: {
-			title: "Fragen",
-			description: "Pflege der Bewertungsfragen mit Prompt, Reprompt und numerischer Skala.",
-			unnamedQuestion: "Unbenannte Frage"
-		},
 		surveys: {
 			title: "Umfragen",
 			description: "Erstellung, Konfiguration und Auswertung von Umfragen.",
@@ -44,49 +39,6 @@ export const de = {
 
 	dashboard: {
 		title: "Dashboard"
-	},
-
-	questions: {
-		searchPlaceholder: "Fragen, Prompt oder Reprompt suchen...",
-		actions: {
-			new: "Neue Frage",
-			delete: "Frage löschen",
-			reloadAnswers: "Antworten neu laden"
-		},
-		newQuestionName: "*Neue Frage",
-		deleteConfirm: {
-			header: "Frage löschen",
-			message: "„{title}“ löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
-			acceptLabel: "Löschen",
-			rejectLabel: "Abbrechen",
-			fallbackTitle: "diese Frage"
-		},
-		toast: {
-			reloadSuccessSummary: "Antworten neu geladen",
-			reloadSuccessDetail: "Antworten wurden erfolgreich neu geladen.",
-			reloadErrorSummary: "Fehler",
-			reloadErrorDetail: "Neu laden fehlgeschlagen."
-		},
-		empty: "Keine Fragen gefunden.",
-		fields: {
-			name: "Name",
-			active: "Aktiv",
-			prompt: "Prompt",
-			reprompt: "Reprompt",
-			min: "Min",
-			max: "Max",
-			scale: "Skala: {min} bis {max}"
-		},
-		placeholders: {
-			name: "z. B. Servicebewertung",
-			prompt: "Bewerten Sie den Service auf einer Skala von 1 bis 5.",
-			reprompt: "Bitte nennen Sie eine Zahl innerhalb des Bereichs."
-		},
-		answers: {
-			title: "Aktuelle Antworten",
-			total: "Gesamt: {count}",
-			updatedAt: "Zuletzt aktualisiert: {date}"
-		}
 	},
 
 	permissions: {
@@ -440,26 +392,11 @@ export const de = {
 
 	controlToolbar: {
 		searchPlaceholder: "Suchen...",
-		save: "Speichern",
-		saveAndClose: "Speichern & schließen",
 		close: "Schließen",
 		edit: "Bearbeiten",
-		sessionExpired: {
-			header: "Session abgelaufen",
-			message: "Session abgelaufen, reaktivieren?",
-			acceptLabel: "Ja",
-			rejectLabel: "Nein"
-		},
 		toast: {
 			lockedSummary: "Gesperrt",
-			lockedDetail: "Die Konfiguration ist grad in Bearbeitung von: {name}",
-			lockSummary: "Sperre",
-			lockDetail: "Lock ist nicht mehr aktiv ({name}).",
-			savedSummary: "Gespeichert",
-			savedDetail: "Konfiguration gespeichert{suffix}.",
-			savedSuffix: " (Draft v{version})",
-			errorSummary: "Fehler",
-			errorDetail: "Speichern fehlgeschlagen."
+			lockedDetail: "Die Konfiguration ist grad in Bearbeitung von: {name}"
 		}
 	},
 

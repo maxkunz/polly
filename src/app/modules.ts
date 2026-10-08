@@ -2,7 +2,7 @@ import { computed } from "vue";
 import { i18n } from "@/i18n";
 import { useAppStore } from "@/stores/appStore";
 
-export type ModuleKey = "dashboard" | "questions" | "surveys" | "settings" | "page";
+export type ModuleKey = "dashboard" | "surveys" | "settings" | "page";
 export interface RouteReference {
 	type: ModuleKey;
 	id: string | number | null;
@@ -64,24 +64,6 @@ export function moduleRegistry() {
 			routeModule: false,
 			isActive: () => true,
 			getChildren: () => []
-		},
-		{
-			key: "questions",
-			title: t("modules.questions.title"),
-			color: "#14B8A6",
-			description: t("modules.questions.description"),
-			page: true,
-			dashboardColumn: 1,
-			routeModule: false,
-			isActive: () => false,
-			getChildren: () =>
-				Object.values(useAppStore().domain.questions.all() ?? {}).map((question: any) => ({
-					key: question.id,
-					value: { type: "questions", id: question.id },
-					label: question.name?.trim() ? question.name : t("modules.questions.unnamedQuestion"),
-					title: question.name,
-					text: question.prompt
-				}))
 		},
 		{
 			key: "surveys",
