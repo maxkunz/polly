@@ -80,7 +80,7 @@ export class BotFlowService {
 			replacements.push(
 				[setup.dataTable?.name, "{{DATA_TABLE_NAME}}"],
 				[setup.mappingDataTable?.name, "{{MAPPING_DATA_TABLE_NAME}}"],
-				// Polly verwendet hier die Data-Action-Kategorie, nicht den Integrationsnamen.
+				// Die gespeicherte Data-Action-Kategorie auch beim Template-Export verwenden.
 				[setup.dataAction?.category || "survey", "{{INTEGRATION_NAME}}"],
 				[setup.dataAction?.name, "{{DA_PREFIX}}_submit_survey_response"],
 			);

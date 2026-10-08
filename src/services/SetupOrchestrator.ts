@@ -37,7 +37,7 @@ type SetupMeta = {
   mappingDataTable: { id: string; name: string };
   dataActionIntegration: { id: string; name: string };
   dataActionCredential: { id: string; name: string };
-  dataAction: { id: string; name: string };
+  dataAction: { id: string; name: string; category: string };
   botFlow: FlowSetupResource;
   inboundFlow: FlowSetupResource;
   installedAt?: string;
@@ -93,7 +93,6 @@ export async function runFullProvisioning(
     "x-genesys-region": region,
     "Content-Type": "application/json",
   };
-  const dataActionCategory = "survey";
 
   const projectTag = projectName.trim().replace(/[^A-Za-z0-9_-]/g, "");
   if (!projectTag) {
@@ -130,7 +129,7 @@ export async function runFullProvisioning(
     mappingDataTable: { id: "", name: names.mappingDataTable },
     dataActionIntegration: { id: "", name: names.dataActionIntegration },
     dataActionCredential: { id: "", name: names.dataActionCredential },
-    dataAction: { id: "", name: names.dataAction },
+    dataAction: { id: "", name: names.dataAction, category: names.dataActionIntegration },
     botFlow: { id: "", name: names.botFlow },
     inboundFlow: { id: "", name: names.inboundFlow },
   } satisfies SetupMeta;
@@ -267,7 +266,7 @@ export async function runFullProvisioning(
     const dataAction = await createDataAction({
       name: names.dataAction,
       integrationId: dataActionIntegration.id,
-      categoryName: dataActionCategory,
+      categoryName: names.dataActionIntegration,
       config: dataActionTemplate.config,
       contract: dataActionTemplate.contract,
     });
@@ -298,7 +297,7 @@ export async function runFullProvisioning(
       DIVISION_NAME: targetDivision.name,
       DATA_TABLE_NAME: names.dataTable,
       MAPPING_DATA_TABLE_NAME: names.mappingDataTable,
-      INTEGRATION_NAME: dataActionCategory,
+      INTEGRATION_NAME: names.dataActionIntegration,
       DA_PREFIX: projectTag,
     };
     const botYaml = applyFlowPlaceholders(botFlowTemplate, flowReplacements);
