@@ -13,9 +13,10 @@ import type { QuestionAnswerStats } from "@/services/genesys_helper";
 // roles: Namen der Genesys-Rollen des Users (beim Login geladen, Refresh über refreshRoles)
 export type CurrentUser = { id: string; name: string; email?: string; roles: string[] };
 
-function hasRole(user: CurrentUser | null, role: string): boolean {
-	const wanted = role.toLowerCase();
-	return (user?.roles ?? []).some(r => r.toLowerCase() === wanted);
+function hasRole(user: CurrentUser | null, role: string, projectTag?: string): boolean {
+	const legacy = role.toLowerCase();
+	const wanted = (projectTag ? `${projectTag}_${role}` : role).toLowerCase();
+	return (user?.roles ?? []).some(r => r.toLowerCase() === wanted || r.toLowerCase() === legacy);
 }
 
 // Laufender Rollen-Refresh, damit parallele Aufrufe nur einen API-Call auslösen
@@ -74,11 +75,11 @@ export const useAppStore = defineStore("app", {
 	}),
 	getters: {
 		// Darf Umfragen anlegen, klonen, bearbeiten und löschen
-		canWrite: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_WRITE),
+		canWrite: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_WRITE, state.domain.meta.setup?.projectTag),
 		// Darf nach Stage/Prod deployen, Rollback ausführen und Queue-Mapping pflegen
-		canDeploy: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_DEPLOY),
+		canDeploy: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_DEPLOY, state.domain.meta.setup?.projectTag),
 		// Darf Umfrageergebnisse exportieren (CSV-Download im Report)
-		canExport: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_REPORTING),
+		canExport: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_REPORTING, state.domain.meta.setup?.projectTag),
 	},
 	actions: {
 		// Liest die Rollen neu ein, wenn sie älter als ROLE_CACHE_TTL_MINUTES sind.

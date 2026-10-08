@@ -152,6 +152,9 @@ export async function runFullDelete(
     });
     await removeResource(setup.backendGroup, "backend group", deleteGroup);
     await removeResource(setup.backendRole, "backend role", deleteRole);
+    for (const role of setup.frontendRoles ?? []) {
+      await removeResource(role, `Polly role ${role.name}`, deleteRole);
+    }
     await removeResource(setup.mappingDataTable, "mapping data table", deleteDataTable);
     await removeResource(setup.dataTable, "survey data table", deleteDataTable);
 

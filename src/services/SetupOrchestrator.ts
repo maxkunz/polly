@@ -9,6 +9,7 @@ import { makeJobForFlow, flowFetch } from "@/services/genesys/botFlow";
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
 import { getErrorMessage } from "@/services/genesys/retry";
+import { POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING } from "@/constants/permissionConstants";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 import inboundFlowTemplate from "@/templates/genesys/inboundFlowStructure.yaml?raw";
@@ -31,6 +32,7 @@ type SetupMeta = {
   division: { id: string; name: string; createdBySetup: boolean };
   backendGroup: { id: string; name: string };
   backendRole: { id: string; name: string };
+  frontendRoles: Array<{ id: string; name: string }>;
   backendAuth: { clientId: string; tokenUrl: string };
   backendClient: { id: string; name: string };
   dataTable: { id: string; name: string };
@@ -53,6 +55,7 @@ export function hasSetupResources(setup: any): boolean {
   if (!setup) return false;
   return Boolean(
     (setup.division?.createdBySetup && setup.division.id)
+    || setup.frontendRoles?.some((role: any) => role.id)
     || setup.backendAuth?.clientId
     || setup.original?.oauthUpdateAttempted
     || setup.original?.integrationUpdateAttempted
@@ -123,6 +126,7 @@ export async function runFullProvisioning(
     division: { id: "", name: names.division, createdBySetup: false },
     backendGroup: { id: "", name: names.backendGroup },
     backendRole: { id: "", name: names.backendRole },
+    frontendRoles: [],
     backendAuth: { clientId: "", tokenUrl: "" },
     backendClient: { id: "", name: names.backendClient },
     dataTable: { id: "", name: names.dataTable },
@@ -202,6 +206,14 @@ export async function runFullProvisioning(
     const backendRole = await createRole(roleConfig, names.backendRole, `Backend role for ${projectTag}`);
     setupState.backendRole.id = backendRole.id;
     onProgress(`Backend role created (${backendRole.id})`);
+
+    for (const roleName of [POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING]) {
+      const name = `${projectTag}_${roleName}`;
+      onProgress(`Creating Polly role ${name}...`);
+      const role = await createRole({ permissions: [], permissionPolicies: [] }, name);
+      setupState.frontendRoles.push({ id: role.id, name });
+      onProgress(`Polly role created: ${name} (${role.id})`);
+    }
 
     onProgress(`Creating backend group ${names.backendGroup}...`);
     const backendGroup = await createGroup(names.backendGroup, false, "public", "official");
