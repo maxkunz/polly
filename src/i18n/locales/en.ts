@@ -28,11 +28,6 @@ export const en: MessageSchema = {
 			title: "Dashboard",
 			description: "Overview of the modules available in the template."
 		},
-		questions: {
-			title: "Questions",
-			description: "Manage rating questions with prompt, reprompt and numeric scale.",
-			unnamedQuestion: "Unnamed question"
-		},
 		surveys: {
 			title: "Surveys",
 			description: "Creation, configuration and analysis of surveys.",
@@ -46,49 +41,6 @@ export const en: MessageSchema = {
 
 	dashboard: {
 		title: "Dashboard"
-	},
-
-	questions: {
-		searchPlaceholder: "Search questions, prompt or reprompt...",
-		actions: {
-			new: "New question",
-			delete: "Delete question",
-			reloadAnswers: "Reload answers"
-		},
-		newQuestionName: "*New question",
-		deleteConfirm: {
-			header: "Delete question",
-			message: "Delete „{title}“? This action cannot be undone.",
-			acceptLabel: "Delete",
-			rejectLabel: "Cancel",
-			fallbackTitle: "this question"
-		},
-		toast: {
-			reloadSuccessSummary: "Answers reloaded",
-			reloadSuccessDetail: "Answers were reloaded successfully.",
-			reloadErrorSummary: "Error",
-			reloadErrorDetail: "Reload failed."
-		},
-		empty: "No questions found.",
-		fields: {
-			name: "Name",
-			active: "Active",
-			prompt: "Prompt",
-			reprompt: "Reprompt",
-			min: "Min",
-			max: "Max",
-			scale: "Scale: {min} to {max}"
-		},
-		placeholders: {
-			name: "e.g. Service rating",
-			prompt: "Rate the service on a scale from 1 to 5.",
-			reprompt: "Please provide a number within the range."
-		},
-		answers: {
-			title: "Current answers",
-			total: "Total: {count}",
-			updatedAt: "Last updated: {date}"
-		}
 	},
 
 	permissions: {
@@ -442,26 +394,11 @@ export const en: MessageSchema = {
 
 	controlToolbar: {
 		searchPlaceholder: "Search...",
-		save: "Save",
-		saveAndClose: "Save & close",
 		close: "Close",
 		edit: "Edit",
-		sessionExpired: {
-			header: "Session expired",
-			message: "Session expired, reactivate?",
-			acceptLabel: "Yes",
-			rejectLabel: "No"
-		},
 		toast: {
 			lockedSummary: "Locked",
-			lockedDetail: "The configuration is currently being edited by: {name}",
-			lockSummary: "Lock",
-			lockDetail: "The lock is no longer active ({name}).",
-			savedSummary: "Saved",
-			savedDetail: "Configuration saved{suffix}.",
-			savedSuffix: " (Draft v{version})",
-			errorSummary: "Error",
-			errorDetail: "Save failed."
+			lockedDetail: "The configuration is currently being edited by: {name}"
 		}
 	},
 

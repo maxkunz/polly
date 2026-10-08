@@ -82,7 +82,7 @@ async function getTableStatus(region: string, token: string, dataTableId: string
 }
 
 function listContainsSurvey(listRow: Record<string, any>, surveyId: string): boolean | null {
-  const raw = listRow.Draft ?? listRow.draft;
+  const raw = listRow.Draft;
   if (raw === undefined || raw === null) return null;
   let list: unknown;
   try {

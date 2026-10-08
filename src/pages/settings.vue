@@ -186,14 +186,13 @@ function startUninstall() {
 							</div>
 						</div>
 
-						<div class="flex flex-wrap items-center justify-between gap-4">
+						<div v-if="app.devView" class="flex flex-wrap items-center justify-between gap-4">
 							<div class="space-y-1 text-sm text-[var(--p-text-muted-color)]">
 								<p>{{ t("settings.setup.updateHint") }}</p>
 								<p>{{ t("settings.setup.uninstallHint") }}</p>
 							</div>
 							<div class="flex flex-wrap items-center gap-2">
 								<Button
-									v-if="app.devView"
 									label="Flow-Templates exportieren"
 									icon="pi pi-download"
 									severity="secondary"

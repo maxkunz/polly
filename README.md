@@ -1,22 +1,19 @@
 # app
 
-A compact Genesys Cloud app template built around a small, complete vertical slice:
+A Genesys Cloud app ("Polly") for post-call surveys:
 
 - tenant setup and onboarding
-- a frontend for managing rating questions
-- publishing questions to a Genesys Data Table
-- a backend Lambda for counting numeric responses
-- displaying current response totals in the frontend
+- a frontend for editing surveys and mapping them to queues
+- publishing surveys to a Genesys Data Table, played back by an Architect flow
+- a backend that stores survey responses in DynamoDB and exports them as CSV
 
 ## Overview
 
-The template implements a small survey application:
-
-- questions are managed in the frontend
-- questions are stored as individual rows in a Genesys Data Table
-- a dialog or a Genesys Data Action can submit answers to the backend
-- the backend increments response counters per question and numeric value in DynamoDB
-- the frontend displays configuration and current response totals side by side
+- surveys are edited in the frontend (draft) and deployed to stage/prod
+- each survey is stored as a row (`survey_<id>`) in a Genesys Data Table
+- a second Data Table maps queues to surveys
+- the Architect flow submits answers step by step via a Genesys Data Action
+- the backend stores sessions and aggregates in DynamoDB
 
 ## Architecture
 
@@ -28,13 +25,10 @@ Main areas:
 
 - `Dashboard`
   - entry point into the available modules
-- `Questions`
-  - manages questions with `name`, `prompt`, `reprompt`, `minValue`, `maxValue`, `enabled`
-  - displays current response counts per question
+- `Surveys`
+  - survey editor, deploy/rollback, queue mapping and response export
 - `Settings`
   - displays setup context
-
-Question configuration is loaded from a Genesys Data Table and synchronized back to it.
 
 ### Setup
 
@@ -47,10 +41,11 @@ The setup flow consists of:
 
 During setup, the following resources are created or configured:
 
-- a Genesys Data Table for questions
+- a Genesys Data Table for surveys (`<projectTag>_polly_surveys`)
+- a Genesys Data Table for the queue mapping (`<projectTag>_polly_mapping`)
 - a Genesys backend OAuth client
 - a Web Services Data Actions integration
-- a Data Action for `question-answers`
+- a Data Action for submitting survey responses
 - backend onboarding in AWS
 - the redirect URL of the frontend OAuth client
 - the launch URL of the app integration
@@ -67,10 +62,6 @@ The backend is implemented with Amplify Gen 2 and contains the components requir
   - creates tenant-specific backend clients
   - stores tenant metadata in DynamoDB
   - manages tenant-specific Genesys credentials in Secrets Manager
-- `question_answers`
-  - accepts `questionId` and `value`
-  - increments the matching counter atomically in DynamoDB
-  - returns aggregated response totals
 - `survey_responses`
   - processes step-by-step answers from Genesys call flows
   - upserts session answers into `SurveyResponsesTable` (supports partial / completed states)
@@ -84,14 +75,12 @@ Additional infrastructure:
 
 - `TenantsTable`
   - stores tenant metadata for onboarding
-- `QuestionAnswersTable`
-  - stores response aggregates per tenant and question (PoC)
 - `SurveyResponsesTable`
   - stores raw call session responses and question answers per tenant
 - `SurveyAggregatesTable`
   - stores real-time aggregated survey statistics per tenant and question
 - `HttpApi`
-  - exposes onboarding, question answers, and survey responses endpoints
+  - exposes onboarding and survey responses endpoints
 
 ### Onboarding
 
@@ -108,50 +97,24 @@ Flow:
 
 This allows the backend to authenticate and process requests in a tenant-specific way.
 
-## Genesys Data Table
+## Genesys Data Tables
 
-Questions are stored in a Genesys Data Table. The schema is tailored to survey questions:
-
-- `key`
-- `meta`
-- `name`
-- `prompt`
-- `reprompt`
-- `min_value`
-- `max_value`
-- `enabled`
-
-Usage:
+Surveys are stored in a Genesys Data Table with the columns `key`, `Draft`, `Stage`, `Prod`, `Backup`, `lock`:
 
 - `__meta`
   - global app metadata and setup metadata
 - `__lock`
   - lock information for the full configuration
-- one row per question
-  - `key = question.id`
+- `survey_list`
+  - index of all surveys
+- `survey_<id>`
+  - one row per survey
+
+The queue mapping is stored in a separate Data Table (`QueueName`, `SurveyId`, `DeliveryRate`), see `documentation/datatablerow_queue_mapping.md`.
 
 ## Response Storage
 
-Responses are not stored in the Data Table. They are aggregated in DynamoDB.
-
-Each question has one item with:
-
-- `tenantId`
-- `questionId`
-- `count_<value>`
-- `totalResponses`
-- `updatedAt`
-- `lastValue`
-
-Example:
-
-- `count_1`
-- `count_2`
-- `count_3`
-- `count_4`
-- `count_5`
-
-The backend increments exactly one of these counters atomically per request.
+Responses are not stored in the Data Table. They are stored in DynamoDB (`SurveyResponsesTable`, `SurveyAggregatesTable`), see `documentation/survey_responses_api.md`.
 
 ## Install and Uninstall
 
@@ -160,8 +123,8 @@ The backend increments exactly one of these counters atomically per request.
 The install flow:
 
 1. creates or selects a division
-2. creates the questions Data Table
-3. writes `__lock` and `__meta`
+2. creates the survey and mapping Data Tables
+3. writes `__lock`, `__meta` and `survey_list`
 4. creates the Genesys backend OAuth client
 5. starts AWS onboarding
 6. creates the Data Action integration and Data Action
@@ -192,14 +155,14 @@ The uninstall flow uses `meta.setup` to remove the installation:
   - Cognito backend app client
   - tenant entry in DynamoDB
   - tenant-specific secret
-- delete the Data Table
+- delete the Data Tables
 - delete the division if it was created by setup
 
 ## Important Files
 
 Frontend:
 
-- `src/pages/questions.vue`
+- `src/pages/surveys.vue`
 - `src/pages/SetupOrchestrator.vue`
 - `src/pages/SetupUninstall.vue`
 - `src/stores/appStore.ts`
@@ -209,7 +172,6 @@ Backend:
 
 - `amplify/backend.ts`
 - `amplify/functions/onboarding/handler.ts`
-- `amplify/functions/question_answers/handler.ts`
 - `amplify/functions/survey_responses/handler.ts`
 - `amplify/functions/survey_cleanup/handler.ts`
 - `amplify/functions/shared/tenant_auth.ts`
@@ -242,4 +204,4 @@ npm run dev
 ## Notes
 
 - The template uses the existing `/api/...` path for backend requests.
-- The frontend currently uses `mypurecloud.de` as the region when loading response totals.
+- The Genesys region is derived from `gcHostOrigin` at runtime.

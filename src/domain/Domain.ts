@@ -1,5 +1,4 @@
 import { Meta } from "./Meta";
-import { Questions } from "./Questions";
 
 function ensureObject<T>(value: unknown, fallback: T): T {
 	if (typeof value === "string") {
@@ -19,12 +18,9 @@ function ensureObject<T>(value: unknown, fallback: T): T {
 
 export class Domain {
 	meta: Meta;
-	questions: Questions;
 
 	constructor(init?: Partial<Domain>) {
 		this.meta = init?.meta ?? new Meta();
-		this.questions = init?.questions ?? new Questions();
-		this.questions.idSupplier = () => crypto.randomUUID();
 	}
 
 	static fromJSON(json: unknown): Domain {
@@ -34,15 +30,13 @@ export class Domain {
 
 		const raw = json as Record<string, unknown>;
 		return new Domain({
-			meta: Meta.fromJSON(ensureObject(raw.meta, {})),
-			questions: Questions.fromJSON(ensureObject(raw.questions, {}))
+			meta: Meta.fromJSON(ensureObject(raw.meta, {}))
 		});
 	}
 
 	toJSON(): Record<string, unknown> {
 		return {
-			meta: this.meta.toJSON(),
-			questions: this.questions.toJSON()
+			meta: this.meta.toJSON()
 		};
 	}
 }

@@ -41,7 +41,7 @@ export async function fetchSurveyDetail(
 		throw new Error(i18n.global.t("surveys.detail.rowNotFound", { key: rowKey }));
 	}
 
-	const rawDraft = row.Draft ?? row.draft;
+	const rawDraft = row.Draft;
 	let surveyData: Survey;
 
 	if (rawDraft) {
@@ -70,7 +70,7 @@ export async function syncSurveyInList(
 	try {
 		listRow = await OneRowDataTable(resolvedTableId, rowKey);
 		if (listRow) {
-			const rawDraft = listRow.Draft ?? listRow.draft;
+			const rawDraft = listRow.Draft;
 			if (rawDraft) {
 				currentList = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
 			}
@@ -262,7 +262,7 @@ export async function deleteSurvey(
 	try {
 		listRow = await OneRowDataTable(resolvedTableId, listRowKey);
 		if (listRow) {
-			const rawDraft = listRow.Draft ?? listRow.draft;
+			const rawDraft = listRow.Draft;
 			if (rawDraft) {
 				currentList = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
 			}
@@ -296,7 +296,7 @@ export async function deleteSurvey(
 }
 
 /**
- * Wandelt eine rohe Zeile der Mapping-Tabelle (Bund_KSC_Atip_Polly_Mapping) in einen
+ * Wandelt eine rohe Zeile der Mapping-Tabelle (<projectTag>_polly_mapping) in einen
  * QueueMappingEntry um. Die Key-Spalte trägt zwar den Titel "QueueName", ihr JSON-Property-
  * Name ist aber wie bei jeder Data-Table-Zeile schlicht "key".
  */
