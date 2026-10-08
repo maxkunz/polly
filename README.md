@@ -169,6 +169,16 @@ The install flow:
 8. updates the frontend OAuth client and app integration to the launch URL
 9. stores all created resources in `meta.setup`
 
+### Botflow aktualisieren
+
+In den Settings steht links neben „Deinstallieren“ der Button „Botflow aktualisieren“.
+Er verwendet dieselbe Git-Vorlage (`src/templates/genesys/botFlowStructure.yaml`) und
+denselben Architect-Import wie die Installation. Die Ressourcennamen werden aus
+`meta.setup` eingesetzt; der vorhandene Botflow wird aktualisiert. Eigene Anpassungen
+im Botflow werden dabei überschrieben. Die Vorlage entspricht dem Stand der
+bereitgestellten App. Während des Updates sind Export und Deinstallation gesperrt;
+Erfolg und Fehler werden als Meldung angezeigt.
+
 ### Uninstall
 
 The uninstall flow uses `meta.setup` to remove the installation:

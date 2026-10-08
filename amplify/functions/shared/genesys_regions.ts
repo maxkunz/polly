@@ -18,6 +18,9 @@ export const GENESYS_REGIONS: readonly string[] = [
   "mec1.pure.cloud",
   "apne3.pure.cloud",
   "euc2.pure.cloud",
+  "mxc1.pure.cloud",
+  "apse1.pure.cloud",
+  "edee1.eusc-pure.cloud",
 ];
 
 /** Normalisiert eine Regionsangabe (trim, lowercase); leerer String bei ungültigem Typ. */

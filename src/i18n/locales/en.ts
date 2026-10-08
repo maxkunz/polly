@@ -495,6 +495,11 @@ export const en: MessageSchema = {
 				installedAt: "Installed At"
 			},
 			uninstallHint: "Uninstall removes the resources stored in the setup metadata.",
+			update: "Update bot flow",
+			updateHint: "The update replaces the bot flow with the current bundled template. Custom flow changes are overwritten.",
+			updateSuccess: "Bot flow updated",
+			updateSuccessDetail: "The bot flow was successfully updated from the current template.",
+			updateFailed: "Could not update bot flow",
 			uninstall: "Uninstall"
 		}
 	},
@@ -504,6 +509,30 @@ export const en: MessageSchema = {
 		logHeader: "Deployment Logs",
 		startApp: "Start app",
 		backToConfig: "Back to configuration",
+		rollback: "Rollback",
+		permissions: {
+			title: "Missing installer permissions",
+			description: "The following permissions are required for installation and rollback.",
+			available: "Available",
+			missing: "Missing",
+			warningTitle: "Some setup options are restricted",
+			divisionHint: "Without permissions to create and delete a division, only an existing division can be used.",
+			checkedTitle: "Permissions checked",
+			checkedDetail: "Installer permissions are available.",
+			loadErrorTitle: "Setup data could not be loaded",
+			retry: "Retry",
+			requirements: {
+				groupsManage: "Create, view and delete groups",
+				rolesManage: "Manage roles and grants",
+				integrationsView: "View integrations",
+				integrationsManage: "Manage integrations and data actions",
+				oauthManage: "View and modify OAuth clients",
+				divisionsView: "View divisions",
+				datatableManage: "Manage Architect data tables and rows",
+				flowsManage: "Manage Architect flows",
+				divisionCreate: "Create and delete a division"
+			}
+		},
 		steps: {
 			installation: "Installation",
 			summary: "Summary"
@@ -544,7 +573,10 @@ export const en: MessageSchema = {
 			successSummary: "Success",
 			successDetail: "Setup completed.",
 			errorSummary: "Error",
-			errorDetail: "Setup failed. Please check the logs."
+			errorDetail: "Setup failed. Please check the logs.",
+			rollbackSummary: "Rollback completed",
+			rollbackDetail: "The resources already created have been removed.",
+			rollbackErrorSummary: "Rollback failed"
 		}
 	},
 
@@ -552,10 +584,11 @@ export const en: MessageSchema = {
 		heroTitle: "Uninstall project",
 		stepTitle: "Remove installed resources",
 		installationLabel: "Installation:",
-		warning: "This action removes the resources created by the setup from Genesys Cloud. This includes the data table, backend OAuth client and data action integration. Do you want to continue?",
+		warning: "This action removes the Genesys resources created by the setup, including both flows, both data tables, the data action and backend OAuth client. The backend tenant is marked as deleted for later admin cleanup. Do you want to continue?",
 		logHeader: "SYSTEM TERMINAL - UNINSTALL_LOG",
 		cancel: "Cancel",
 		remove: "Remove installation",
+		retry: "Retry",
 		back: "Back to menu",
 		finish: "Finish",
 		toast: {

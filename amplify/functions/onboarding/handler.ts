@@ -25,6 +25,7 @@ import {
   CreateUserPoolClientCommand,
   DeleteUserPoolClientCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { resolveTenantContext } from "../shared/tenant_auth";
 
 import { isGenesysRegion, normalizeGenesysRegion } from "../shared/genesys_regions";
 
@@ -171,6 +172,10 @@ type DeleteTenantBody = {
   forceDeleteSecret?: boolean;
 };
 
+type UninstallTenantBody = {
+  backendClientId: string;
+};
+
 type WipeAllBody = {
   // Must be exactly this string to proceed.
   confirm: "DELETE_ALL";
@@ -185,8 +190,9 @@ const routes: Record<RouteKey, RouteHandler> = {
   "POST /onboarding/start": startRoute,
   "POST /onboarding/complete": completeRoute,
   "POST /onboarding/approve": approveRoute,
+  "POST /onboarding/uninstall": uninstallTenantRoute,
 
-  // Destructive endpoints
+  // Destructive endpoints (ADMIN_TOKEN required)
   "POST /onboarding/delete": deleteTenantRoute,
   "POST /onboarding/wipeAll": wipeAllRoute,
 };
@@ -236,6 +242,11 @@ export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
 };
 
 async function startRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const tenantResult = await resolveTenantContext(event, { skipTenantLookup: true });
+  if (!tenantResult.context || tenantResult.context.source !== "genesys") {
+    return json(403, { message: tenantResult.error ?? "Genesys token required" });
+  }
+
   const body = safeParse<StartBody>(event.body);
   if (!body?.tenantName) return json(400, { message: "tenantName is required" });
 
@@ -281,6 +292,7 @@ async function startRoute(event: AnyApiGwEvent): Promise<AnyResult> {
       Item: {
         backendClientId,
         tenantId,
+        installerTenantId: tenantResult.context.tenantId,
         tenantName: body.tenantName,
         frontendVersion: body.frontendVersion ?? null,
         status: "PENDING",
@@ -308,6 +320,11 @@ async function startRoute(event: AnyApiGwEvent): Promise<AnyResult> {
 }
 
 async function completeRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const tenantResult = await resolveTenantContext(event, { skipTenantLookup: true });
+  if (!tenantResult.context || tenantResult.context.source !== "genesys") {
+    return json(403, { message: tenantResult.error ?? "Genesys token required" });
+  }
+
   const body = safeParse<CompleteBody>(event.body);
   if (
     !body?.backendClientId ||
@@ -335,9 +352,15 @@ async function completeRoute(event: AnyApiGwEvent): Promise<AnyResult> {
   );
 
   if (!existing.Item) return json(404, { message: "Unknown backendClientId" });
+  if (existing.Item.tenantId !== tenantResult.context.tenantId
+    && existing.Item.installerTenantId !== tenantResult.context.tenantId) {
+    return json(403, { message: "backendClientId does not match authenticated tenant" });
+  }
 
   const tenantId = existing.Item.tenantId as string;
-  const secretName = `${SECRETS_PREFIX}/${tenantId}`;
+  // DELETED-Installationen bleiben für die Admin-Bereinigung erhalten.
+  // Ihr Secret darf deshalb nicht von einer Neuinstallation wiederverwendet werden.
+  const secretName = `${SECRETS_PREFIX}/${tenantId}/${body.backendClientId}`;
 
   let secretArn: string | undefined = existing.Item.genesysSecretArn as
     | string
@@ -441,6 +464,50 @@ async function approveRoute(event: AnyApiGwEvent): Promise<AnyResult> {
 }
 
 /**
+ * Frontend uninstall and rollback mark the authenticated tenant as DELETED.
+ * Cognito clients and secrets are retained for admin cleanup.
+ */
+async function uninstallTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const tenantResult = await resolveTenantContext(event, { skipTenantLookup: true });
+  if (!tenantResult.context || tenantResult.context.source !== "genesys") {
+    return json(403, { message: tenantResult.error ?? "Genesys token required" });
+  }
+
+  const body = safeParse<UninstallTenantBody>(event.body);
+  const backendClientId = body?.backendClientId?.trim() ?? "";
+  if (!backendClientId) return json(400, { message: "backendClientId is required" });
+
+  // Die konkrete Installation nachschlagen: auch PENDING-Rollbacks und Wiederholungen
+  // nach DELETED müssen ohne Freigabe und ohne mehrdeutige Tenant-ID-Suche funktionieren.
+  const existing = await ddb.send(new GetCommand({
+    TableName: TENANTS_TABLE_NAME,
+    Key: { backendClientId },
+  }));
+  if (!existing.Item) return json(404, { message: "Tenant not found" });
+  if (existing.Item.tenantId !== tenantResult.context.tenantId
+    && existing.Item.installerTenantId !== tenantResult.context.tenantId) {
+    return json(403, { message: "backendClientId does not match authenticated tenant" });
+  }
+
+  const now = new Date().toISOString();
+  await ddb.send(new UpdateCommand({
+    TableName: TENANTS_TABLE_NAME,
+    Key: { backendClientId },
+    UpdateExpression: "SET #s = :deleted, updatedAt = :u",
+    ExpressionAttributeNames: { "#s": "status" },
+    ExpressionAttributeValues: { ":deleted": "DELETED", ":u": now },
+  }));
+
+  return json(200, {
+    message: "Tenant marked as deleted",
+    backendClientId,
+    tenantId: existing.Item.tenantId,
+    previousStatus: existing.Item.status ?? null,
+    status: "DELETED",
+  });
+}
+
+/**
  * Deletes exactly one tenant:
  * - Deletes the Cognito User Pool App Client (backendClientId)
  * - Deletes the Secrets Manager secret (genesysSecretArn) if present
@@ -448,6 +515,9 @@ async function approveRoute(event: AnyApiGwEvent): Promise<AnyResult> {
  *
  */
 async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const authErr = await requireAdmin(event);
+  if (authErr) return authErr;
+
   const body = safeParse<DeleteTenantBody>(event.body);
   if (!body?.backendClientId) {
     return json(400, { message: "backendClientId is required" });
@@ -482,11 +552,12 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     );
     console.log("Deleted Cognito app client", { backendClientId });
   } catch (e: any) {
-    console.warn("Failed to delete Cognito app client (continuing)", {
+    console.warn("Failed to delete Cognito app client", {
       backendClientId,
       errorName: e?.name,
       message: e?.message,
     });
+    if (e?.name !== "ResourceNotFoundException") throw e;
   }
 
   // 2) Delete secret (if exists)
@@ -504,12 +575,13 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
         forceDeleteSecret,
       });
     } catch (e: any) {
-      console.warn("Failed to delete secret (continuing)", {
+      console.warn("Failed to delete secret", {
         tenantId,
         secretArn,
         errorName: e?.name,
         message: e?.message,
       });
+      if (e?.name !== "ResourceNotFoundException") throw e;
     }
   }
 
@@ -532,8 +604,8 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
 }
 
 /**
- * DANGEROUS: wipes ALL tenants in the table.
- * - Scans DynamoDB table
+ * Deletes tenants marked DELETED, including their Cognito clients and secrets.
+ * - Scans DynamoDB table for status DELETED
  * - For each item: delete Cognito app client, delete secret, delete DynamoDB item
  *
  * Requires ADMIN_TOKEN and body.confirm === "DELETE_ALL".
@@ -561,7 +633,10 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
       new ScanCommand({
         TableName: TENANTS_TABLE_NAME,
         ExclusiveStartKey: lastEvaluatedKey,
-        ProjectionExpression: "backendClientId, tenantId, genesysSecretArn",
+        ProjectionExpression: "backendClientId, tenantId, genesysSecretArn, #status",
+        FilterExpression: "#status = :deleted",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":deleted": "DELETED" },
       })
     );
 

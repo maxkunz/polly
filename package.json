@@ -17,10 +17,11 @@
     "@aws-sdk/lib-dynamodb": "^3.975.0",
     "@heroicons/vue": "^2.2.0",
     "@primeuix/themes": "^2.0.2",
+    "buffer": "5.6.0",
     "pinia": "^2.2.0",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.4",
-    "purecloud-platform-client-v2": "^221.0.0",
+    "purecloud-platform-client-v2": "^262.0.0",
     "vue": "^3.5.0",
     "vue-i18n": "^10.0.8",
     "vue-router": "^4.4.0"

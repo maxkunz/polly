@@ -3,6 +3,7 @@ import { Domain } from "@/domain/Domain";
 import { Meta } from "@/domain/Meta";
 import { Questions } from "@/domain/Questions";
 import type { LockObject, LockRow } from "@/services/lockingService";
+import { genesysAuthStoragePrefix } from "@/services/genesys/region";
 import { getGenesysRegion } from "@/services/genesysRegion";
 
 export type QuestionAnswerStats = {
@@ -32,7 +33,8 @@ export function safeParse<T = unknown>(json: unknown, fallback: T): T {
 
 export async function login(
 	clientId: string | null,
-	redirectUri: string
+	redirectUri: string,
+	region: string
 ): Promise<void> {
 	if (!clientId) {
 		throw new Error("Missing clientId for Genesys login.");
@@ -42,9 +44,10 @@ export async function login(
 	app.initGenesysClients();
 	const genesys = app.genesys;
 
-	genesys.client.setEnvironment(getGenesysRegion());
+	genesys.client.setEnvironment(region);
+	genesys.client.setPersistSettings(true, genesysAuthStoragePrefix(clientId, region));
 
-	await genesys.client.loginImplicitGrant(clientId, redirectUri);
+	await genesys.client.loginPKCEGrant(clientId, redirectUri);
 
 	const accessToken = genesys.client?.authData?.accessToken ?? null;
 	if (accessToken) {
@@ -209,7 +212,7 @@ export async function getConfigurationDataFromGenesys(datatableId: string | null
 	});
 	const entities = res?.entities ?? [];
 	const metaRow = entities.find((row: any) => row?.key === "__meta");
-	const rawMeta = safeParse(metaRow?.meta ?? metaRow?.values?.meta ?? "{}", {});
+	const rawMeta = safeParse(metaRow?.meta ?? metaRow?.values?.meta ?? metaRow?.Draft ?? metaRow?.values?.Draft ?? "{}", {});
 	const datatableMetaRows: Record<string, unknown> = {};
 
 	for (const row of entities) {

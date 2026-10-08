@@ -493,6 +493,11 @@ export const de = {
 				installedAt: "Installiert am"
 			},
 			uninstallHint: "Beim Deinstallieren werden die im Setup gespeicherten Ressourcen entfernt.",
+			update: "Botflow aktualisieren",
+			updateHint: "Das Update ersetzt den Botflow durch die aktuelle mitgelieferte Vorlage. Eigene Flow-Anpassungen werden überschrieben.",
+			updateSuccess: "Botflow aktualisiert",
+			updateSuccessDetail: "Der Botflow wurde erfolgreich aus der aktuellen Vorlage aktualisiert.",
+			updateFailed: "Botflow konnte nicht aktualisiert werden",
 			uninstall: "Deinstallieren"
 		}
 	},
@@ -502,6 +507,30 @@ export const de = {
 		logHeader: "Deployment Logs",
 		startApp: "App starten",
 		backToConfig: "Zurück zur Konfiguration",
+		rollback: "Rollback",
+		permissions: {
+			title: "Fehlende Installer-Berechtigungen",
+			description: "Für die Installation und den Rollback werden die folgenden Berechtigungen benötigt.",
+			available: "Vorhanden",
+			missing: "Fehlend",
+			warningTitle: "Einige Setup-Optionen sind eingeschränkt",
+			divisionHint: "Ohne Rechte zum Anlegen und Löschen einer Division kann nur eine bestehende Division verwendet werden.",
+			checkedTitle: "Berechtigungen geprüft",
+			checkedDetail: "Installer-Berechtigungen sind vorhanden.",
+			loadErrorTitle: "Setup-Daten konnten nicht geladen werden",
+			retry: "Erneut versuchen",
+			requirements: {
+				groupsManage: "Gruppen anlegen, lesen und löschen",
+				rolesManage: "Rollen und Grants verwalten",
+				integrationsView: "Integrationen lesen",
+				integrationsManage: "Integrationen und Data Actions verwalten",
+				oauthManage: "OAuth-Clients lesen und ändern",
+				divisionsView: "Divisionen lesen",
+				datatableManage: "Architect Data Tables und Rows verwalten",
+				flowsManage: "Architect Flows verwalten",
+				divisionCreate: "Neue Division anlegen und löschen"
+			}
+		},
 		steps: {
 			installation: "Installation",
 			summary: "Zusammenfassung"
@@ -542,7 +571,10 @@ export const de = {
 			successSummary: "Erfolg",
 			successDetail: "Setup abgeschlossen.",
 			errorSummary: "Fehler",
-			errorDetail: "Setup fehlgeschlagen. Bitte Logs prüfen."
+			errorDetail: "Setup fehlgeschlagen. Bitte Logs prüfen.",
+			rollbackSummary: "Rollback erfolgreich",
+			rollbackDetail: "Die bereits angelegten Ressourcen wurden entfernt.",
+			rollbackErrorSummary: "Rollback fehlgeschlagen"
 		}
 	},
 
@@ -550,10 +582,11 @@ export const de = {
 		heroTitle: "Projekt deinstallieren",
 		stepTitle: "Installierte Ressourcen entfernen",
 		installationLabel: "Installation:",
-		warning: "Diese Aktion entfernt die durch das Setup erzeugten Ressourcen aus Genesys Cloud. Dazu gehören Data Table, Backend OAuth Client und Data Action Integration. Möchtest du fortfahren?",
+		warning: "Diese Aktion entfernt die durch das Setup erzeugten Genesys-Ressourcen, darunter beide Flows, beide Data Tables, die Data Action und den Backend-OAuth-Client. Der Backend-Tenant wird zur späteren Admin-Bereinigung als gelöscht markiert. Möchtest du fortfahren?",
 		logHeader: "SYSTEM TERMINAL - UNINSTALL_LOG",
 		cancel: "Abbrechen",
 		remove: "Installation entfernen",
+		retry: "Erneut versuchen",
 		back: "Zurück zum Menü",
 		finish: "Fertig",
 		toast: {

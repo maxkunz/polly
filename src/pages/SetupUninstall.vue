@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/appStore";
 import { runFullDelete } from '@/services/SetupUninstall';
+import { getErrorMessage } from "@/services/genesys/retry";
 import { useToast } from "primevue/usetoast";
 
 import Toast from 'primevue/toast';
@@ -16,6 +17,7 @@ const logs = ref<string[]>([]);
 const isProcessing = ref(false);
 const isFinished = ref(false);
 const isStarted = ref(false);
+const hasError = ref(false);
 
 
 const handleStart = async () => {
@@ -24,6 +26,9 @@ const handleStart = async () => {
 };
 
 const startAutomaticUninstallation = async () => {
+    if (isProcessing.value) return;
+    isFinished.value = false;
+    hasError.value = false;
     isProcessing.value = true;
     logs.value.push("Initiating secure resource teardown...");
 
@@ -42,15 +47,17 @@ const startAutomaticUninstallation = async () => {
             life: 3000 // 3 Sek.
         });
     } catch (e: any) {
-        if (e.message.includes("Dependency found")) {           // In Case InboundFlow has a TelNum
-            logs.value.push(`--ERROR-- ABORTED: ${e.message}`);
+        hasError.value = true;
+        const detail = getErrorMessage(e);
+        if (detail.includes("Dependency found")) {
+            logs.value.push(`--ERROR-- ABORTED: ${detail}`);
         } else {
-            logs.value.push(`--ERROR-- FATAL: ${e.message}`);
+            logs.value.push(`--ERROR-- FATAL: ${detail}`);
 
             toast.add({
             severity: 'error',
             summary: t('uninstall.toast.failedSummary'),
-            detail: e.message,
+            detail,
             life: 6000 // 6 Sek.
         });
         }
@@ -75,15 +82,12 @@ const exitUninstall = () => {
         app.initialized = false;
         const url = new URL(window.location.href);
         url.searchParams.delete("datatable_id");
+        url.searchParams.delete("mapping_datatable_id");
         window.location.assign(url.toString());
     } else {
         router.replace({ name: "dashboard", query: router.currentRoute.value.query });
     }
 };
-
-const hasError = computed(() => {
-    return logs.value.some(line => line.includes('--ERROR--'));
-});
 
 </script>
 
@@ -142,6 +146,14 @@ const hasError = computed(() => {
                 class="btn-danger"
             >
                 {{ t("uninstall.remove") }}
+            </button>
+
+            <button
+                v-if="isFinished && hasError && !isProcessing"
+                @click="startAutomaticUninstallation"
+                class="btn-danger"
+            >
+                {{ t("uninstall.retry") }}
             </button>
 
             <button

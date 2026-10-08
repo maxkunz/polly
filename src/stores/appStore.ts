@@ -3,6 +3,8 @@ import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { OneRowDataTable, findDataTableByName } from "@/services/genesys/dataTable";
 import { POLLY_DATA_TABLE_NAME, POLLY_MAPPING_DATA_TABLE_NAME } from "@/constants/surveyConstants";
+import { getGenesysRegion } from "@/services/genesys/region";
+import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
 
 import { Domain } from "@/domain/Domain";
@@ -20,6 +22,7 @@ function hasRole(user: CurrentUser | null, role: string): boolean {
 let rolesRefreshPromise: Promise<void> | null = null;
 
 const SESSION_ID_KEY = "app.sessionId";
+const GENESYS_ORIGINAL_URL_KEY = "polly.genesys.originalUrl";
 function loadSessionId(): string {
 	try {
 		if (typeof window === "undefined" || !window.localStorage) {
@@ -51,6 +54,7 @@ export const useAppStore = defineStore("app", {
 		dropdowns: {} as Record<string, { selected: any }>,
 
 		genesys: {
+			region: null as string | null,
 			client: null as any,
 			architectApi: null as any,
 			authorizationApi: null as any,
@@ -64,7 +68,6 @@ export const useAppStore = defineStore("app", {
 
 		clientId: null as string | null,
 		datatableId: null as string | null,
-		dataTableId: null as string | null,
 		mappingDataTableId: null as string | null,
 		devView: false,
 
@@ -103,6 +106,7 @@ export const useAppStore = defineStore("app", {
 			if (!this.genesys.client) {
 				this.genesys.client = (platformClient as any).ApiClient.instance;
 			}
+			enableGenesysRequestRetry(this.genesys.client);
 			if (!this.genesys.architectApi) {
 				this.genesys.architectApi = new (platformClient as any).ArchitectApi();
 			}
@@ -135,9 +139,9 @@ export const useAppStore = defineStore("app", {
 			return table.id;
 		},
 
-		// Umfrage- und Mapping-Tabelle kommen aus meta.setup (Namen im Setup wählbar).
+		// Umfrage- und Mapping-Tabelle kommen aus meta.setup.
 		// Installationen ohne diese Einträge fallen auf die festen Namen aus surveyConstants zurück.
-		async resolveSetupDataTableId(setupKey: "surveyDataTable" | "mappingDataTable", fallbackName: string): Promise<string> {
+		async resolveSetupDataTableId(setupKey: "dataTable" | "mappingDataTable", fallbackName: string): Promise<string> {
 			const entry = this.domain.meta.setup?.[setupKey];
 			if (entry?.id) {
 				return entry.id;
@@ -146,11 +150,11 @@ export const useAppStore = defineStore("app", {
 		},
 
 		async ensureDataTableId(): Promise<string> {
-			if (this.dataTableId) {
-				return this.dataTableId;
+			if (this.datatableId) {
+				return this.datatableId;
 			}
-			this.dataTableId = await this.resolveSetupDataTableId("surveyDataTable", POLLY_DATA_TABLE_NAME);
-			return this.dataTableId;
+			this.datatableId = await this.resolveSetupDataTableId("dataTable", POLLY_DATA_TABLE_NAME);
+			return this.datatableId;
 		},
 
 		async ensureMappingDataTableId(): Promise<string> {
@@ -193,31 +197,38 @@ export const useAppStore = defineStore("app", {
 			if (this.initialized) return;
 			this.initGenesysClients();
 
-			const search =
-				currentUrl !== undefined
-					? new URL(currentUrl).search
-					: window.location.search;
-			const params = new URLSearchParams(search);
-
-			this.clientId =
-				params.get("client_id") || sessionStorage.getItem("gc_client_id");
-			this.datatableId =
-				params.get("datatable_id") || sessionStorage.getItem("gc_datatable_id");
+			const incomingUrl = new URL(currentUrl ?? window.location.href);
+			const rememberedUrl = sessionStorage.getItem(GENESYS_ORIGINAL_URL_KEY);
+			const urlObj = currentUrl === undefined && rememberedUrl
+				? new URL(rememberedUrl)
+				: incomingUrl;
+			urlObj.hash = "";
+			// OAuth-Antwortparameter gehören nicht zur registrierten Redirect-URI.
+			for (const key of ["code", "state", "error", "error_description"]) {
+				if (urlObj.searchParams.has(key)) urlObj.searchParams.delete(key);
+			}
+			const params = urlObj.searchParams;
+			this.genesys.region = getGenesysRegion(urlObj.toString());
+			this.clientId = params.get("client_id");
+			// Ein expliziter Einstieg ohne Tabelle muss auch nach einer Installation ins Setup führen.
+			this.datatableId = params.get("datatable_id");
+			this.mappingDataTableId = params.get("mapping_datatable_id");
 
 			if (this.clientId) sessionStorage.setItem("gc_client_id", this.clientId);
 			if (this.datatableId)
 				sessionStorage.setItem("gc_datatable_id", this.datatableId);
+			else
+				sessionStorage.removeItem("gc_datatable_id");
 
-			let redirectUri = sessionStorage.getItem("gc_redirect_uri");
+			const redirectUri = urlObj.toString();
+			sessionStorage.setItem(GENESYS_ORIGINAL_URL_KEY, redirectUri);
 
-			if (!redirectUri) {
-				const urlObj = new URL(currentUrl ?? window.location.href);
-				urlObj.hash = "";
-				redirectUri = urlObj.toString();
-				sessionStorage.setItem("gc_redirect_uri", redirectUri);
-			}
-
-			await (genesysHelper as any).login(this.clientId, redirectUri);
+			await genesysHelper.login(this.clientId, redirectUri, this.genesys.region);
+			// Das SDK entfernt bei PKCE die gesamte Query; den App-Kontext wiederherstellen.
+			const restoredUrl = new URL(window.location.href);
+			restoredUrl.search = urlObj.search;
+			restoredUrl.hash = "";
+			window.history.replaceState(window.history.state, "", restoredUrl.toString());
 
 			if (!this.datatableId) return;
 

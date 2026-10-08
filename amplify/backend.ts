@@ -19,6 +19,7 @@ import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
 import { surveyResponsesDelete } from "./functions/survey_responses_delete/resource";
+import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -50,6 +51,7 @@ const backend = defineBackend({
   surveyResponsesExport,
   surveyResponsesDelete,
   surveyCleanup,
+  pollyArchyUpload,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -64,6 +66,13 @@ const httpApi = new apigw.HttpApi(stack, "AppHttpApi", {
 });
 
 const tokenUrl = `https://app-m2m-${envSuffix}.auth.${stack.region}.amazoncognito.com/oauth2/token`;
+
+const archyUploadLambda = backend.pollyArchyUpload.resources.lambda as lambda.Function;
+httpApi.addRoutes({
+  path: "/archy-upload",
+  methods: [apigw.HttpMethod.POST, apigw.HttpMethod.GET, apigw.HttpMethod.OPTIONS],
+  integration: new integrations.HttpLambdaIntegration("ArchyUploadInteg", archyUploadLambda),
+});
 
 const tenantsTable = new dynamodb.Table(stack, "TenantsTable", {
   partitionKey: {
@@ -225,6 +234,7 @@ onboardingLambda.addToRolePolicy(
       "secretsmanager:PutSecretValue",
       "secretsmanager:UpdateSecret",
       "secretsmanager:DescribeSecret",
+      "secretsmanager:DeleteSecret",
       "secretsmanager:GetSecretValue",
       "secretsmanager:TagResource",
     ],
@@ -251,6 +261,12 @@ httpApi.addRoutes({
 
 httpApi.addRoutes({
   path: "/onboarding/approve",
+  methods: [apigw.HttpMethod.POST],
+  integration: onboardingHttpIntegration,
+});
+
+httpApi.addRoutes({
+  path: "/onboarding/uninstall",
   methods: [apigw.HttpMethod.POST],
   integration: onboardingHttpIntegration,
 });

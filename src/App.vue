@@ -78,13 +78,14 @@ onMounted(async () => {
 
   try {
     await app.initializeFromLocation();
+    const launchQuery = Object.fromEntries(new URL(window.location.href).searchParams);
     if (!app.datatableId && route.name !== "setup" && route.name !== "uninstall") {
-      await router.replace({ name: "setup", query: route.query });
+      await router.replace({ name: "setup", query: launchQuery });
       return;
     }
 
     if (app.datatableId && route.name === "setup") {
-      await router.replace({ name: "dashboard", query: route.query });
+      await router.replace({ name: "dashboard", query: launchQuery });
     }
   } catch (e: any) {
     console.error("Initialization error:", e);

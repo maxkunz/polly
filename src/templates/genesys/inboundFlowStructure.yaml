@@ -1,0 +1,183 @@
+inboundCall:
+  name: {{INBOUNDFLOW_NAME}}
+  description: Inbound Flow for Polly
+  division: {{DIVISION_NAME}}
+  startUpRef: "/inboundCall/tasks/task[New Task 1_12]"
+  defaultLanguage: de-de
+  supportedLanguages:
+    de-de:
+      defaultLanguageSkill:
+        noValue: true
+      textToSpeech:
+        Genesys Enhanced TTS:
+          voice: de-DE-AmalaNeural
+  settingsActionDefaults:
+    playAudioOnSilence:
+      allowedRepeatCount:
+        lit: 5
+      silenceDuration:
+        lit:
+          seconds: 1
+      timeout:
+        lit:
+          seconds: 40
+    detectSilence:
+      silenceDuration:
+        lit:
+          seconds: 1
+      timeout:
+        lit:
+          seconds: 40
+    callData:
+      processingPrompt:
+        noValue: true
+    collectInput:
+      interDigitTimeout:
+        lit:
+          seconds: 3
+      noEntryTimeout:
+        lit:
+          seconds: 5
+    dialByExtension:
+      interDigitTimeout:
+        lit:
+          seconds: 6
+    transferToUser:
+      connectTimeout:
+        noValue: true
+    transferToNumber:
+      connectTimeout:
+        noValue: true
+    transferToGroup:
+      connectTimeout:
+        noValue: true
+    transferToFlowSecure:
+      connectTimeout:
+        lit:
+          seconds: 15
+  settingsErrorHandling:
+    errorHandling:
+      disconnect:
+        none: true
+    preHandlingAudio:
+      tts: Es tut uns leid, ein Fehler ist aufgetreten. Bitte führen Sie den Anruf erneut durch.
+  settingsMenu:
+    extensionDialingMaxDelay:
+      lit:
+        seconds: 1
+    listenForExtensionDialing:
+      lit: true
+    menuSelectionTimeout:
+      lit:
+        seconds: 10
+    repeatCount:
+      lit: 3
+  settingsPrompts:
+    ensureAudioInPrompts: false
+    promptMediaToValidate:
+      - mediaType: audio
+      - mediaType: tts
+  settingsSpeechRec:
+    completeMatchTimeout:
+      lit:
+        ms: 100
+    incompleteMatchTimeout:
+      lit:
+        ms: 1500
+    maxSpeechLengthTimeout:
+      lit:
+        seconds: 20
+    minConfidenceLevel:
+      lit: 50
+    asrCompanyDir: none
+    asrEnabledOnFlow: true
+    suppressRecording: true
+  tasks:
+    - task:
+        name: New Task 1
+        refId: New Task 1_12
+        actions:
+          - callBotFlow:
+              name: Call Bot Flow
+              inputText:
+                noValue: true
+              exitReason:
+                noValue: true
+              intent:
+                noValue: true
+              botFlow:
+                {{BOTFLOW_NAME}}:
+                  ver_latestPublished:
+                    inputs:
+                      Slot.rating:
+                        noValue: true
+                      Slot.choice:
+                        noValue: true
+                      Slot.nps:
+                        noValue: true
+                      Slot.choice_type_test:
+                        noValue: true
+                      Slot.comment:
+                        noValue: true
+                      Flow.inbound_test:
+                        noValue: true
+                      Flow.inbound_queue_name:
+                        exp: ToString(Call.InvocationData)
+                      Flow.inbound_called_address:
+                        exp: Call.CalledAddressOriginal
+                    outputs:
+                      Slot.rating:
+                        noValue: true
+                      Slot.choice:
+                        noValue: true
+                      Slot.nps:
+                        noValue: true
+                      Slot.choice_type_test:
+                        noValue: true
+                      Slot.comment:
+                        noValue: true
+                      Flow.inbound_test:
+                        noValue: true
+          - disconnect:
+              name: Disconnect
+  referencedObjects:
+    flows:
+      - flow:
+          name: {{BOTFLOW_NAME}}
+          type: bot
+          defaultLanguage: de-de
+          variables:
+            - stringVariable:
+                name: Slot.rating
+                isInput: true
+                isOutput: true
+            - stringVariable:
+                name: Slot.choice
+                isInput: true
+                isOutput: true
+            - stringVariable:
+                name: Slot.nps
+                isInput: true
+                isOutput: true
+            - stringVariable:
+                name: Slot.choice_type_test
+                isInput: true
+                isOutput: true
+            - stringVariable:
+                name: Slot.comment
+                isInput: true
+                isOutput: true
+            - stringVariable:
+                name: Flow.inbound_test
+                isInput: true
+                isOutput: true
+            - stringVariable:
+                name: Flow.inbound_queue_name
+                isInput: true
+                isOutput: false
+            - stringVariable:
+                name: Flow.inbound_called_address
+                isInput: true
+                isOutput: false
+          supportedLanguages:
+            - de-de
