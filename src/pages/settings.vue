@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import Button from "primevue/button";
 import Select from "primevue/select";
+import { useToast } from "primevue/usetoast";
 
 import PageHeader from "@/components/layout/PageHeader.vue";
 import { useAppStore } from "@/stores/appStore";
@@ -13,9 +14,12 @@ import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
 import { setLocale, type SupportedLocale } from "@/i18n";
 import { startBotFlowUpdate, startInboundFlowUpdate } from "@/services/SetupExportFlow";
+import { updateInstalledBotFlow } from "@/services/SetupUpdate";
+import { getErrorMessage } from "@/services/genesys/retry";
 
 const app = useAppStore();
 const router = useRouter();
+const toast = useToast();
 const { t, locale } = useI18n();
 const { selectModules } = moduleRegistry();
 
@@ -38,9 +42,33 @@ const selectedLocale = computed<SupportedLocale>({
 
 const setup = computed(() => app.domain.meta.setup ?? null);
 const isExporting = ref(false);
+const isUpdating = ref(false);
+
+async function updateBotFlow() {
+	if (isUpdating.value || isExporting.value) return;
+	isUpdating.value = true;
+	try {
+		await updateInstalledBotFlow();
+		toast.add({
+			severity: "success",
+			summary: t("settings.setup.updateSuccess"),
+			detail: t("settings.setup.updateSuccessDetail"),
+			life: 5000
+		});
+	} catch (error) {
+		toast.add({
+			severity: "error",
+			summary: t("settings.setup.updateFailed"),
+			detail: getErrorMessage(error),
+			life: 10000
+		});
+	} finally {
+		isUpdating.value = false;
+	}
+}
 
 async function exportTemplateConfig() {
-	if (!app.devView || isExporting.value) return;
+	if (!app.devView || isExporting.value || isUpdating.value) return;
 	isExporting.value = true;
 	try {
 		const currentSetup = setup.value;
@@ -98,6 +126,7 @@ function formatBackendAuth(resource: any): string {
 }
 
 function startUninstall() {
+	if (isUpdating.value || isExporting.value) return;
 	router.push({ name: "uninstall", query: router.currentRoute.value.query });
 }
 </script>
@@ -157,11 +186,12 @@ function startUninstall() {
 							</div>
 						</div>
 
-						<div class="flex items-center justify-between gap-4">
-							<div class="text-sm text-[var(--p-text-muted-color)]">
-								{{ t("settings.setup.uninstallHint") }}
+						<div class="flex flex-wrap items-center justify-between gap-4">
+							<div class="space-y-1 text-sm text-[var(--p-text-muted-color)]">
+								<p>{{ t("settings.setup.updateHint") }}</p>
+								<p>{{ t("settings.setup.uninstallHint") }}</p>
 							</div>
-							<div class="flex items-center gap-2">
+							<div class="flex flex-wrap items-center gap-2">
 								<Button
 									v-if="app.devView"
 									label="Flow-Templates exportieren"
@@ -170,13 +200,21 @@ function startUninstall() {
 									text
 									size="small"
 									:loading="isExporting"
-									:disabled="isExporting"
+									:disabled="isExporting || isUpdating"
 									@click="exportTemplateConfig"
+								/>
+								<Button
+									:label="t('settings.setup.update')"
+									icon="pi pi-refresh"
+									:loading="isUpdating"
+									:disabled="isUpdating || isExporting || !setup.botFlow?.id"
+									@click="updateBotFlow"
 								/>
 								<Button
 									:label="t('settings.setup.uninstall')"
 									icon="pi pi-trash"
 									severity="danger"
+									:disabled="isUpdating || isExporting"
 									@click="startUninstall"
 								/>
 							</div>

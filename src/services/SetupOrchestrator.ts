@@ -371,7 +371,7 @@ export async function runFullProvisioning(
   }
 }
 
-function applyFlowPlaceholders(template: string, replacements: Record<string, string>): string {
+export function applyFlowPlaceholders(template: string, replacements: Record<string, string>): string {
   return template.replace(/\{\{([A-Z_]+)\}\}/g, (_token, key: string) => {
     if (!Object.prototype.hasOwnProperty.call(replacements, key)) {
       throw new Error(`Missing flow placeholder replacement: ${key}`);
@@ -381,7 +381,7 @@ function applyFlowPlaceholders(template: string, replacements: Record<string, st
   });
 }
 
-async function importFlow(
+export async function importFlow(
   yaml: string,
   flowState: FlowSetupResource,
   appOrigin: string,

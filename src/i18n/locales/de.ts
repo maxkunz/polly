@@ -493,6 +493,11 @@ export const de = {
 				installedAt: "Installiert am"
 			},
 			uninstallHint: "Beim Deinstallieren werden die im Setup gespeicherten Ressourcen entfernt.",
+			update: "Botflow aktualisieren",
+			updateHint: "Das Update ersetzt den Botflow durch die aktuelle mitgelieferte Vorlage. Eigene Flow-Anpassungen werden überschrieben.",
+			updateSuccess: "Botflow aktualisiert",
+			updateSuccessDetail: "Der Botflow wurde erfolgreich aus der aktuellen Vorlage aktualisiert.",
+			updateFailed: "Botflow konnte nicht aktualisiert werden",
 			uninstall: "Deinstallieren"
 		}
 	},

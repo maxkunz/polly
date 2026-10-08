@@ -495,6 +495,11 @@ export const en: MessageSchema = {
 				installedAt: "Installed At"
 			},
 			uninstallHint: "Uninstall removes the resources stored in the setup metadata.",
+			update: "Update bot flow",
+			updateHint: "The update replaces the bot flow with the current bundled template. Custom flow changes are overwritten.",
+			updateSuccess: "Bot flow updated",
+			updateSuccessDetail: "The bot flow was successfully updated from the current template.",
+			updateFailed: "Could not update bot flow",
 			uninstall: "Uninstall"
 		}
 	},
