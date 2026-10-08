@@ -82,7 +82,7 @@ export class BotFlowService {
 				[setup.mappingDataTable?.name, "{{MAPPING_DATA_TABLE_NAME}}"],
 				// Die gespeicherte Data-Action-Kategorie auch beim Template-Export verwenden.
 				[setup.dataAction?.category || "survey", "{{INTEGRATION_NAME}}"],
-				[setup.dataAction?.name, "{{DA_PREFIX}}_submit_survey_response"],
+				[setup.dataAction?.name, "{{DATA_ACTION_NAME}}"],
 			);
 		} else {
 			replacements.push([setup.inboundFlow?.name, "{{INBOUNDFLOW_NAME}}"]);

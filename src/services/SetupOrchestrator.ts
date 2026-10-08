@@ -310,7 +310,7 @@ export async function runFullProvisioning(
       DATA_TABLE_NAME: names.dataTable,
       MAPPING_DATA_TABLE_NAME: names.mappingDataTable,
       INTEGRATION_NAME: names.dataActionIntegration,
-      DA_PREFIX: projectTag,
+      DATA_ACTION_NAME: names.dataAction,
     };
     const botYaml = applyFlowPlaceholders(botFlowTemplate, flowReplacements);
     const inboundYaml = applyFlowPlaceholders(inboundFlowTemplate, flowReplacements);
@@ -387,8 +387,7 @@ export function applyFlowPlaceholders(template: string, replacements: Record<str
     if (!Object.prototype.hasOwnProperty.call(replacements, key)) {
       throw new Error(`Missing flow placeholder replacement: ${key}`);
     }
-    // Vollständige YAML-Namen quoten; DA_PREFIX ist Teil eines bereits bereinigten Namens.
-    return key === "DA_PREFIX" ? replacements[key] : JSON.stringify(replacements[key]);
+    return JSON.stringify(replacements[key]);
   });
 }
 

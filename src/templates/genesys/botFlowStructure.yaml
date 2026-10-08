@@ -1324,7 +1324,7 @@ botFlow:
                         category:
                           {{INTEGRATION_NAME}}:
                             dataAction:
-                              {{DA_PREFIX}}_submit_survey_response:
+                              {{DATA_ACTION_NAME}}:
                                 inputs:
                                   conversationId:
                                     exp: Session.ConversationId

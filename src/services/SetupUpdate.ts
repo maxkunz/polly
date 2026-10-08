@@ -20,7 +20,7 @@ export async function updateInstalledBotFlow(onProgress: (msg: string) => void =
 		DATA_TABLE_NAME: setup.dataTable?.name,
 		MAPPING_DATA_TABLE_NAME: setup.mappingDataTable?.name,
 		INTEGRATION_NAME: setup.dataAction?.category || "survey",
-		DA_PREFIX: setup.projectTag,
+		DATA_ACTION_NAME: setup.dataAction?.name,
 	};
 	for (const [key, value] of Object.entries(replacements)) {
 		if (typeof value !== "string" || !value.trim()) {
