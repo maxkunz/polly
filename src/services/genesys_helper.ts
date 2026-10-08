@@ -114,7 +114,7 @@ export async function getConfigurationDataFromGenesys(datatableId: string | null
 	});
 	const entities = res?.entities ?? [];
 	const metaRow = entities.find((row: any) => row?.key === "__meta");
-	const rawMeta = safeParse(metaRow?.meta ?? metaRow?.values?.meta ?? metaRow?.Draft ?? metaRow?.values?.Draft ?? "{}", {});
+	const rawMeta = safeParse(metaRow?.Draft ?? "{}", {});
 
 	const app = getApp();
 	app.domain = new Domain({

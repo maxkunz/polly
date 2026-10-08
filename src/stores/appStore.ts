@@ -170,7 +170,7 @@ export const useAppStore = defineStore("app", {
 				const datatableId = await this.ensureDataTableId();
 				const data = await OneRowDataTable(datatableId, rowId);
 				if (data) {
-					const rawDraft = data.Draft ?? data.draft;
+					const rawDraft = data.Draft;
 					if (rawDraft) {
 						this.surveys = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
 					}
