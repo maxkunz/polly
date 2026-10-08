@@ -101,15 +101,15 @@ export async function runFullProvisioning(
   }
 
   const names = {
-    division: `${projectTag}_division`,
+    division: `${projectTag}_polly_division`,
     dataTable: `${projectTag}_polly_surveys`,
     mappingDataTable: `${projectTag}_polly_mapping`,
-    backendGroup: `${projectTag}_backend_group`,
-    backendRole: `${projectTag}_backend_role`,
-    backendClient: `${projectTag}_backend_client`,
-    dataActionIntegration: `${projectTag}_data_actions`,
-    dataActionCredential: `${projectTag}_credentials`,
-    dataAction: `${projectTag}_submit_survey_response`,
+    backendGroup: `${projectTag}_polly_backend_group`,
+    backendRole: `${projectTag}_polly_backend_role`,
+    backendClient: `${projectTag}_polly_backend_client`,
+    dataActionIntegration: `${projectTag}_polly_data_actions`,
+    dataActionCredential: `${projectTag}_polly_credentials`,
+    dataAction: `${projectTag}_polly_submit_survey_response`,
     botFlow: `${projectTag}_polly_bot_flow`,
     inboundFlow: `${projectTag}_polly_inbound_flow`,
   };

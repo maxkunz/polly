@@ -146,7 +146,7 @@ export async function runFullDelete(
     }
 
     await removeResource(setup.backendClient, "backend OAuth client", async id => {
-      await inactiveOAuth(id, setup.backendClient.name || `${setup.projectTag || "app"}_backend_client`);
+      await inactiveOAuth(id, setup.backendClient.name || `${setup.projectTag || "app"}_polly_backend_client`);
       await sleep(2000);
       await deleteBackend(id);
     });
