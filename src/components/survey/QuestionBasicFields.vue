@@ -106,6 +106,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 				:id="titleId"
 				aria-required="true"
 				v-model="question.title"
+				ttsLimit
 				:placeholder="t('surveyQuestionFields.titlePlaceholder')"
 				:disabled="disabled"
 				:invalid="showValidation && !question.title?.trim()"
@@ -122,6 +123,7 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 				<PromptTextarea
 					:id="repromptId"
 					v-model="question.reprompt_message"
+					ttsLimit
 					class="text-sm"
 					:placeholder="t('surveyQuestionFields.repromptPlaceholder')"
 					:disabled="disabled"

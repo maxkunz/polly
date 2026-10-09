@@ -283,6 +283,14 @@ export const de = {
 		comment: "Offenes Freitextfeld für Rückmeldungen des Teilnehmers."
 	},
 
+	promptTextarea: {
+		ttsLimitHint: "Wird per Sprachausgabe vorgelesen, maximal {max} Zeichen.",
+		ttsCounter: "{length} von maximal {max} Zeichen",
+		ttsTooLong: "Text zu lang: {length} von maximal {max} Zeichen. Bitte kürzen Sie den Text, sonst kann die Umfrage nicht gespeichert werden.",
+		ttsAnnounceTooLong: "Text zu lang: {length} von maximal {max} Zeichen. Die Umfrage kann so nicht gespeichert werden.",
+		ttsAnnounceOk: "Textlänge wieder innerhalb des Limits."
+	},
+
 	validation: {
 		summaryTitle: "Bitte beheben Sie folgende Fehler:",
 		questionTitleRequired: "Fragetitel darf nicht leer sein.",
@@ -302,7 +310,8 @@ export const de = {
 		surveyTitleRequired: "Der Titel der Umfrage darf nicht leer sein.",
 		surveyNameRequired: "Der Name der Umfrage darf nicht leer sein.",
 		surveyMinQuestions: "Eine Umfrage muss mindestens 1 Frage enthalten.",
-		surveyMaxQuestions: "Eine Umfrage darf maximal 20 Fragen enthalten (inkl. Folgefragen). Aktuell: {count}."
+		surveyMaxQuestions: "Eine Umfrage darf maximal 20 Fragen enthalten (inkl. Folgefragen). Aktuell: {count}.",
+		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text."
 	},
 
 	deployment: {

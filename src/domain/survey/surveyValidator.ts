@@ -6,7 +6,8 @@ import type {
 	ConditionOperator
 } from "./surveyTypes";
 import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
-import { i18n } from "@/i18n";
+import { i18n, currentLocaleTag } from "@/i18n";
+import { TTS_TEXT_MAX_CHARS } from "@/constants/surveyConstants";
 
 export interface ValidationError {
 	field: string;
@@ -102,6 +103,33 @@ export function findDuplicateFollowUpValues(
 	return duplicates;
 }
 
+/** true, wenn ein per TTS gesprochener Text das Genesys-Limit pro TTS-Anfrage überschreitet. */
+export function isTtsTextTooLong(text: string | null | undefined): boolean {
+	return (text?.length ?? 0) > TTS_TEXT_MAX_CHARS;
+}
+
+function ttsTooLongError(
+	text: string | null | undefined,
+	field: string,
+	fieldLabelKey: string,
+	fieldId: string,
+	questionId?: string
+): ValidationError | null {
+	if (!isTtsTextTooLong(text)) return null;
+	const { t } = i18n.global;
+	const format = new Intl.NumberFormat(currentLocaleTag());
+	return {
+		field,
+		message: t("validation.ttsTextTooLong", {
+			field: t(fieldLabelKey),
+			length: format.format(text!.length),
+			max: format.format(TTS_TEXT_MAX_CHARS)
+		}),
+		questionId,
+		fieldId
+	};
+}
+
 export function validateQuestion(
 	question: SurveyQuestion,
 	prefix = ""
@@ -117,6 +145,15 @@ export function validateQuestion(
 			questionId: question.id,
 			fieldId: `q_title_${question.id}`
 		});
+	}
+
+	// Fragetitel (prompt) und Reprompt werden im Bot Flow per TTS gesprochen.
+	// Folgefragen haben im Editor eine eigene Reprompt-Feld-ID (fu_reprompt_…).
+	for (const error of [
+		ttsTooLongError(question.title, `${qField}.title`, "surveyQuestionFields.title", `q_title_${question.id}`, question.id),
+		ttsTooLongError(question.reprompt_message, `${qField}.reprompt_message`, "surveyQuestionFields.reprompt", `${prefix ? "fu" : "q"}_reprompt_${question.id}`, question.id)
+	]) {
+		if (error) errors.push(error);
 	}
 
 	if (!question.name || !question.name.trim()) {
@@ -270,6 +307,14 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 			message: t("validation.surveyNameRequired"),
 			fieldId: "survey_name_input"
 		});
+	}
+
+	// Begrüßung und Verabschiedung werden im Bot Flow per TTS gesprochen
+	for (const error of [
+		ttsTooLongError(survey.greeting_message, "survey.greeting_message", "surveyEditor.meta.greeting", "survey_greeting_input"),
+		ttsTooLongError(survey.closing_message, "survey.closing_message", "surveyEditor.meta.closing", "survey_closing_input")
+	]) {
+		if (error) errors.push(error);
 	}
 
 	const totalQuestions = countAllQuestions(survey.questions || []);

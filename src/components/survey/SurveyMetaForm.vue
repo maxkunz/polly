@@ -96,6 +96,7 @@ const computedTechnicalName = computed(() => {
 						<PromptTextarea
 							:id="surveyGreetingId"
 							v-model="survey.greeting_message"
+							ttsLimit
 							class="text-sm"
 							:placeholder="t('surveyEditor.meta.placeholders.greeting')"
 							:disabled="disabled"
@@ -109,6 +110,7 @@ const computedTechnicalName = computed(() => {
 						<PromptTextarea
 							:id="surveyClosingId"
 							v-model="survey.closing_message"
+							ttsLimit
 							class="text-sm"
 							:placeholder="t('surveyEditor.meta.placeholders.closing')"
 							:disabled="disabled"

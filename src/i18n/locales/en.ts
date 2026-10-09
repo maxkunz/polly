@@ -285,6 +285,14 @@ export const en: MessageSchema = {
 		comment: "Open free-text field for the participant's feedback."
 	},
 
+	promptTextarea: {
+		ttsLimitHint: "Read out by text-to-speech, max. {max} characters.",
+		ttsCounter: "{length} of max. {max} characters",
+		ttsTooLong: "Text too long: {length} of max. {max} characters. Please shorten the text, otherwise the survey cannot be saved.",
+		ttsAnnounceTooLong: "Text too long: {length} of max. {max} characters. The survey cannot be saved like this.",
+		ttsAnnounceOk: "Text length is within the limit again."
+	},
+
 	validation: {
 		summaryTitle: "Please fix the following errors:",
 		questionTitleRequired: "The question title must not be empty.",
@@ -304,7 +312,8 @@ export const en: MessageSchema = {
 		surveyTitleRequired: "The survey title must not be empty.",
 		surveyNameRequired: "The survey name must not be empty.",
 		surveyMinQuestions: "A survey must contain at least 1 question.",
-		surveyMaxQuestions: "A survey may contain a maximum of 20 questions (incl. follow-up questions). Currently: {count}."
+		surveyMaxQuestions: "A survey may contain a maximum of 20 questions (incl. follow-up questions). Currently: {count}.",
+		ttsTextTooLong: "“{field}” is too long ({length} of max. {max} characters). Texts read out by text-to-speech may be at most {max} characters long. Please shorten the text."
 	},
 
 	deployment: {

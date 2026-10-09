@@ -115,6 +115,7 @@ function confirmDelete() {
 						:id="titleId"
 						aria-required="true"
 						v-model="followUp.question.title"
+						ttsLimit
 						class="text-sm"
 						:placeholder="t('surveyFollowUp.titlePlaceholder')"
 						:disabled="disabled"
@@ -152,6 +153,7 @@ function confirmDelete() {
 					<PromptTextarea
 						:id="repromptId"
 						v-model="followUp.question.reprompt_message"
+						ttsLimit
 						class="text-sm"
 						:placeholder="t('surveyFollowUp.repromptPlaceholder')"
 						:disabled="disabled"
