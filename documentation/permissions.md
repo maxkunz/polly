@@ -1,12 +1,12 @@
 # Berechtigungen (Frontend-Rollen)
 
-Polly prüft im Frontend zwei Genesys-Cloud-Rollen des eingeloggten Users. Die Prüfung dient nur als Schutz gegen versehentliche Fehlbedienung. Sie ist **keine** Sicherheitsgrenze: Die Data Tables und die API werden serverseitig nicht zusätzlich abgesichert.
+Polly prüft im Frontend drei Genesys-Cloud-Rollen des eingeloggten Users. Die Prüfung dient nur als Schutz gegen versehentliche Fehlbedienung. Sie ist **keine** Sicherheitsgrenze: Die Data Tables und die API werden serverseitig nicht zusätzlich abgesichert.
 
 | Rolle | Erlaubt |
 |---|---|
-| `polly_write` | Umfragen anlegen, klonen, bearbeiten/speichern, löschen |
-| `polly_deploy` | Deploy nach Stage und Prod, Rollback, Queue-Mapping speichern |
-| `polly_reporting` | Umfrageergebnisse exportieren (CSV-Download im Report) |
+| `<projectTag>_polly_write` (oder `polly_write`) | Umfragen anlegen, klonen, bearbeiten/speichern, löschen |
+| `<projectTag>_polly_deploy` (oder `polly_deploy`) | Deploy nach Stage und Prod, Rollback, Queue-Mapping speichern |
+| `<projectTag>_polly_reporting` (oder `polly_reporting`) | Umfrageergebnisse exportieren (CSV-Download im Report) |
 
 - Ohne Rolle hat ein User nur Lesezugriff. Er kann Umfragen im schreibgeschützten Editor ansehen und die Report-Vorschau öffnen, aber keine Ergebnisse exportieren.
 - Die Rollen sind unabhängig voneinander. Ein User nur mit `polly_deploy` kann deployen, aber nicht editieren.
@@ -15,7 +15,7 @@ Polly prüft im Frontend zwei Genesys-Cloud-Rollen des eingeloggten Users. Die P
 
 ## Einrichtung in Genesys
 
-1. Die Rollen `polly_write`, `polly_deploy` und `polly_reporting` in Genesys anlegen. Sie benötigen keine Permissions, entscheidend ist nur der Name. Groß-/Kleinschreibung wird ignoriert.
+1. Das Setup legt die Rollen mit dem Projekt-Tag als Prefix an: `<projectTag>_polly_write`, `<projectTag>_polly_deploy` und `<projectTag>_polly_reporting` (in `meta.setup.frontendRoles`, Uninstall löscht sie wieder). Sie benötigen keine Permissions, entscheidend ist nur der Name. Groß-/Kleinschreibung wird ignoriert. Geprüft wird die Rolle mit dem Prefix der eigenen Installation **oder** die unpräfixierte Rolle (`polly_write`, `polly_deploy`, `polly_reporting`, Legacy-Check). Die präfixierten Rollen berechtigen nur in der eigenen Installation, sodass mehrere Installationen in einer Org getrennt berechtigt werden können. Die unpräfixierte Rolle gilt dagegen in allen Installationen und eignet sich daher für Kunden mit mehreren Mandanten/Installationen als Rolle für „Meta-Admins“, die überall berechtigt sein sollen.
 2. Die Rollen den gewünschten Usern zuweisen.
 3. Der Implicit-Grant-OAuth-Client des Frontends braucht ggf. den Scope `authorization:readonly`, damit `GET /api/v2/users/me?expand=authorization` die Rollen liefert. Schlägt der Abruf fehl, arbeitet der User read-only (Warnung in der Browser-Konsole).
 
