@@ -3,14 +3,14 @@ botFlow:
   description: Bot Flow for Polly
   division: {{DIVISION_NAME}}
   startUpRef: "/botFlow/bots/bot[Default Bot_10]"
-  defaultLanguage: de-de
+  defaultLanguage: en-us
   supportedLanguages:
-    de-de:
+    en-us:
       defaultLanguageSkill:
         noValue: true
       speechToText:
         engine:
-          name: Microsoft Azure
+          name: Genesys Native
           defaultEngine: true
   variables:
     - stringVariable:
@@ -1428,6 +1428,6 @@ botFlow:
           description: The description of the Entity Type "yes_no_type"
           mechanism:
             type: DynamicList
-      language: de-de
+      language: en-us
       languageVersions: {}
     mutedUtterances: []

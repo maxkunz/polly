@@ -3,14 +3,14 @@ inboundCall:
   description: Inbound Flow for Polly
   division: {{DIVISION_NAME}}
   startUpRef: "/inboundCall/tasks/task[New Task 1_12]"
-  defaultLanguage: de-de
+  defaultLanguage: en-us
   supportedLanguages:
-    de-de:
+    en-us:
       defaultLanguageSkill:
         noValue: true
       textToSpeech:
-        Genesys Enhanced TTS:
-          voice: de-DE-AmalaNeural
+        Genesys TTS:
+          voice: Jill
   settingsActionDefaults:
     playAudioOnSilence:
       allowedRepeatCount:
@@ -145,7 +145,7 @@ inboundCall:
       - flow:
           name: {{BOTFLOW_NAME}}
           type: bot
-          defaultLanguage: de-de
+          defaultLanguage: en-us
           variables:
             - stringVariable:
                 name: Slot.rating
@@ -180,4 +180,4 @@ inboundCall:
                 isInput: true
                 isOutput: false
           supportedLanguages:
-            - de-de
+            - en-us
