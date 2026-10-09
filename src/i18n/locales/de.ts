@@ -130,6 +130,15 @@ export const de = {
 			errorSummary: "Speicherfehler",
 			errorFallback: "Fehler beim Speichern der Umfrage in der Data Table."
 		},
+		flowSize: {
+			warnTitle: "Textmenge der Umfrage nähert sich dem Limit",
+			warnDetail: "Die Umfrage nutzt {percent} % der maximal möglichen Textmenge ({length} von {max} Zeichen inkl. technischer Daten). Über 100 % kann sie weiterhin gespeichert, aber nicht mehr deployt werden.",
+			exceededTitle: "Textmenge der Umfrage ist zu groß",
+			exceededDetail: "Die Umfrage nutzt {percent} % der maximal möglichen Textmenge ({length} von {max} Zeichen inkl. technischer Daten). Sie kann als Entwurf gespeichert, aber nicht deployt werden. Bitte kürzen Sie längere Texte.",
+			announceWarn: "Warnung: Die Textmenge der Umfrage hat {percent} % des Limits erreicht.",
+			announceExceeded: "Die Textmenge der Umfrage ist zu groß. Deployen ist erst möglich, wenn längere Texte gekürzt wurden.",
+			announceOk: "Die Textmenge der Umfrage liegt wieder im unkritischen Bereich."
+		},
 		discardConfirm: {
 			header: "Änderungen verwerfen",
 			message: "Möchten Sie alle nicht gespeicherten Änderungen wirklich verwerfen?",
@@ -311,7 +320,8 @@ export const de = {
 		rollback: "Rollback",
 		rollbackAriaLabel: "Letze Version auf Prod zurückspielen",
 		alreadyInProd: "Version v{version} ist bereits in Prod deployed. Ein erneutes Prod-Deployment ist erst nach einer Änderung am Entwurf möglich.",
-		unknownError: "Unbekannter Fehler beim Deployment"
+		unknownError: "Unbekannter Fehler beim Deployment",
+		payloadTooLarge: "Die Gesamttextmenge der Umfrage ist zu groß ({length} von maximal {max} Zeichen inkl. technischer Daten), daher kann sie nicht deployt werden. Bitte kürzen Sie längere Texte im Editor und speichern Sie die Umfrage erneut."
 	},
 
 	report: {

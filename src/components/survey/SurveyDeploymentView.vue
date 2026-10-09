@@ -8,6 +8,7 @@ import { useSurveyDeployment } from "@/composables/useSurveyDeployment";
 import SurveyDeploymentStatus from "./SurveyDeploymentStatus.vue";
 import SurveyQueueMappingForm from "./SurveyQueueMappingForm.vue";
 import { useAppStore } from "@/stores/appStore";
+import { currentLocaleTag } from "@/i18n";
 
 const props = defineProps<{
 	survey: Survey;
@@ -52,6 +53,8 @@ const {
 	prodSnapshot,
 	backupSnapshot,
 	isDraftInProd,
+	draftPayloadSize,
+	isDraftTooLarge,
 	deployToStage,
 	deployToProd,
 	rollback
@@ -63,6 +66,16 @@ const {
 
 // Tooltip nur bei fehlender Rolle polly_deploy
 const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions.missingDeploy")));
+
+const payloadTooLargeId = `deploy-payload-too-large-${props.surveyId}`;
+const payloadTooLargeText = computed(() => {
+	if (!draftPayloadSize.value) return "";
+	const format = new Intl.NumberFormat(currentLocaleTag());
+	return t("deployment.payloadTooLarge", {
+		length: format.format(draftPayloadSize.value.length),
+		max: format.format(draftPayloadSize.value.max)
+	});
+});
 </script>
 
 <template>
@@ -102,6 +115,11 @@ const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions
 			<SurveyDeploymentStatus :label="t('deployment.backup')" :survey="backupSnapshot" severity="secondary" />
 		</div>
 
+		<!-- Hinweis vor den Buttons, damit er in der Lesereihenfolge vor den gesperrten Aktionen steht -->
+		<Message v-if="isDraftTooLarge" :id="payloadTooLargeId" severity="error" :closable="false">
+			{{ payloadTooLargeText }}
+		</Message>
+
 		<!-- Actions -->
 		<div class="flex flex-wrap gap-3 pt-2">
 			<span v-tooltip.top="deployTooltip">
@@ -110,8 +128,9 @@ const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions
 					:label="t('deployment.deployStage')"
 					severity="primary"
 					:loading="isDeploying"
-					:disabled="isDeploying || !app.canDeploy"
+					:disabled="isDeploying || isDraftTooLarge || !app.canDeploy"
 					:aria-label="t('deployment.deployStageAriaLabel')"
+					:aria-describedby="isDraftTooLarge ? payloadTooLargeId : undefined"
 					@click="deployToStage"
 				/>
 			</span>
@@ -121,8 +140,9 @@ const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions
 					:label="t('deployment.deployProd')"
 					severity="warn"
 					:loading="isDeploying"
-					:disabled="isDeploying || isDraftInProd || !app.canDeploy"
+					:disabled="isDeploying || isDraftInProd || isDraftTooLarge || !app.canDeploy"
 					:aria-label="t('deployment.deployProdAriaLabel')"
+					:aria-describedby="isDraftTooLarge ? payloadTooLargeId : undefined"
 					@click="deployToProd"
 				/>
 			</span>

@@ -9,6 +9,7 @@ import {
 	fetchSurveyDetail,
 	readFieldVersion
 } from "@/services/surveyService";
+import { measureFlowPayload, type FlowPayloadSize } from "@/services/flowPayloadBudget";
 
 export interface UseSurveyDeploymentOptions {
 	datatableId?: string;
@@ -24,6 +25,10 @@ export interface UseSurveyDeploymentReturn {
 	backupSnapshot: ComputedRef<Survey | null>;
 	/** true, wenn die Draft-Version bereits in Prod liegt – erneutes Prod-Deploy ist dann gesperrt. */
 	isDraftInProd: ComputedRef<boolean>;
+	/** Größe des übersetzten Drafts; null, wenn der Draft nicht übersetzbar ist. */
+	draftPayloadSize: ComputedRef<FlowPayloadSize | null>;
+	/** true, wenn das Flow-JSON das Architect-Budget überschreitet – Deployen ist dann gesperrt. */
+	isDraftTooLarge: ComputedRef<boolean>;
 	deployToStage(): Promise<void>;
 	deployToProd(): Promise<void>;
 	rollback(): Promise<void>;
@@ -55,6 +60,19 @@ export function useSurveyDeployment({
 		const draftVersion = readFieldVersion(existingRow.value?.Draft);
 		return draftVersion !== null && draftVersion === readFieldVersion(existingRow.value?.Prod);
 	});
+
+	// Nur bei Änderung der Zeile neu berechnet (nach Laden bzw. Deploy), nicht laufend
+	const draftPayloadSize = computed<FlowPayloadSize | null>(() => {
+		const draft = existingRow.value?.Draft;
+		if (!draft || draft === "{}") return null;
+		try {
+			return measureFlowPayload(draft);
+		} catch {
+			// Nicht übersetzbare Drafts meldet deploySurvey selbst
+			return null;
+		}
+	});
+	const isDraftTooLarge = computed(() => draftPayloadSize.value?.level === "exceeded");
 
 	async function refresh(): Promise<void> {
 		const res = await fetchSurveyDetail(datatableId, surveyId);
@@ -97,6 +115,8 @@ export function useSurveyDeployment({
 		prodSnapshot,
 		backupSnapshot,
 		isDraftInProd,
+		draftPayloadSize,
+		isDraftTooLarge,
 		deployToStage,
 		deployToProd,
 		rollback

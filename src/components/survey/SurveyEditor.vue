@@ -8,9 +8,11 @@ import { cloneSurvey } from "@/domain/survey/surveyTypes";
 import { useSurveyEditor } from "@/composables/useSurveyEditor";
 import { useSurveySaveActions } from "@/composables/useSurveySaveActions";
 import { useSurveyLock } from "@/composables/useSurveyLock";
+import { useFlowPayloadSize } from "@/composables/useFlowPayloadSize";
 
 import SurveyEditorToolbar from "./SurveyEditorToolbar.vue";
 import SurveyValidationSummary from "./SurveyValidationSummary.vue";
+import SurveyFlowSizeHint from "./SurveyFlowSizeHint.vue";
 import SurveyMetaForm from "./SurveyMetaForm.vue";
 import SurveyQuestionsSection from "./SurveyQuestionsSection.vue";
 import SurveyStickySaveBar from "./SurveyStickySaveBar.vue";
@@ -70,6 +72,8 @@ const {
 	reset,
 	markClean
 } = useSurveyEditor(props.survey);
+
+const flowPayloadSize = useFlowPayloadSize(draftSurvey);
 
 const {
 	isLockedByMe,
@@ -178,6 +182,9 @@ function handleClone() {
 			:show="saveAttempted && !isValid"
 			:errors="validationErrors"
 		/>
+
+		<!-- Hinweis zur Gesamttextmenge (Architect-Budget des Flow-JSON) -->
+		<SurveyFlowSizeHint :size="flowPayloadSize" />
 
 		<!-- Meta Section Card -->
 		<SurveyMetaForm

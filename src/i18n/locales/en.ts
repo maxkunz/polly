@@ -132,6 +132,15 @@ export const en: MessageSchema = {
 			errorSummary: "Save error",
 			errorFallback: "Failed to save the survey in the data table."
 		},
+		flowSize: {
+			warnTitle: "Survey text volume is approaching the limit",
+			warnDetail: "The survey uses {percent} % of the maximum text volume ({length} of {max} characters incl. technical data). Above 100 % it can still be saved but no longer deployed.",
+			exceededTitle: "Survey text volume is too large",
+			exceededDetail: "The survey uses {percent} % of the maximum text volume ({length} of {max} characters incl. technical data). It can be saved as a draft but not deployed. Please shorten longer texts.",
+			announceWarn: "Warning: The survey text volume has reached {percent} % of the limit.",
+			announceExceeded: "The survey text volume is too large. Deploying is only possible after shortening longer texts.",
+			announceOk: "The survey text volume is back within the uncritical range."
+		},
 		discardConfirm: {
 			header: "Discard changes",
 			message: "Do you really want to discard all unsaved changes?",
@@ -313,7 +322,8 @@ export const en: MessageSchema = {
 		rollback: "Rollback",
 		rollbackAriaLabel: "Restore last version to prod",
 		alreadyInProd: "Version v{version} is already deployed in prod. Deploying to prod again requires a change to the draft.",
-		unknownError: "Unknown error during deployment"
+		unknownError: "Unknown error during deployment",
+		payloadTooLarge: "The total text volume of the survey is too large ({length} of max. {max} characters incl. technical data), so it cannot be deployed. Please shorten longer texts in the editor and save the survey again."
 	},
 
 	report: {

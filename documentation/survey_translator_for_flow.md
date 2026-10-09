@@ -15,6 +15,8 @@ Bei Typ "rating" bitte beachten, dass im Flow-JSON-Format zusätzlich alle mögl
 
 Bei Typ "choice" gehen im Flow-JSON die Options-IDs aus dem Draft verloren: "labels", "synonyms" (pro Option ein String, in dem die Synonyme durch "; " getrennt sind, z. B. "Hammer; Zange; Schraubenzieher"; ohne Synonyme ein leerer String "") und "next_question_ids" sind drei parallele Arrays, deren Reihenfolge der Reihenfolge der Optionen im Draft entspricht (Zuordnung also ausschließlich über den Array-Index, nicht mehr über eine ID).
 
+Das übersetzte JSON darf höchstens 32.000 Zeichen lang sein (Architect-Limit für Strings). Das Deployment prüft die Länge des fertigen JSON und bricht bei Überschreitung ab. Das Flow-JSON ist je nach Fragetyp größer (rating/nps: "values", immer drei Bedingungen) oder kleiner (choice: Options-IDs entfallen) als der Draft, daher wird immer das übersetzte Ergebnis gemessen.
+
 Folgende Felder werden beim Übersetzen aus dem Draft-Format übernommen bzw. umbenannt: "title" → "prompt", "reprompt_message" → "reprompt", bei der Umfrage "greeting_message" → "greeting_prompt" und "closing_message" → "closing_prompt". "id", "name", "description", "mandatory" sowie bei der Umfrage "created_at"/"updated_at"/"version" werden unverändert übernommen. Zusätzlich wird bei der Umfrage "type": "Flow" gesetzt.
 
 

@@ -5,7 +5,8 @@ import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/
 import { useAppStore } from "@/stores/appStore";
 import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
-import { i18n } from "@/i18n";
+import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
+import { i18n, currentLocaleTag } from "@/i18n";
 
 export async function resolveDataTableId(datatableId?: string): Promise<string> {
 	if (datatableId && datatableId.trim()) {
@@ -167,6 +168,19 @@ export async function deploySurvey(
 	}
 
 	const translatedPayload = translateSurveyForFlow(existingRow.Draft ?? "{}");
+
+	// Architect liest max. FLOW_PAYLOAD_MAX_CHARS Zeichen pro String – zu große
+	// Umfragen nicht deployen, sonst scheitert der Flow erst im Anruf.
+	const payloadSize = evaluateFlowPayloadSize(translatedPayload.length);
+	if (payloadSize.level === "exceeded") {
+		const format = new Intl.NumberFormat(currentLocaleTag());
+		throw new Error(
+			i18n.global.t("deployment.payloadTooLarge", {
+				length: format.format(payloadSize.length),
+				max: format.format(payloadSize.max)
+			})
+		);
+	}
 
 	if (target === "Stage") {
 		rowPayload.Stage = translatedPayload;
