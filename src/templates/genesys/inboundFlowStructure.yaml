@@ -9,8 +9,8 @@ inboundCall:
       defaultLanguageSkill:
         noValue: true
       textToSpeech:
-        Genesys TTS:
-          voice: Jill
+        Genesys Enhanced TTS:
+          voice: polly-Danielle-NTTS
   settingsActionDefaults:
     playAudioOnSilence:
       allowedRepeatCount:
