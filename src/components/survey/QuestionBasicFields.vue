@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
+import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import ToggleSwitch from "primevue/toggleswitch";
 import Select from "primevue/select";
 import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
@@ -102,11 +102,10 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 			<label :for="titleId" class="block text-sm font-medium mb-1">
 				{{ t("surveyQuestionFields.title") }} <span class="text-red-700" aria-hidden="true">*</span>
 			</label>
-			<InputText
+			<PromptTextarea
 				:id="titleId"
 				aria-required="true"
 				v-model="question.title"
-				class="w-full"
 				:placeholder="t('surveyQuestionFields.titlePlaceholder')"
 				:disabled="disabled"
 				:invalid="showValidation && !question.title?.trim()"
@@ -120,12 +119,10 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 				<label :for="repromptId" class="block text-xs font-medium mb-1">
 					{{ t("surveyQuestionFields.reprompt") }}
 				</label>
-				<Textarea
+				<PromptTextarea
 					:id="repromptId"
 					v-model="question.reprompt_message"
-					class="w-full text-sm"
-					rows="2"
-					autoResize
+					class="text-sm"
 					:placeholder="t('surveyQuestionFields.repromptPlaceholder')"
 					:disabled="disabled"
 				/>
@@ -135,12 +132,10 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 				<label :for="descId" class="block text-xs font-medium mb-1">
 					{{ t("surveyQuestionFields.description") }}
 				</label>
-				<Textarea
+				<PromptTextarea
 					:id="descId"
 					v-model="question.description"
-					class="w-full text-sm"
-					rows="2"
-					autoResize
+					class="text-sm"
 					:placeholder="t('surveyQuestionFields.descriptionPlaceholder')"
 					:disabled="disabled"
 				/>

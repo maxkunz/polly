@@ -2,8 +2,7 @@
 import { computed, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
-import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
+import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import Select from "primevue/select";
 import { useConfirm } from "primevue/useconfirm";
 import type { FollowUpRule, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
@@ -112,11 +111,11 @@ function confirmDelete() {
 					<label :for="titleId" class="block text-xs font-medium mb-1">
 						{{ t("surveyFollowUp.title") }} <span class="text-red-700" aria-hidden="true">*</span>
 					</label>
-					<InputText
+					<PromptTextarea
 						:id="titleId"
 						aria-required="true"
 						v-model="followUp.question.title"
-						class="w-full text-sm"
+						class="text-sm"
 						:placeholder="t('surveyFollowUp.titlePlaceholder')"
 						:disabled="disabled"
 						:invalid="showValidation && !followUp.question.title?.trim()"
@@ -150,12 +149,10 @@ function confirmDelete() {
 					<label :for="repromptId" class="block text-xs font-medium mb-1">
 						{{ t("surveyFollowUp.reprompt") }}
 					</label>
-					<Textarea
+					<PromptTextarea
 						:id="repromptId"
 						v-model="followUp.question.reprompt_message"
-						class="w-full text-sm"
-						rows="2"
-						autoResize
+						class="text-sm"
 						:placeholder="t('surveyFollowUp.repromptPlaceholder')"
 						:disabled="disabled"
 					/>
@@ -165,12 +162,10 @@ function confirmDelete() {
 					<label :for="descId" class="block text-xs font-medium mb-1">
 						{{ t("surveyFollowUp.description") }}
 					</label>
-					<Textarea
+					<PromptTextarea
 						:id="descId"
 						v-model="followUp.question.description"
-						class="w-full text-sm"
-						rows="2"
-						autoResize
+						class="text-sm"
 						:placeholder="t('surveyFollowUp.descriptionPlaceholder')"
 						:disabled="disabled"
 					/>

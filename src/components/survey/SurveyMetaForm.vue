@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import InputText from "primevue/inputtext";
-import Textarea from "primevue/textarea";
+import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
 
@@ -79,12 +79,10 @@ const computedTechnicalName = computed(() => {
 					<label :for="surveyDescId" class="block text-sm font-medium mb-1">
 						{{ t("surveyEditor.meta.description") }}
 					</label>
-					<Textarea
+					<PromptTextarea
 						:id="surveyDescId"
 						v-model="survey.description"
-						class="w-full text-sm"
-						rows="2"
-						autoResize
+						class="text-sm"
 						:placeholder="t('surveyEditor.meta.placeholders.description')"
 						:disabled="disabled"
 					/>
@@ -95,12 +93,10 @@ const computedTechnicalName = computed(() => {
 						<label :for="surveyGreetingId" class="block text-sm font-medium mb-1">
 							{{ t("surveyEditor.meta.greeting") }}
 						</label>
-						<Textarea
+						<PromptTextarea
 							:id="surveyGreetingId"
 							v-model="survey.greeting_message"
-							class="w-full text-sm"
-							rows="2"
-							autoResize
+							class="text-sm"
 							:placeholder="t('surveyEditor.meta.placeholders.greeting')"
 							:disabled="disabled"
 						/>
@@ -110,12 +106,10 @@ const computedTechnicalName = computed(() => {
 						<label :for="surveyClosingId" class="block text-sm font-medium mb-1">
 							{{ t("surveyEditor.meta.closing") }}
 						</label>
-						<Textarea
+						<PromptTextarea
 							:id="surveyClosingId"
 							v-model="survey.closing_message"
-							class="w-full text-sm"
-							rows="2"
-							autoResize
+							class="text-sm"
 							:placeholder="t('surveyEditor.meta.placeholders.closing')"
 							:disabled="disabled"
 						/>
