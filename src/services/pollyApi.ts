@@ -23,7 +23,7 @@ export class MissingTokenError extends Error {
  * Wirft PollyApiError bei Status >= 400.
  */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-	const accessToken = useAppStore().genesys.accessToken;
+	const { accessToken, region } = useAppStore().genesys;
 	if (!accessToken) throw new MissingTokenError();
 
 	const response = await fetch(`/api${path}`, {
@@ -31,7 +31,10 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 		headers: {
 			...(init.headers ?? {}),
 			Authorization: `Bearer ${accessToken}`,
-			"x-genesys-region": getGenesysRegion()
+			// Region des Logins (appStore, aus gcHostOrigin der gemerkten Start-URL) – passt garantiert zum Token.
+			// getGenesysRegion() liest nur die aktuelle URL/sessionStorage und fällt nach dem PKCE-Redirect
+			// bzw. auf internen Routen ohne gcHostOrigin auf den Build-Default zurück.
+			"x-genesys-region": region || getGenesysRegion()
 		}
 	});
 
