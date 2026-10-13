@@ -127,7 +127,7 @@ export const de = {
 			validationErrorSummary: "Validierungsfehler",
 			validationErrorFallback: "Bitte beheben Sie die markierten Fehler vor dem Speichern.",
 			successSummary: "Erfolgreich gespeichert",
-			successDetail: "Umfrage „{title}“ wurde in der Data Table aktualisiert.",
+			successDetail: "Umfrage „{title}“ wurde aktualisiert.",
 			errorSummary: "Speicherfehler",
 			errorFallback: "Fehler beim Speichern der Umfrage in der Data Table."
 		},
@@ -406,7 +406,7 @@ export const de = {
 		},
 		toast: {
 			savedSummary: "Queue Mapping gespeichert",
-			savedDetail: "Die Queue-Zuordnungen wurden erfolgreich in der Data Table aktualisiert."
+			savedDetail: "Die Queue-Zuordnungen wurden erfolgreich aktualisiert."
 		},
 		loadErrorFallback: "Fehler beim Laden des Queue-Mappings",
 		saveErrorFallback: "Fehler beim Speichern des Queue-Mappings in der Data Table"

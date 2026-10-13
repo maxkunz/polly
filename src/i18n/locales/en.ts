@@ -129,7 +129,7 @@ export const en: MessageSchema = {
 			validationErrorSummary: "Validation error",
 			validationErrorFallback: "Please fix the highlighted errors before saving.",
 			successSummary: "Saved successfully",
-			successDetail: "Survey „{title}“ was updated in the data table.",
+			successDetail: "Survey „{title}“ was updated.",
 			errorSummary: "Save error",
 			errorFallback: "Failed to save the survey in the data table."
 		},
@@ -408,7 +408,7 @@ export const en: MessageSchema = {
 		},
 		toast: {
 			savedSummary: "Queue mapping saved",
-			savedDetail: "The queue assignments were updated successfully in the data table."
+			savedDetail: "The queue assignments were updated successfully."
 		},
 		loadErrorFallback: "Failed to load the queue mapping",
 		saveErrorFallback: "Failed to save the queue mapping in the data table"
