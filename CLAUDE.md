@@ -6,7 +6,7 @@ Genesys-Cloud-App ("Polly"): Umfragen im Vue-Frontend pflegen, als Data-Table-Ze
 
 - `npm run dev` – Vite-Dev-Server. `/api` wird auf eine **fest verdrahtete** API-Gateway-URL in `vite.config.ts` proxied (nicht aus `amplify_outputs.json`); bei eigenem Backend dort anpassen.
 - `npm run build` – nur Frontend (`dist/`, gitignored). Kein Typecheck im Build.
-- `npm test` – führt `test/surveyFlowTranslator.test.ts`, `surveyResponsesExport.test.ts`, `surveyDeletion.test.ts`, `genesysRegion.test.ts`, `flowPayloadBudget.test.ts`, `ttsTextLimit.test.ts`, `technicalName.test.ts` und `surveyValidation.test.ts` nacheinander per `tsx` aus (eigene Mini-Test-Funktion, kein Vitest/Jest). Weitere Testdateien müssen explizit ins `test`-Script aufgenommen werden.
+- `npm test` – führt `test/surveyFlowTranslator.test.ts`, `surveyResponsesExport.test.ts`, `surveyDeletion.test.ts`, `genesysRegion.test.ts`, `flowPayloadBudget.test.ts`, `ttsTextLimit.test.ts`, `technicalName.test.ts`, `surveyValidation.test.ts` und `surveyRow.test.ts` nacheinander per `tsx` aus (eigene Mini-Test-Funktion, kein Vitest/Jest). Weitere Testdateien müssen explizit ins `test`-Script aufgenommen werden.
   - Einzeltest: keinen Filter vorhanden – Datei direkt ausführen: `npx tsx test/<datei>.ts`.
   - Im Claude-Sandbox scheitert `tsx` mit `listen EPERM …tsx-*.pipe`; dann `node --import tsx test/surveyFlowTranslator.test.ts` verwenden.
 - Typecheck (kein Script, kein Linter/Formatter im Projekt): `npx vue-tsc --noEmit`. Muss fehlerfrei durchlaufen (prüft auch `amplify/`). Fehlerhafte Typen in `node_modules` (z. B. PrimeVue-Eventbus) werden per `skipLibCheck` ignoriert.
@@ -30,7 +30,7 @@ Die Markdown-Dateien in `documentation/` sind die fachliche Spezifikation (Const
 
 Nicht offensichtliche Regeln daraus (Auszug):
 - `name` von Umfrage/Fragen wird automatisch aus Titel + erste 8 Zeichen der ID erzeugt und danach nie mehr geändert (Reporting-Schlüssel) – nicht editierbar machen, nicht neu generieren.
-- Max. 20 Fragen inkl. aller (beliebig tief verschachtelten) Folgefragen.
+- Max. 20 Fragen inkl. aller Folgefragen.
 - Flow-JSON für `rating`/`nps`: immer alle drei Bedingungen in fester Reihenfolge `equals`, `less_than`, `greater_than`; fehlende mit unerfüllbarem Wert (-1 / -1000 / 1000) und `next_question_id: null`.
 - Fehlende Folgefrage ⇒ `null`, Flow fährt mit `default_next_question_id` fort (nicht Umfrage-Ende).
 - Architect liest max. 32.000 Zeichen pro String. Das Flow-JSON wird gegen `FLOW_PAYLOAD_MAX_CHARS` geprüft (`services/flowPayloadBudget.ts`): Draft darf größer sein, Deploy wird gesperrt, Editor warnt ab 75 % (Messung entprellt in `useFlowPayloadSize`).

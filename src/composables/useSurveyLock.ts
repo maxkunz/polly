@@ -117,12 +117,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 		try {
 			const username = await getCurrentUsername();
-			const updatedRow = await acquireSurveyLock(
-				options.datatableId,
-				options.surveyId,
-				username,
-				options.existingRow.value ?? undefined
-			);
+			const updatedRow = await acquireSurveyLock(options.datatableId, options.surveyId, username);
 
 			if (updatedRow) {
 				options.existingRow.value = updatedRow;
@@ -145,12 +140,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 		try {
 			const username = await getCurrentUsername();
-			const updatedRow = await releaseSurveyLock(
-				options.datatableId,
-				options.surveyId,
-				username,
-				options.existingRow.value ?? undefined
-			);
+			const updatedRow = await releaseSurveyLock(options.datatableId, options.surveyId, username);
 
 			if (updatedRow) {
 				options.existingRow.value = updatedRow;

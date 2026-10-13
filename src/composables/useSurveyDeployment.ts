@@ -3,12 +3,8 @@ import type { Ref, ComputedRef } from "vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { i18n } from "@/i18n";
 import { useAppStore } from "@/stores/appStore";
-import {
-	deploySurvey,
-	rollbackSurvey,
-	fetchSurveyDetail,
-	readFieldVersion
-} from "@/services/surveyService";
+import { deploySurvey, rollbackSurvey, fetchSurveyDetail } from "@/services/surveyService";
+import { readFieldVersion } from "@/domain/survey/surveyRow";
 import { measureFlowPayload, type FlowPayloadSize } from "@/services/flowPayloadBudget";
 
 export interface UseSurveyDeploymentOptions {
@@ -91,21 +87,24 @@ export function useSurveyDeployment({
 			await refresh();
 		} catch (e: any) {
 			deployError.value = e?.message ?? i18n.global.t("deployment.unknownError");
+			// Auch bei Fehlern den aktuellen Stand zeigen (z. B. wenn der Draft zwischenzeitlich geändert wurde)
+			await refresh().catch(err => console.warn("Could not refresh survey row after deploy error:", err));
 		} finally {
 			isDeploying.value = false;
 		}
 	}
 
+	// Übergeben wird jeweils die angezeigte Version: Hat sie sich inzwischen geändert, bricht der Service ab
 	async function deployToStage(): Promise<void> {
-		await run(() => deploySurvey(datatableId, surveyId, "Stage", existingRow.value!));
+		await run(() => deploySurvey(datatableId, surveyId, "Stage", readFieldVersion(existingRow.value?.Draft)));
 	}
 
 	async function deployToProd(): Promise<void> {
-		await run(() => deploySurvey(datatableId, surveyId, "Prod", existingRow.value!));
+		await run(() => deploySurvey(datatableId, surveyId, "Prod", readFieldVersion(existingRow.value?.Draft)));
 	}
 
 	async function rollback(): Promise<void> {
-		await run(() => rollbackSurvey(datatableId, surveyId, existingRow.value!));
+		await run(() => rollbackSurvey(datatableId, surveyId, readFieldVersion(existingRow.value?.Prod)));
 	}
 
 	return {

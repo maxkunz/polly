@@ -4,7 +4,7 @@
 * Der Fragetyp "rating" kann von 0 bis maximal 8 frei konfiguriert werden; es ist also auch möglich, Rating 0 bis 3 oder 0 bis 4 usw. zu definieren. Der Minimalwert muss dabei kleiner als der Maximalwert sein.
 * Der Fragetyp "choice" darf maximal 5 Auswahlmöglichkeiten haben und muss mindestens zwei Auswahlmöglichkeiten haben.
 * Der Fragetyp "comment" darf keine Folgefragen haben.
-* Folgefragen dürfen selbst wieder Folgefragen haben (beliebig tief verschachtelt), zählen aber weiterhin zu den maximal 20 Fragen der Umfrage.
+* Folgefragen dürfen selbst keine Folgefragen haben und zählen zu den maximal 20 Fragen der Umfrage.
 * Erstelle als IDs immer valide, zufällige und eindeutige UUIDs.
 * Das erstellte JSON muss valide sein.
 * Das Feld "name" bei der Umfrage und den Fragen ist ein technischer Bezeichner fürs Reporting und wird nicht frei vergeben, sondern beim Speichern automatisch aus dem Titel und den ersten 8 Zeichen der ID erzeugt (z. B. "kundenzufriedenheit_2026_a0eebc99"; Umlaute werden dabei transliteriert, Sonderzeichen durch "_" ersetzt). Ist der Titel beim Erzeugen noch leer, wird zunächst ein Platzhalter ("umfrage_<id>" bzw. "frage_<id>") verwendet. Sobald einmal ein aus dem Titel abgeleiteter Name gespeichert wurde, bleibt dieser auch bei späteren Titeländerungen unverändert erhalten (daher "unmutable"). Der Name ist im Editor nicht direkt editierbar.

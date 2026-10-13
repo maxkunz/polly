@@ -9,6 +9,7 @@ import SurveyDeploymentStatus from "./SurveyDeploymentStatus.vue";
 import SurveyQueueMappingForm from "./SurveyQueueMappingForm.vue";
 import { useAppStore } from "@/stores/appStore";
 import { currentLocaleTag } from "@/i18n";
+import { readFieldVersion } from "@/domain/survey/surveyRow";
 
 const props = defineProps<{
 	survey: Survey;
@@ -64,6 +65,9 @@ const {
 	existingRow: localRow
 });
 
+// Version des aktuell geladenen Drafts (nach einem Deploy-Fehler ggf. neuer als beim Öffnen)
+const draftVersion = computed(() => readFieldVersion(localRow.value?.Draft) ?? props.survey.version ?? 1);
+
 // Tooltip nur bei fehlender Rolle polly_deploy
 const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions.missingDeploy")));
 
@@ -94,7 +98,7 @@ const payloadTooLargeText = computed(() => {
 				/>
 				<h2 class="text-base font-semibold text-[var(--p-text-color)]">
 					{{ survey.title || survey.name }}
-					<span class="text-[var(--p-surface-600)] font-normal">(v{{ survey.version ?? 1 }})</span>
+					<span class="text-[var(--p-surface-600)] font-normal">(v{{ draftVersion }})</span>
 				</h2>
 			</div>
 		</div>
@@ -161,7 +165,7 @@ const payloadTooLargeText = computed(() => {
 		</div>
 
 		<Message v-if="isDraftInProd" severity="info" :closable="false">
-			{{ t("deployment.alreadyInProd", { version: survey.version ?? 1 }) }}
+			{{ t("deployment.alreadyInProd", { version: draftVersion }) }}
 		</Message>
 
 		<!-- Queue Mapping (nur wenn Version in Prod deployt ist) -->

@@ -331,6 +331,8 @@ export const de = {
 		rollbackAriaLabel: "Letze Version auf Prod zurückspielen",
 		alreadyInProd: "Version v{version} ist bereits in Prod deployed. Ein erneutes Prod-Deployment ist erst nach einer Änderung am Entwurf möglich.",
 		unknownError: "Unbekannter Fehler beim Deployment",
+		draftChanged: "Der Entwurf wurde zwischenzeitlich geändert (angezeigt: v{expected}, aktuell: v{current}), z. B. von einem anderen Nutzer. Es wurde nichts deployt. Die Ansicht zeigt jetzt den aktuellen Stand – bitte prüfen und erneut deployen.",
+		prodChanged: "Prod wurde zwischenzeitlich geändert, z. B. durch ein Deployment eines anderen Nutzers. Der Rollback wurde nicht ausgeführt. Die Ansicht zeigt jetzt den aktuellen Stand – bitte prüfen und den Rollback ggf. erneut ausführen.",
 		payloadTooLarge: "Die Gesamttextmenge der Umfrage ist zu groß ({length} von maximal {max} Zeichen inkl. technischer Daten), daher kann sie nicht deployt werden. Bitte kürzen Sie längere Texte im Editor und speichern Sie die Umfrage erneut."
 	},
 

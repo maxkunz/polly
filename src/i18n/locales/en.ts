@@ -333,6 +333,8 @@ export const en: MessageSchema = {
 		rollbackAriaLabel: "Restore last version to prod",
 		alreadyInProd: "Version v{version} is already deployed in prod. Deploying to prod again requires a change to the draft.",
 		unknownError: "Unknown error during deployment",
+		draftChanged: "The draft was changed in the meantime (shown: v{expected}, current: v{current}), e.g. by another user. Nothing was deployed. The view now shows the current state – please review and deploy again.",
+		prodChanged: "Prod was changed in the meantime, e.g. by another user's deployment. The rollback was not performed. The view now shows the current state – please review and run the rollback again if needed.",
 		payloadTooLarge: "The total text volume of the survey is too large ({length} of max. {max} characters incl. technical data), so it cannot be deployed. Please shorten longer texts in the editor and save the survey again."
 	},
 

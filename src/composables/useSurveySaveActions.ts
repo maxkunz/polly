@@ -75,7 +75,6 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				options.datatableId,
 				options.surveyId,
 				options.draftSurvey.value,
-				options.existingRow?.value ?? undefined,
 				options.isNew
 			);
 			options.markClean(updated);
