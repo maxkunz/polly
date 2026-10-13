@@ -11,10 +11,9 @@ import type {
 } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions } from "@/domain/survey/surveyTypes";
 import { getOperatorOptions, getBooleanOptions } from "@/domain/survey/questionTypeCatalog";
-import {
-	findDuplicateFollowUpOperators,
-	findDuplicateFollowUpValues
-} from "@/domain/survey/surveyValidator";
+import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import FieldError from "@/components/ui/FieldError.vue";
 
 const { t } = useI18n();
 
@@ -24,13 +23,13 @@ const props = withDefaults(
 		followUp: FollowUpRule;
 		index: number;
 		disabled?: boolean;
-		showValidation?: boolean;
 	}>(),
 	{
-		disabled: false,
-		showValidation: false
+		disabled: false
 	}
 );
+
+const { hasError, errorId } = useFieldErrors();
 
 const isChoiceParent = computed(() => props.parentQuestion.type === "choice");
 
@@ -69,16 +68,6 @@ const operatorOptions = computed(() =>
 	}))
 );
 
-const duplicateOperatorMessage = computed(() => {
-	const duplicates = findDuplicateFollowUpOperators(
-		props.parentQuestion.type,
-		props.parentQuestion.follow_ups || []
-	);
-	const firstIdx = duplicates.get(props.index);
-	if (firstIdx === undefined) return undefined;
-	return t("surveyCondition.operatorDuplicate", { number: firstIdx + 1 });
-});
-
 // Bei choice und yes_no darf jeder mögliche Antwortwert (Auswahloption bzw.
 // ja/nein) nur einmal als Folgefragen-Bedingung verwendet werden.
 const usedValuesBySiblings = computed(() => {
@@ -110,19 +99,16 @@ const booleanOptions = computed(() =>
 	}))
 );
 
-const duplicateValueMessage = computed(() => {
-	if (!hasSingleOperator.value) return undefined;
-	const duplicates = findDuplicateFollowUpValues(
-		props.parentQuestion.type,
-		props.parentQuestion.follow_ups || []
-	);
-	const firstIdx = duplicates.get(props.index);
-	if (firstIdx === undefined) return undefined;
-	return t("surveyCondition.valueDuplicate", { number: firstIdx + 1 });
-});
+const conditionOpId = computed(() => questionFieldIds.conditionOperator(props.parentQuestion.id, props.index));
+const conditionValueId = computed(() => questionFieldIds.conditionValue(props.parentQuestion.id, props.index));
 
-const conditionOpId = computed(() => `fu_cond_op_${props.parentQuestion.id}_${props.index}`);
-const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_${props.index}`);
+// Select setzt aria-invalid selbst (über invalid); aria-describedby muss per pt an das fokussierbare Label
+const operatorSelectPt = computed(() => ({
+	label: { "aria-required": "true", "aria-describedby": errorId(conditionOpId.value) }
+}));
+const valueSelectPt = computed(() => ({
+	label: { "aria-required": "true", "aria-describedby": errorId(conditionValueId.value) }
+}));
 </script>
 
 <template>
@@ -140,7 +126,7 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 				<Select
 					:inputId="conditionOpId"
 					:ariaLabelledby="`${conditionOpId}_label`"
-					:pt="{ label: { 'aria-required': 'true' } }"
+					:pt="operatorSelectPt"
 					v-model="followUp.condition.operator"
 					:options="operatorOptions"
 					optionLabel="label"
@@ -148,17 +134,9 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					optionDisabled="disabled"
 					class="w-full text-xs"
 					:disabled="disabled"
-					:invalid="showValidation && !!duplicateOperatorMessage"
-					:aria-invalid="showValidation && !!duplicateOperatorMessage"
-					:aria-describedby="showValidation && duplicateOperatorMessage ? `${conditionOpId}_dup` : undefined"
+					:invalid="hasError(conditionOpId)"
 				/>
-				<small
-					v-if="showValidation && duplicateOperatorMessage"
-					:id="`${conditionOpId}_dup`"
-					class="block mt-1 text-xs text-red-700"
-				>
-					{{ duplicateOperatorMessage }}
-				</small>
+				<FieldError :fieldId="conditionOpId" />
 			</div>
 
 			<div>
@@ -173,7 +151,7 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					<Select
 						:inputId="conditionValueId"
 						:ariaLabelledby="`${conditionValueId}_label`"
-						:pt="{ label: { 'aria-required': 'true' } }"
+						:pt="valueSelectPt"
 						v-model="followUp.condition.value"
 						:options="booleanOptions"
 						optionLabel="label"
@@ -181,17 +159,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 						optionDisabled="disabled"
 						class="w-full text-xs"
 						:disabled="disabled"
-						:invalid="showValidation && !!duplicateValueMessage"
-						:aria-invalid="showValidation && !!duplicateValueMessage"
-						:aria-describedby="showValidation && duplicateValueMessage ? `${conditionValueId}_dup` : undefined"
+						:invalid="hasError(conditionValueId)"
 					/>
-					<small
-						v-if="showValidation && duplicateValueMessage"
-						:id="`${conditionValueId}_dup`"
-						class="block mt-1 text-xs text-red-700"
-					>
-						{{ duplicateValueMessage }}
-					</small>
 				</template>
 
 				<!-- Options for choice -->
@@ -199,7 +168,7 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					<Select
 						:inputId="conditionValueId"
 						:ariaLabelledby="`${conditionValueId}_label`"
-						:pt="{ label: { 'aria-required': 'true' } }"
+						:pt="valueSelectPt"
 						v-model="followUp.condition.value"
 						:options="choiceOptionsList"
 						optionLabel="label"
@@ -208,17 +177,8 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 						:placeholder="t('surveyCondition.choicePlaceholder')"
 						class="w-full text-xs"
 						:disabled="disabled"
-						:invalid="showValidation && !!duplicateValueMessage"
-						:aria-invalid="showValidation && !!duplicateValueMessage"
-						:aria-describedby="showValidation && duplicateValueMessage ? `${conditionValueId}_dup` : undefined"
+						:invalid="hasError(conditionValueId)"
 					/>
-					<small
-						v-if="showValidation && duplicateValueMessage"
-						:id="`${conditionValueId}_dup`"
-						class="block mt-1 text-xs text-red-700"
-					>
-						{{ duplicateValueMessage }}
-					</small>
 				</template>
 
 				<!-- Number for rating / nps -->
@@ -226,12 +186,14 @@ const conditionValueId = computed(() => `fu_cond_val_${props.parentQuestion.id}_
 					v-else
 					:inputId="conditionValueId"
 					:ariaLabelledby="`${conditionValueId}_label`"
-					:pt="{ pcInputText: { root: { 'aria-required': 'true' } } }"
+					:pt="{ pcInputText: { root: { 'aria-required': 'true', 'aria-describedby': errorId(conditionValueId) } } }"
 					v-model="followUp.condition.value as number"
 					inputClass="w-full text-xs"
 					:useGrouping="false"
 					:disabled="disabled"
+					:invalid="hasError(conditionValueId)"
 				/>
+				<FieldError :fieldId="conditionValueId" />
 			</div>
 		</div>
 	</div>

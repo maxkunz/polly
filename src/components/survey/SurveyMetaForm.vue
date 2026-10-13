@@ -6,16 +6,17 @@ import InputText from "primevue/inputtext";
 import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
+import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import FieldError from "@/components/ui/FieldError.vue";
 
 const props = withDefaults(
 	defineProps<{
 		survey: Survey;
 		disabled?: boolean;
-		saveAttempted?: boolean;
 	}>(),
 	{
-		disabled: false,
-		saveAttempted: false
+		disabled: false
 	}
 );
 
@@ -23,12 +24,13 @@ const emit = defineEmits<{
 	(e: "save"): void;
 }>();
 
-const surveyTitleId = "survey_title_input";
-const surveyNameId = "survey_name_input";
-const surveyDescId = "survey_desc_input";
-const surveyGreetingId = "survey_greeting_input";
-const surveyClosingId = "survey_closing_input";
+const surveyTitleId = surveyFieldIds.title;
+const surveyNameId = surveyFieldIds.name;
+const surveyDescId = surveyFieldIds.description;
+const surveyGreetingId = surveyFieldIds.greeting;
+const surveyClosingId = surveyFieldIds.closing;
 const { t } = useI18n();
+const { hasError, errorId } = useFieldErrors();
 
 const computedTechnicalName = computed(() => {
 	return ensureTechnicalName(props.survey.name, props.survey.title, props.survey.id, "umfrage");
@@ -56,9 +58,10 @@ const computedTechnicalName = computed(() => {
 							class="w-full"
 							:placeholder="t('surveyEditor.meta.placeholders.title')"
 							:disabled="disabled"
-							:invalid="saveAttempted && !survey.title?.trim()"
-							:aria-invalid="saveAttempted && !survey.title?.trim()"
+							:invalid="hasError(surveyTitleId)"
+							:aria-describedby="errorId(surveyTitleId)"
 						/>
+						<FieldError :fieldId="surveyTitleId" />
 					</div>
 
 					<div class="md:col-span-4">
@@ -100,7 +103,10 @@ const computedTechnicalName = computed(() => {
 							class="text-sm"
 							:placeholder="t('surveyEditor.meta.placeholders.greeting')"
 							:disabled="disabled"
+							:invalid="hasError(surveyGreetingId)"
+							:aria-describedby="errorId(surveyGreetingId)"
 						/>
+						<FieldError :fieldId="surveyGreetingId" />
 					</div>
 
 					<div>
@@ -114,7 +120,10 @@ const computedTechnicalName = computed(() => {
 							class="text-sm"
 							:placeholder="t('surveyEditor.meta.placeholders.closing')"
 							:disabled="disabled"
+							:invalid="hasError(surveyClosingId)"
+							:aria-describedby="errorId(surveyClosingId)"
 						/>
+						<FieldError :fieldId="surveyClosingId" />
 					</div>
 				</div>
 			</form>

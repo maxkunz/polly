@@ -8,8 +8,11 @@ import type {
 import {
 	isRatingOptions,
 	isChoiceOptions,
-	createEmptyChoiceOption
+	createEmptyChoiceOption,
+	createDefaultRatingOptions,
+	createDefaultChoiceOptions
 } from "@/domain/survey/surveyTypes";
+import { CHOICE_MIN_OPTIONS, CHOICE_MAX_OPTIONS } from "@/constants/surveyConstants";
 
 export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 	const getQuestion = (): SurveyQuestion => unref(questionRef);
@@ -19,16 +22,11 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 		q.type = newType;
 		if (newType === "rating") {
 			if (!isRatingOptions(q.options)) {
-				q.options = { min_value: 1, max_value: 5 };
+				q.options = createDefaultRatingOptions();
 			}
 		} else if (newType === "choice") {
 			if (!isChoiceOptions(q.options)) {
-				q.options = {
-					labels: [
-						{ id: crypto.randomUUID(), label: "Option 1" },
-						{ id: crypto.randomUUID(), label: "Option 2" }
-					]
-				};
+				q.options = createDefaultChoiceOptions();
 			}
 		} else {
 			q.options = undefined;
@@ -41,7 +39,7 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 			if (isRatingOptions(q.options)) {
 				return q.options;
 			}
-			return { min_value: 1, max_value: 5 };
+			return createDefaultRatingOptions();
 		},
 		set(val) {
 			const q = getQuestion();
@@ -55,12 +53,7 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 			if (isChoiceOptions(q.options)) {
 				return q.options;
 			}
-			return {
-				labels: [
-					{ id: crypto.randomUUID(), label: "Option 1" },
-					{ id: crypto.randomUUID(), label: "Option 2" }
-				]
-			};
+			return createDefaultChoiceOptions();
 		},
 		set(val) {
 			const q = getQuestion();
@@ -69,24 +62,15 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 	});
 
 	function addChoiceOption() {
-		if (choiceOptions.value.labels.length < 5) {
+		if (choiceOptions.value.labels.length < CHOICE_MAX_OPTIONS) {
 			choiceOptions.value.labels.push(createEmptyChoiceOption());
 		}
 	}
 
 	function removeChoiceOption(optIndex: number) {
-		if (choiceOptions.value.labels.length > 2) {
+		if (choiceOptions.value.labels.length > CHOICE_MIN_OPTIONS) {
 			choiceOptions.value.labels.splice(optIndex, 1);
 		}
-	}
-
-	function getRatingScaleArray(): number[] {
-		const min = ratingOptions.value.min_value ?? 1;
-		const max = ratingOptions.value.max_value ?? 5;
-		if (min > max) return [];
-		const arr: number[] = [];
-		for (let i = min; i <= max; i++) arr.push(i);
-		return arr;
 	}
 
 	return {
@@ -94,7 +78,6 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 		ratingOptions,
 		choiceOptions,
 		addChoiceOption,
-		removeChoiceOption,
-		getRatingScaleArray
+		removeChoiceOption
 	};
 }

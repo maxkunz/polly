@@ -6,6 +6,7 @@ import {
 	countAllQuestions
 } from "@/domain/survey/surveyTypes";
 import { validateSurvey, type ValidationError } from "@/domain/survey/surveyValidator";
+import { SURVEY_MAX_QUESTIONS } from "@/constants/surveyConstants";
 
 export function useSurveyEditor(initialData?: Survey | null) {
 	const survey = ref<Survey | null>(
@@ -64,7 +65,7 @@ export function useSurveyEditor(initialData?: Survey | null) {
 	});
 
 	const canAddQuestion = computed(() => {
-		return totalQuestionsCount.value < 20;
+		return totalQuestionsCount.value < SURVEY_MAX_QUESTIONS;
 	});
 
 	const validationErrors = computed<ValidationError[]>(() => {

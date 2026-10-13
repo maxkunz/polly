@@ -3,6 +3,10 @@ import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import { useToast } from "primevue/usetoast";
 import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
+import { SURVEY_MAX_QUESTIONS } from "@/constants/surveyConstants";
+import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import FieldError from "@/components/ui/FieldError.vue";
 import SurveyQuestionCard from "./SurveyQuestionCard.vue";
 
 const props = withDefaults(
@@ -12,11 +16,9 @@ const props = withDefaults(
 		canAddQuestion: boolean;
 		isQuestionSaved: (id: string) => boolean;
 		disabled?: boolean;
-		showValidation?: boolean;
 	}>(),
 	{
-		disabled: false,
-		showValidation: false
+		disabled: false
 	}
 );
 
@@ -30,13 +32,15 @@ const emit = defineEmits<{
 
 const toast = useToast();
 const { t } = useI18n();
+const { errorId } = useFieldErrors();
+const questionsId = surveyFieldIds.questions;
 
 function handleAddNewQuestion(type: QuestionType = "yes_no") {
 	if (!props.canAddQuestion) {
 		toast.add({
 			severity: "warn",
 			summary: t("surveyQuestions.limitToast.summary"),
-			detail: t("surveyQuestions.limitToast.detail"),
+			detail: t("surveyQuestions.limitToast.detail", { max: SURVEY_MAX_QUESTIONS }),
 			life: 4000
 		});
 		return;
@@ -46,7 +50,14 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 </script>
 
 <template>
-	<section aria-labelledby="questions-heading" class="space-y-4">
+	<!-- Fokussierbar: Ziel für Fehler zur Anzahl der Fragen -->
+	<section
+		:id="questionsId"
+		tabindex="-1"
+		aria-labelledby="questions-heading"
+		:aria-describedby="errorId(questionsId)"
+		class="space-y-4"
+	>
 		<div class="flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h3 id="questions-heading" class="text-base font-semibold text-[var(--p-text-color)]">
@@ -56,13 +67,14 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 					role="status"
 					aria-live="polite"
 					class="text-xs flex items-center gap-2 mt-0.5"
-					:class="totalQuestionsCount >= 20 ? 'text-red-700 font-bold' : 'text-[var(--p-surface-600)]'"
+					:class="totalQuestionsCount >= SURVEY_MAX_QUESTIONS ? 'text-red-700 font-bold' : 'text-[var(--p-surface-600)]'"
 				>
-					<span>{{ t("surveyQuestions.countStatus", { count: totalQuestionsCount }) }}</span>
-					<span v-if="totalQuestionsCount >= 20" class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+					<span>{{ t("surveyQuestions.countStatus", { count: totalQuestionsCount, max: SURVEY_MAX_QUESTIONS }) }}</span>
+					<span v-if="totalQuestionsCount >= SURVEY_MAX_QUESTIONS" class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
 						{{ t("surveyQuestions.maxReached") }}
 					</span>
 				</div>
+				<FieldError :fieldId="questionsId" />
 			</div>
 
 			<div class="flex items-center gap-2">
@@ -112,7 +124,6 @@ function handleAddNewQuestion(type: QuestionType = "yes_no") {
 				:isSaved="isQuestionSaved(question.id)"
 				:isQuestionSaved="isQuestionSaved"
 				:disabled="disabled"
-				:showValidation="showValidation"
 				@move-up="emit('move-question', qIndex, 'up')"
 				@move-down="emit('move-question', qIndex, 'down')"
 				@delete="emit('remove-question', question.id)"

@@ -79,7 +79,7 @@ test("Zu lange TTS-Texte sind harte Validierungsfehler", () => {
 			"survey_closing_input",
 			`q_title_${QUESTION_ID}`,
 			`q_reprompt_${QUESTION_ID}`,
-			`fu_reprompt_${FOLLOW_UP_ID}`
+			`q_reprompt_${FOLLOW_UP_ID}`
 		]
 	);
 });

@@ -76,6 +76,7 @@ export const de = {
 			availableCount: "Verfügbare Umfragen ({count})",
 			loading: "Lade Umfragedaten...",
 			loadErrorFallback: "Fehler beim Laden der Umfragedaten",
+			invalidIndex: "Die Umfrageliste (Zeile survey_list) ist beschädigt und wird nicht überschrieben.",
 			unnamedSurvey: "Unbenannte Umfrage",
 			openAriaLabel: "Umfrage öffnen: {title}",
 			edit: "Bearbeiten",
@@ -175,7 +176,7 @@ export const de = {
 
 	surveyQuestions: {
 		title: "Fragenkatalog",
-		countStatus: "{count} von maximal 20 Fragen belegt (inkl. Folgefragen)",
+		countStatus: "{count} von maximal {max} Fragen belegt (inkl. Folgefragen)",
 		maxReached: "Maximum erreicht",
 		addQuestion: "Frage hinzufügen",
 		addQuestionAriaLabel: "Neue Frage zur Umfrage hinzufügen",
@@ -187,7 +188,7 @@ export const de = {
 		},
 		limitToast: {
 			summary: "Limit erreicht",
-			detail: "Eine Umfrage darf maximal 20 Fragen (inkl. Folgefragen) enthalten."
+			detail: "Eine Umfrage darf maximal {max} Fragen (inkl. Folgefragen) enthalten."
 		}
 	},
 
@@ -252,29 +253,26 @@ export const de = {
 	surveyCondition: {
 		label: "Bedingung zur Anzeige:",
 		operator: "Operator",
-		operatorDuplicate: "Der Komparator wird bereits von Folgefrage {number} verwendet.",
 		valueChoice: "Antwort entspricht Option",
 		valueOther: "Vergleichswert",
 		choicePlaceholder: "Wähle Option...",
-		valueDuplicate: "Dieser Wert wird bereits von Folgefrage {number} verwendet.",
 		unnamedOption: "Option ({id})"
 	},
 
 	ratingOptions: {
-		scaleLabel: "Bewertungsskala konfigurieren (0 bis max. 8):",
-		min: "Minimalwert (0 bis 7)",
-		max: "Maximalwert (1 bis 8)",
+		scaleLabel: "Bewertungsskala konfigurieren ({min} bis max. {max}):",
+		min: "Minimalwert ({min} bis {max})",
+		max: "Maximalwert ({min} bis {max})",
 		previewLabel: "Vorschau der Skala:"
 	},
 
 	choiceOptions: {
-		label: "Auswahloptionen (2 bis max. 5 Optionen):",
+		label: "Auswahloptionen ({min} bis max. {max} Optionen):",
 		add: "Option hinzufügen",
 		hint: "Optional Synonyme durch Komma getrennt angeben, z. B. „Orange, Apfelsine, Saftorange“. Das erste Wort ist die Option, alle weiteren sind Synonyme.",
 		optionSrLabel: "Option {number}",
 		optionPlaceholder: "Option {number}, Synonym 1, Synonym 2",
-		removeAriaLabel: "Option {number} entfernen",
-		duplicate: "Option {number} überschneidet sich mit Option {otherNumber} (gleiches Label oder Synonym)."
+		removeAriaLabel: "Option {number} entfernen"
 	},
 
 	typeHint: {
@@ -293,24 +291,27 @@ export const de = {
 
 	validation: {
 		summaryTitle: "Bitte beheben Sie folgende Fehler:",
+		summaryHint: "Ein Klick auf einen Fehler springt zum betroffenen Feld.",
 		questionTitleRequired: "Fragetitel darf nicht leer sein.",
 		questionNameRequired: "Name der Frage darf nicht leer sein.",
 		ratingOptionsInvalid: "Bewertungsoptionen sind ungültig.",
-		ratingMinRange: "Minimalwert muss zwischen 0 und 8 liegen.",
-		ratingMaxRange: "Maximalwert muss zwischen 0 und 8 liegen.",
+		ratingMinRange: "Minimalwert muss zwischen {min} und {max} liegen.",
+		ratingMaxRange: "Maximalwert muss zwischen {min} und {max} liegen.",
 		ratingMinLessThanMax: "Minimalwert muss kleiner als der Maximalwert sein.",
 		choiceOptionsInvalid: "Auswahloptionen sind ungültig.",
-		choiceMinOptions: "Eine Auswahlabfrage benötigt mindestens 2 Optionen.",
-		choiceMaxOptions: "Eine Auswahlabfrage darf maximal 5 Optionen haben.",
+		choiceMinOptions: "Eine Auswahlabfrage benötigt mindestens {min} Optionen.",
+		choiceMaxOptions: "Eine Auswahlabfrage darf maximal {max} Optionen haben.",
 		choiceOptionEmpty: "Option {number} darf nicht leer sein.",
 		choiceOptionDuplicate: "Option {number} überschneidet sich mit Option {otherNumber} (gleiches Label oder Synonym).",
 		followUpMissing: "Folgefrage fehlt.",
+		followUpsNotAllowed: "Fragen vom Typ Kommentar können keine Folgefragen haben. Bitte die Folgefragen entfernen oder einen anderen Fragetyp wählen.",
+		followUpValueRequired: "Bitte einen gültigen Wert für die Bedingung angeben.",
 		followUpOperatorDuplicate: "Der Komparator \"{operator}\" wird bereits von Folgefrage {number} verwendet. Jeder Komparator darf nur einmal verwendet werden.",
 		followUpValueDuplicate: "Dieser Wert wird bereits von Folgefrage {number} verwendet. Jeder mögliche Antwortwert darf nur eine Folgefrage haben.",
 		surveyTitleRequired: "Der Titel der Umfrage darf nicht leer sein.",
 		surveyNameRequired: "Der Name der Umfrage darf nicht leer sein.",
 		surveyMinQuestions: "Eine Umfrage muss mindestens 1 Frage enthalten.",
-		surveyMaxQuestions: "Eine Umfrage darf maximal 20 Fragen enthalten (inkl. Folgefragen). Aktuell: {count}.",
+		surveyMaxQuestions: "Eine Umfrage darf maximal {max} Fragen enthalten (inkl. Folgefragen). Aktuell: {count}.",
 		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text."
 	},
 

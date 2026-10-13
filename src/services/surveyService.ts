@@ -6,6 +6,7 @@ import { useAppStore } from "@/stores/appStore";
 import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
 import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
+import { getErrorStatus } from "./genesys/retry";
 import { i18n, currentLocaleTag } from "@/i18n";
 
 export async function resolveDataTableId(datatableId?: string): Promise<string> {
@@ -57,28 +58,68 @@ export async function fetchSurveyDetail(
 	};
 }
 
+const SURVEY_LIST_ROW_KEY = "survey_list";
+
+/**
+ * Liest den Umfrage-Index (Zeile survey_list, Liste im Feld Draft).
+ * Nur eine fehlende Zeile (404) gilt als leere Liste. Jeder andere Fehler wird geworfen:
+ * Sonst schriebe der Aufrufer eine unvollständige Liste zurück und alle übrigen Umfragen
+ * verschwänden aus der Übersicht.
+ */
+export async function readSurveyList(
+	datatableId: string
+): Promise<{ items: SurveyListItem[]; row: Record<string, any> | null }> {
+	let row: Record<string, any> | null;
+	try {
+		row = await OneRowDataTable(datatableId, SURVEY_LIST_ROW_KEY);
+	} catch (err) {
+		if (getErrorStatus(err) === 404) return { items: [], row: null };
+		throw err;
+	}
+
+	const rawDraft = row?.Draft;
+	if (!rawDraft) return { items: [], row };
+	const items = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
+	if (!Array.isArray(items)) {
+		throw new Error(i18n.global.t("surveys.list.invalidIndex"));
+	}
+	return { items, row };
+}
+
+/** Schreibt den Umfrage-Index; legt die Zeile an, falls sie noch nicht existiert. */
+async function writeSurveyList(
+	datatableId: string,
+	items: SurveyListItem[],
+	listRow: Record<string, any> | null
+): Promise<void> {
+	const rowPayload: Record<string, any> = {
+		key: SURVEY_LIST_ROW_KEY,
+		Draft: JSON.stringify(items),
+		Prod: listRow?.Prod ?? "{}",
+		Stage: listRow?.Stage ?? "{}",
+		Backup: listRow?.Backup ?? "{}",
+		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
+	};
+
+	if (listRow) {
+		await updateDataTableRow(datatableId, SURVEY_LIST_ROW_KEY, rowPayload);
+	} else {
+		await addDataTableRow(datatableId, rowPayload);
+	}
+
+	try {
+		useAppStore().surveys = items;
+	} catch {
+		// Ignored if Pinia store is not active
+	}
+}
+
 export async function syncSurveyInList(
 	datatableId: string | undefined,
 	survey: Survey
 ): Promise<SurveyListItem[]> {
-	console.log("syncing survey in list", survey);
-
 	const resolvedTableId = await resolveDataTableId(datatableId);
-	const rowKey = "survey_list";
-	let listRow: Record<string, any> | null = null;
-	let currentList: SurveyListItem[] = [];
-
-	try {
-		listRow = await OneRowDataTable(resolvedTableId, rowKey);
-		if (listRow) {
-			const rawDraft = listRow.Draft;
-			if (rawDraft) {
-				currentList = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
-			}
-		}
-	} catch (e) {
-		console.warn("Could not load existing survey_list row, initializing new list:", e);
-	}
+	const { items: currentList, row: listRow } = await readSurveyList(resolvedTableId);
 
 	const displayName = survey.title?.trim() || survey.name?.trim() || "Unbenannte Umfrage";
 	const existingIndex = currentList.findIndex(
@@ -98,25 +139,7 @@ export async function syncSurveyInList(
 		});
 	}
 
-	const serializedDraft = JSON.stringify(currentList);
-	const rowPayload: Record<string, any> = {
-		key: rowKey,
-		Draft: serializedDraft,
-		Prod: listRow?.Prod ?? "{}",
-		Stage: listRow?.Stage ?? "{}",
-		Backup: listRow?.Backup ?? "{}",
-		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
-	};
-
-	await updateDataTableRow(resolvedTableId, rowKey, rowPayload);
-
-	try {
-		const app = useAppStore();
-		app.surveys = currentList;
-	} catch {
-		// Ignored if Pinia store is not active
-	}
-
+	await writeSurveyList(resolvedTableId, currentList, listRow);
 	return currentList;
 }
 
@@ -265,48 +288,15 @@ export async function deleteSurvey(
 	const resolvedTableId = await resolveDataTableId(datatableId);
 	const rowKey = `survey_${surveyId}`;
 
-	// 1. Delete data table row
+	// Liste zuerst lesen: Ist sie nicht lesbar, wird abgebrochen, bevor etwas gelöscht ist
+	const { items: currentList, row: listRow } = await readSurveyList(resolvedTableId);
+
 	await deleteDataTableRow(resolvedTableId, rowKey);
-
-	// 2. Remove survey from survey_list row
-	const listRowKey = "survey_list";
-	let listRow: Record<string, any> | null = null;
-	let currentList: SurveyListItem[] = [];
-
-	try {
-		listRow = await OneRowDataTable(resolvedTableId, listRowKey);
-		if (listRow) {
-			const rawDraft = listRow.Draft;
-			if (rawDraft) {
-				currentList = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
-			}
-		}
-	} catch (e) {
-		console.warn("Could not load survey_list row during delete:", e);
-	}
 
 	const updatedList = currentList.filter(
 		item => String(item.id ?? item.key) !== String(surveyId)
 	);
-
-	const serializedDraft = JSON.stringify(updatedList);
-	const rowPayload: Record<string, any> = {
-		key: listRowKey,
-		Draft: serializedDraft,
-		Prod: listRow?.Prod ?? "{}",
-		Stage: listRow?.Stage ?? "{}",
-		Backup: listRow?.Backup ?? "{}",
-		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
-	};
-
-	await updateDataTableRow(resolvedTableId, listRowKey, rowPayload);
-
-	try {
-		const app = useAppStore();
-		app.surveys = updatedList;
-	} catch {
-		// Ignored if Pinia store is not active
-	}
+	await writeSurveyList(resolvedTableId, updatedList, listRow);
 }
 
 /**

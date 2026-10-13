@@ -44,7 +44,7 @@ const describedBy = computed(() => {
 const isInvalid = computed(() => Boolean(attrs.invalid) || isTooLong.value);
 const isAriaInvalid = computed(() => {
 	const external = attrs["aria-invalid"];
-	return external === true || external === "true" || isTooLong.value;
+	return external === true || external === "true" || isInvalid.value;
 });
 
 // Screenreader-Ansage nur beim Über- bzw. Unterschreiten des Limits, nicht bei jedem Zeichen

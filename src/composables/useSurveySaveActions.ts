@@ -7,6 +7,8 @@ import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, resolveDataTableId } from "@/services/surveyService";
 import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
 import { useAppStore } from "@/stores/appStore";
+import { focusField, focusTopmostField } from "@/composables/useFieldErrors";
+import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 
 export interface SurveySaveActionsOptions {
 	draftSurvey: Ref<Survey | null>;
@@ -56,14 +58,11 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				life: 5000
 			});
 
-			const firstError = options.validationErrors.value.find(e => e.fieldId);
-			if (firstError?.fieldId) {
-				await nextTick();
-				const el = document.getElementById(firstError.fieldId);
-				if (el) {
-					el.scrollIntoView({ behavior: "smooth", block: "center" });
-					el.focus();
-				}
+			// Zum obersten fehlerhaften Feld springen; ohne passendes Feld zur Fehlerübersicht
+			await nextTick();
+			const fieldIds = errors.flatMap(e => (e.fieldId ? [e.fieldId] : []));
+			if (!focusTopmostField(fieldIds)) {
+				focusField(surveyFieldIds.validationSummary);
 			}
 			return;
 		}

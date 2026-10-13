@@ -8,6 +8,9 @@ import { useConfirm } from "primevue/useconfirm";
 import type { FollowUpRule, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
 import { getFollowUpQuestionTypes } from "@/domain/survey/questionTypeCatalog";
 import { useQuestionTypeOptions } from "@/composables/useQuestionTypeOptions";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
+import FieldError from "@/components/ui/FieldError.vue";
 
 import FollowUpConditionEditor from "./FollowUpConditionEditor.vue";
 import RatingOptionsEditor from "./RatingOptionsEditor.vue";
@@ -21,12 +24,10 @@ const props = withDefaults(
 		index: number;
 		isSaved?: boolean;
 		disabled?: boolean;
-		showValidation?: boolean;
 	}>(),
 	{
 		isSaved: false,
-		disabled: false,
-		showValidation: false
+		disabled: false
 	}
 );
 
@@ -47,10 +48,12 @@ const {
 
 const followUpQuestionTypeOptions = computed(() => getFollowUpQuestionTypes());
 
-const titleId = computed(() => `q_title_${props.followUp.question.id}`);
-const descId = computed(() => `fu_desc_${props.followUp.question.id}`);
-const repromptId = computed(() => `fu_reprompt_${props.followUp.question.id}`);
-const typeId = computed(() => `fu_type_${props.followUp.question.id}`);
+const { hasError, errorId } = useFieldErrors();
+
+const titleId = computed(() => questionFieldIds.title(props.followUp.question.id));
+const descId = computed(() => questionFieldIds.description(props.followUp.question.id));
+const repromptId = computed(() => questionFieldIds.reprompt(props.followUp.question.id));
+const typeId = computed(() => questionFieldIds.type(props.followUp.question.id));
 
 function confirmDelete() {
 	confirm.require({
@@ -101,7 +104,6 @@ function confirmDelete() {
 			:followUp="followUp"
 			:index="index"
 			:disabled="disabled"
-			:showValidation="showValidation"
 		/>
 
 		<!-- Question Details -->
@@ -119,9 +121,10 @@ function confirmDelete() {
 						class="text-sm"
 						:placeholder="t('surveyFollowUp.titlePlaceholder')"
 						:disabled="disabled"
-						:invalid="showValidation && !followUp.question.title?.trim()"
-						:aria-invalid="showValidation && !followUp.question.title?.trim()"
+						:invalid="hasError(titleId)"
+						:aria-describedby="errorId(titleId)"
 					/>
+					<FieldError :fieldId="titleId" />
 				</div>
 
 				<div>
@@ -157,7 +160,10 @@ function confirmDelete() {
 						class="text-sm"
 						:placeholder="t('surveyFollowUp.repromptPlaceholder')"
 						:disabled="disabled"
+						:invalid="hasError(repromptId)"
+						:aria-describedby="errorId(repromptId)"
 					/>
+					<FieldError :fieldId="repromptId" />
 				</div>
 
 				<div>
@@ -179,16 +185,15 @@ function confirmDelete() {
 		<RatingOptionsEditor
 			v-if="followUp.question.type === 'rating'"
 			:ratingOptions="ratingOptions"
-			:idPrefix="`fu_rating_${followUp.question.id}`"
+			:questionId="followUp.question.id"
 			:disabled="disabled"
 		/>
 
 		<ChoiceOptionsEditor
 			v-else-if="followUp.question.type === 'choice'"
 			:choiceOptions="choiceOptions"
-			:idPrefix="`fu_opt_${followUp.question.id}`"
+			:questionId="followUp.question.id"
 			:disabled="disabled"
-			:showValidation="showValidation"
 			@add="addChoiceOption"
 			@remove="removeChoiceOption"
 		/>

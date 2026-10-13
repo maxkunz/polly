@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import Button from "primevue/button";
 import type { SurveyQuestion } from "@/domain/survey/surveyTypes";
 import { useQuestionTypeOptions } from "@/composables/useQuestionTypeOptions";
+import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import FieldError from "@/components/ui/FieldError.vue";
 
 import QuestionCardHeader from "./QuestionCardHeader.vue";
 import QuestionBasicFields from "./QuestionBasicFields.vue";
@@ -22,12 +25,10 @@ const props = withDefaults(
 		isSaved?: boolean;
 		isQuestionSaved?: (id: string) => boolean;
 		disabled?: boolean;
-		showValidation?: boolean;
 	}>(),
 	{
 		isSaved: false,
-		disabled: false,
-		showValidation: false
+		disabled: false
 	}
 );
 
@@ -48,6 +49,10 @@ const {
 } = useQuestionTypeOptions(toRef(() => props.question));
 
 const { t } = useI18n();
+const { errorId } = useFieldErrors();
+const followUpsId = computed(() => questionFieldIds.followUps(props.question.id));
+// Kommentarfragen haben keine Folgefragen; bereits vorhandene (nach Typwechsel) bleiben sichtbar, damit man sie entfernen kann
+const showFollowUps = computed(() => props.question.type !== "comment" || (props.question.follow_ups?.length ?? 0) > 0);
 </script>
 
 <template>
@@ -71,7 +76,6 @@ const { t } = useI18n();
 					:question="question"
 					:isSaved="isSaved"
 					:disabled="disabled"
-					:showValidation="showValidation"
 					@type-change="handleTypeChange"
 				/>
 
@@ -79,16 +83,15 @@ const { t } = useI18n();
 				<RatingOptionsEditor
 					v-if="question.type === 'rating'"
 					:ratingOptions="ratingOptions"
-					:idPrefix="`q_rating_${question.id}`"
+					:questionId="question.id"
 					:disabled="disabled"
 				/>
 
 				<ChoiceOptionsEditor
 					v-else-if="question.type === 'choice'"
 					:choiceOptions="choiceOptions"
-					:idPrefix="`opt_${question.id}`"
+					:questionId="question.id"
 					:disabled="disabled"
-					:showValidation="showValidation"
 					@add="addChoiceOption"
 					@remove="removeChoiceOption"
 				/>
@@ -96,10 +99,19 @@ const { t } = useI18n();
 				<QuestionTypeInfoHint v-else :type="question.type" />
 
 				<!-- Follow-Up Section -->
-				<div class="pt-4 border-t border-[var(--p-content-border-color)]" v-if="question.type != 'comment'">
+				<!-- Fokussierbarer Bereich: Ziel für Fehler, die die Folgefragen insgesamt betreffen -->
+				<div
+					v-if="showFollowUps"
+					:id="followUpsId"
+					tabindex="-1"
+					role="group"
+					:aria-labelledby="`${followUpsId}_label`"
+					:aria-describedby="errorId(followUpsId)"
+					class="pt-4 border-t border-[var(--p-content-border-color)]"
+				>
 					<div class="flex items-center justify-between mb-3">
 						<div>
-							<h4 class="text-xs font-bold uppercase tracking-wider text-[var(--p-text-muted-color)]">
+							<h4 :id="`${followUpsId}_label`" class="text-xs font-bold uppercase tracking-wider text-[var(--p-text-muted-color)]">
 								{{ t("surveyQuestion.followUps.title", { count: question.follow_ups?.length ?? 0 }) }}
 							</h4>
 							<span class="text-[11px] text-[var(--p-text-muted-color)]">
@@ -111,11 +123,13 @@ const { t } = useI18n();
 							severity="secondary"
 							icon="pi pi-plus"
 							:label="t('surveyQuestion.followUps.add')"
-							:disabled="disabled || !canAddQuestion"
+							:disabled="disabled || !canAddQuestion || question.type === 'comment'"
 							:aria-label="t('surveyQuestion.followUps.addAriaLabel', { number: index + 1 })"
 							@click="emit('add-follow-up')"
 						/>
 					</div>
+
+					<FieldError :fieldId="followUpsId" class="mb-3" />
 
 					<div v-if="question.follow_ups && question.follow_ups.length > 0" class="space-y-3 pl-2 sm:pl-4 border-l-2 border-[var(--p-primary-200)]">
 						<SurveyFollowUpEditor
@@ -126,7 +140,6 @@ const { t } = useI18n();
 							:index="fuIdx"
 							:isSaved="isQuestionSaved ? isQuestionSaved(fu.question.id) : false"
 							:disabled="disabled"
-							:showValidation="showValidation"
 							@remove="emit('remove-follow-up', fuIdx)"
 						/>
 					</div>

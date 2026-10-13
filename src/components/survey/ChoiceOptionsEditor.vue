@@ -4,20 +4,21 @@ import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import type { ChoiceOptionLabel, ChoiceOptions } from "@/domain/survey/surveyTypes";
-import { findDuplicateChoiceLabels } from "@/domain/survey/surveyValidator";
+import { CHOICE_MIN_OPTIONS, CHOICE_MAX_OPTIONS } from "@/constants/surveyConstants";
+import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import FieldError from "@/components/ui/FieldError.vue";
 
 const { t } = useI18n();
 
 const props = withDefaults(
 	defineProps<{
 		choiceOptions: ChoiceOptions;
-		idPrefix: string;
+		questionId: string;
 		disabled?: boolean;
-		showValidation?: boolean;
 	}>(),
 	{
-		disabled: false,
-		showValidation: false
+		disabled: false
 	}
 );
 
@@ -26,10 +27,12 @@ const emit = defineEmits<{
 	(e: "remove", index: number): void;
 }>();
 
-const duplicates = computed(() => findDuplicateChoiceLabels(props.choiceOptions.labels));
+const { hasError, errorId } = useFieldErrors();
 
-function isOptionInvalid(label: string | undefined, idx: number): boolean {
-	return props.showValidation && (!label?.trim() || duplicates.value.has(idx));
+const optionsId = computed(() => questionFieldIds.options(props.questionId));
+
+function optionId(index: number): string {
+	return questionFieldIds.choiceOption(props.questionId, index);
 }
 
 // Rohtext je Option (nach id), damit während der Eingabe nichts (z. B. ein
@@ -60,20 +63,29 @@ function updateOptionInput(opt: ChoiceOptionLabel, value: string | undefined): v
 </script>
 
 <template>
-	<div class="p-4 bg-[var(--p-surface-50)] rounded-xl border border-[var(--p-content-border-color)] space-y-3">
+	<!-- Fokussierbarer Bereich: Ziel für Fehler, die alle Optionen betreffen (z. B. deren Anzahl) -->
+	<div
+		:id="optionsId"
+		tabindex="-1"
+		role="group"
+		:aria-labelledby="`${optionsId}_label`"
+		:aria-describedby="errorId(optionsId)"
+		class="p-4 bg-[var(--p-surface-50)] rounded-xl border border-[var(--p-content-border-color)] space-y-3"
+	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-[var(--p-text-color)]">
-				{{ t("choiceOptions.label") }}
+			<span :id="`${optionsId}_label`" class="text-xs font-semibold text-[var(--p-text-color)]">
+				{{ t("choiceOptions.label", { min: CHOICE_MIN_OPTIONS, max: CHOICE_MAX_OPTIONS }) }}
 			</span>
 			<Button
 				size="small"
 				severity="secondary"
 				icon="pi pi-plus"
 				:label="t('choiceOptions.add')"
-				:disabled="disabled || choiceOptions.labels.length >= 5"
+				:disabled="disabled || choiceOptions.labels.length >= CHOICE_MAX_OPTIONS"
 				@click="emit('add')"
 			/>
 		</div>
+		<FieldError :fieldId="optionsId" />
 		<p class="text-xs text-[var(--p-text-muted-color)]">
 			{{ t("choiceOptions.hint") }}
 		</p>
@@ -88,19 +100,18 @@ function updateOptionInput(opt: ChoiceOptionLabel, value: string | undefined): v
 					<span class="w-6 text-xs text-[var(--p-text-muted-color)] font-medium text-right">
 						{{ optIdx + 1 }}.
 					</span>
-					<label :for="`${idPrefix}_${optIdx}`" class="sr-only">
+					<label :for="optionId(optIdx)" class="sr-only">
 						{{ t("choiceOptions.optionSrLabel", { number: optIdx + 1 }) }}
 					</label>
 					<InputText
-						:id="`${idPrefix}_${optIdx}`"
+						:id="optionId(optIdx)"
 						:model-value="getOptionInput(opt)"
 						@update:model-value="value => updateOptionInput(opt, value)"
 						class="flex-1 text-sm"
 						:placeholder="t('choiceOptions.optionPlaceholder', { number: optIdx + 1 })"
 						:disabled="disabled"
-						:invalid="isOptionInvalid(opt.label, optIdx)"
-						:aria-invalid="isOptionInvalid(opt.label, optIdx)"
-						:aria-describedby="showValidation && duplicates.has(optIdx) ? `${idPrefix}_${optIdx}_dup` : undefined"
+						:invalid="hasError(optionId(optIdx))"
+						:aria-describedby="errorId(optionId(optIdx))"
 					/>
 					<Button
 						size="small"
@@ -108,17 +119,11 @@ function updateOptionInput(opt: ChoiceOptionLabel, value: string | undefined): v
 						variant="text"
 						icon="pi pi-times"
 						:aria-label="t('choiceOptions.removeAriaLabel', { number: optIdx + 1 })"
-						:disabled="disabled || choiceOptions.labels.length <= 2"
+						:disabled="disabled || choiceOptions.labels.length <= CHOICE_MIN_OPTIONS"
 						@click="emit('remove', optIdx)"
 					/>
 				</div>
-				<small
-					v-if="showValidation && duplicates.has(optIdx)"
-					:id="`${idPrefix}_${optIdx}_dup`"
-					class="block ml-8 text-xs text-red-700"
-				>
-					{{ t("choiceOptions.duplicate", { number: optIdx + 1, otherNumber: duplicates.get(optIdx)! + 1 }) }}
-				</small>
+				<FieldError :fieldId="optionId(optIdx)" class="ml-8" />
 			</li>
 		</ul>
 	</div>

@@ -8,6 +8,9 @@ import Select from "primevue/select";
 import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
 import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
 import { getQuestionTypes } from "@/domain/survey/questionTypeCatalog";
+import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
+import { useFieldErrors } from "@/composables/useFieldErrors";
+import FieldError from "@/components/ui/FieldError.vue";
 
 const { t } = useI18n();
 const questionTypeOptions = computed(() => getQuestionTypes());
@@ -17,12 +20,10 @@ const props = withDefaults(
 		question: SurveyQuestion;
 		isSaved?: boolean;
 		disabled?: boolean;
-		showValidation?: boolean;
 	}>(),
 	{
 		isSaved: false,
-		disabled: false,
-		showValidation: false
+		disabled: false
 	}
 );
 
@@ -34,13 +35,14 @@ const displayQuestionName = computed(() => {
 	return ensureTechnicalName(props.question.name, props.question.title, props.question.id, "frage");
 });
 
-// Generated IDs for strict accessibility binding
-const nameId = computed(() => `q_name_${props.question.id}`);
-const typeId = computed(() => `q_type_${props.question.id}`);
-const titleId = computed(() => `q_title_${props.question.id}`);
-const descId = computed(() => `q_desc_${props.question.id}`);
-const repromptId = computed(() => `q_reprompt_${props.question.id}`);
-const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
+const { hasError, errorId } = useFieldErrors();
+
+const nameId = computed(() => questionFieldIds.name(props.question.id));
+const typeId = computed(() => questionFieldIds.type(props.question.id));
+const titleId = computed(() => questionFieldIds.title(props.question.id));
+const descId = computed(() => questionFieldIds.description(props.question.id));
+const repromptId = computed(() => questionFieldIds.reprompt(props.question.id));
+const mandatoryId = computed(() => questionFieldIds.mandatory(props.question.id));
 </script>
 
 <template>
@@ -109,9 +111,10 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 				ttsLimit
 				:placeholder="t('surveyQuestionFields.titlePlaceholder')"
 				:disabled="disabled"
-				:invalid="showValidation && !question.title?.trim()"
-				:aria-invalid="showValidation && !question.title?.trim()"
+				:invalid="hasError(titleId)"
+				:aria-describedby="errorId(titleId)"
 			/>
+			<FieldError :fieldId="titleId" />
 		</div>
 
 		<!-- Description & Reprompt -->
@@ -127,7 +130,10 @@ const mandatoryId = computed(() => `q_mandatory_${props.question.id}`);
 					class="text-sm"
 					:placeholder="t('surveyQuestionFields.repromptPlaceholder')"
 					:disabled="disabled"
+					:invalid="hasError(repromptId)"
+					:aria-describedby="errorId(repromptId)"
 				/>
+				<FieldError :fieldId="repromptId" />
 			</div>
 
 			<div>

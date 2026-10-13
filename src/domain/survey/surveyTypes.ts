@@ -72,6 +72,16 @@ export function isChoiceOptions(options: unknown): options is ChoiceOptions {
 	);
 }
 
+/** Erste 8 Zeichen der ID ohne Bindestriche – Bestandteil der technischen Namen. */
+export function shortId(id: string): string {
+	return (id || "").replace(/-/g, "").slice(0, 8);
+}
+
+/** Platzhalter-Name, solange noch kein Titel gespeichert wurde (z. B. "frage_47cc5f41"). */
+function placeholderName(defaultSlug: string, id: string): string {
+	return `${defaultSlug}_${shortId(id)}`;
+}
+
 export function createEmptyChoiceOption(): ChoiceOptionLabel {
 	return {
 		id: crypto.randomUUID(),
@@ -79,11 +89,24 @@ export function createEmptyChoiceOption(): ChoiceOptionLabel {
 	};
 }
 
+export function createDefaultRatingOptions(): RatingOptions {
+	return { min_value: 1, max_value: 5 };
+}
+
+export function createDefaultChoiceOptions(): ChoiceOptions {
+	return {
+		labels: [
+			{ id: crypto.randomUUID(), label: "Option 1" },
+			{ id: crypto.randomUUID(), label: "Option 2" }
+		]
+	};
+}
+
 export function createEmptyQuestion(type: QuestionType = "rating"): SurveyQuestion {
 	const id = crypto.randomUUID();
 	const question: SurveyQuestion = {
 		id,
-		name: `frage_${id.replace(/-/g, "").slice(0, 8)}`,
+		name: placeholderName("frage", id),
 		type,
 		title: "",
 		description: "",
@@ -92,17 +115,9 @@ export function createEmptyQuestion(type: QuestionType = "rating"): SurveyQuesti
 	};
 
 	if (type === "rating") {
-		question.options = {
-			min_value: 1,
-			max_value: 5
-		};
+		question.options = createDefaultRatingOptions();
 	} else if (type === "choice") {
-		question.options = {
-			labels: [
-				{ id: crypto.randomUUID(), label: "Option 1" },
-				{ id: crypto.randomUUID(), label: "Option 2" }
-			]
-		};
+		question.options = createDefaultChoiceOptions();
 	}
 
 	return question;
@@ -151,7 +166,7 @@ export function countAllQuestions(questions: SurveyQuestion[]): number {
 }
 
 export function generateTechnicalName(title: string, id: string, defaultSlug = "umfrage"): string {
-	const first8 = (id || "").replace(/-/g, "").slice(0, 8);
+	const first8 = shortId(id);
 	let slug = (title || "")
 		.toLowerCase()
 		.replace(/ä/g, "ae")
@@ -174,14 +189,12 @@ export function ensureTechnicalName(
 	id: string,
 	defaultSlug = "umfrage"
 ): string {
-	// If a technical name is already present and set (not default unassigned "frage_..." or "umfrage_..."), preserve it!
-	if (
-		existingName &&
-		existingName.trim() &&
-		!existingName.toLowerCase().startsWith("frage_") &&
-		!existingName.toLowerCase().startsWith("umfrage_")
-	) {
-		return existingName.trim();
+	// Ein einmal vergebener Name bleibt erhalten (Reporting-Schlüssel). Neu erzeugt wird nur,
+	// solange der Name leer ist oder exakt dem Platzhalter entspricht. Ein reiner Präfix-Vergleich
+	// genügt nicht: Titel wie "Umfrage …" oder "Frage …" ergeben Namen mit demselben Präfix.
+	const trimmed = existingName?.trim() ?? "";
+	if (trimmed && trimmed.toLowerCase() !== placeholderName(defaultSlug, id)) {
+		return trimmed;
 	}
 
 	return generateTechnicalName(title, id, defaultSlug);
@@ -211,7 +224,7 @@ export function createEmptySurvey(): Survey {
 	const id = crypto.randomUUID();
 	return {
 		id,
-		name: `umfrage_${id.replace(/-/g, "").slice(0, 8)}`,
+		name: placeholderName("umfrage", id),
 		title: "",
 		description: "",
 		greeting_message: "",
@@ -247,7 +260,7 @@ export function cloneSurveyQuestion(source: SurveyQuestion): SurveyQuestion {
 
 	return {
 		id: newId,
-		name: `frage_${newId.replace(/-/g, "").slice(0, 8)}`,
+		name: placeholderName("frage", newId),
 		type: source.type,
 		title: source.title,
 		description: source.description,
@@ -262,7 +275,7 @@ export function cloneSurvey(source: Survey): Survey {
 	const newId = crypto.randomUUID();
 	return {
 		id: newId,
-		name: `umfrage_${newId.replace(/-/g, "").slice(0, 8)}`,
+		name: placeholderName("umfrage", newId),
 		title: source.title,
 		description: source.description,
 		greeting_message: source.greeting_message,

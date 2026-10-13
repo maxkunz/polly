@@ -78,6 +78,7 @@ export const en: MessageSchema = {
 			availableCount: "Available surveys ({count})",
 			loading: "Loading survey data...",
 			loadErrorFallback: "Failed to load survey data",
+			invalidIndex: "The survey list (row survey_list) is corrupt and will not be overwritten.",
 			unnamedSurvey: "Unnamed survey",
 			openAriaLabel: "Open survey: {title}",
 			edit: "Edit",
@@ -177,7 +178,7 @@ export const en: MessageSchema = {
 
 	surveyQuestions: {
 		title: "Question catalog",
-		countStatus: "{count} of a maximum of 20 questions used (incl. follow-up questions)",
+		countStatus: "{count} of a maximum of {max} questions used (incl. follow-up questions)",
 		maxReached: "Maximum reached",
 		addQuestion: "Add question",
 		addQuestionAriaLabel: "Add new question to the survey",
@@ -189,7 +190,7 @@ export const en: MessageSchema = {
 		},
 		limitToast: {
 			summary: "Limit reached",
-			detail: "A survey may contain a maximum of 20 questions (incl. follow-up questions)."
+			detail: "A survey may contain a maximum of {max} questions (incl. follow-up questions)."
 		}
 	},
 
@@ -254,29 +255,26 @@ export const en: MessageSchema = {
 	surveyCondition: {
 		label: "Condition for display:",
 		operator: "Operator",
-		operatorDuplicate: "This comparator is already used by follow-up question {number}.",
 		valueChoice: "Answer matches option",
 		valueOther: "Comparison value",
 		choicePlaceholder: "Select option...",
-		valueDuplicate: "This value is already used by follow-up question {number}.",
 		unnamedOption: "Option ({id})"
 	},
 
 	ratingOptions: {
-		scaleLabel: "Configure rating scale (0 to max. 8):",
-		min: "Minimum value (0 to 7)",
-		max: "Maximum value (1 to 8)",
+		scaleLabel: "Configure rating scale ({min} to max. {max}):",
+		min: "Minimum value ({min} to {max})",
+		max: "Maximum value ({min} to {max})",
 		previewLabel: "Scale preview:"
 	},
 
 	choiceOptions: {
-		label: "Answer options (2 to max. 5 options):",
+		label: "Answer options ({min} to max. {max} options):",
 		add: "Add option",
 		hint: "Optionally provide synonyms separated by commas, e.g. „orange, tangerine, mandarin“. The first word is the option, all others are synonyms.",
 		optionSrLabel: "Option {number}",
 		optionPlaceholder: "Option {number}, synonym 1, synonym 2",
-		removeAriaLabel: "Remove option {number}",
-		duplicate: "Option {number} overlaps with option {otherNumber} (same label or synonym)."
+		removeAriaLabel: "Remove option {number}"
 	},
 
 	typeHint: {
@@ -295,24 +293,27 @@ export const en: MessageSchema = {
 
 	validation: {
 		summaryTitle: "Please fix the following errors:",
+		summaryHint: "Click an error to jump to the affected field.",
 		questionTitleRequired: "The question title must not be empty.",
 		questionNameRequired: "The question name must not be empty.",
 		ratingOptionsInvalid: "Rating options are invalid.",
-		ratingMinRange: "Minimum value must be between 0 and 8.",
-		ratingMaxRange: "Maximum value must be between 0 and 8.",
+		ratingMinRange: "Minimum value must be between {min} and {max}.",
+		ratingMaxRange: "Maximum value must be between {min} and {max}.",
 		ratingMinLessThanMax: "Minimum value must be smaller than the maximum value.",
 		choiceOptionsInvalid: "Answer options are invalid.",
-		choiceMinOptions: "A choice question requires at least 2 options.",
-		choiceMaxOptions: "A choice question may have a maximum of 5 options.",
+		choiceMinOptions: "A choice question requires at least {min} options.",
+		choiceMaxOptions: "A choice question may have a maximum of {max} options.",
 		choiceOptionEmpty: "Option {number} must not be empty.",
 		choiceOptionDuplicate: "Option {number} overlaps with option {otherNumber} (same label or synonym).",
 		followUpMissing: "Follow-up question is missing.",
+		followUpsNotAllowed: "Comment questions cannot have follow-up questions. Please remove the follow-up questions or choose a different question type.",
+		followUpValueRequired: "Please enter a valid value for the condition.",
 		followUpOperatorDuplicate: "The comparator \"{operator}\" is already used by follow-up question {number}. Each comparator may only be used once.",
 		followUpValueDuplicate: "This value is already used by follow-up question {number}. Each possible answer value may only have one follow-up question.",
 		surveyTitleRequired: "The survey title must not be empty.",
 		surveyNameRequired: "The survey name must not be empty.",
 		surveyMinQuestions: "A survey must contain at least 1 question.",
-		surveyMaxQuestions: "A survey may contain a maximum of 20 questions (incl. follow-up questions). Currently: {count}.",
+		surveyMaxQuestions: "A survey may contain a maximum of {max} questions (incl. follow-up questions). Currently: {count}.",
 		ttsTextTooLong: "“{field}” is too long ({length} of max. {max} characters). Texts read out by text-to-speech may be at most {max} characters long. Please shorten the text."
 	},
 

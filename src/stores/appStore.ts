@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
-import { OneRowDataTable, findDataTableByName } from "@/services/genesys/dataTable";
+import { findDataTableByName } from "@/services/genesys/dataTable";
+import { readSurveyList } from "@/services/surveyService";
 import { getGenesysRegion } from "@/services/genesys/region";
 import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
@@ -165,20 +166,11 @@ export const useAppStore = defineStore("app", {
 			return this.mappingDataTableId;
 		},
 
+		// Wirft bei Fehlern, damit die Umfrageseite den Fehler anzeigen kann
 		async loadSurveys(): Promise<void> {
-			const rowId = "survey_list";
-			try {
-				const datatableId = await this.ensureDataTableId();
-				const data = await OneRowDataTable(datatableId, rowId);
-				if (data) {
-					const rawDraft = data.Draft;
-					if (rawDraft) {
-						this.surveys = typeof rawDraft === "string" ? JSON.parse(rawDraft) : rawDraft;
-					}
-				}
-			} catch (e) {
-				console.error("Failed to load surveys:", e);
-			}
+			const datatableId = await this.ensureDataTableId();
+			const { items } = await readSurveyList(datatableId);
+			this.surveys = items;
 		},
 
 		async initializeFromLocation(currentUrl?: string): Promise<void> {
@@ -221,7 +213,12 @@ export const useAppStore = defineStore("app", {
 			if (!this.datatableId) return;
 
 			await genesysHelper.getConfigurationDataFromGenesys(this.datatableId);
-			await this.loadSurveys();
+			try {
+				await this.loadSurveys();
+			} catch (e) {
+				// Beim Start nicht abbrechen; die Umfrageseite lädt die Liste erneut und zeigt den Fehler an
+				console.error("Failed to load surveys:", e);
+			}
 			this.initialized = true;
 		},
 	}

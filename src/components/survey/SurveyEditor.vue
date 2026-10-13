@@ -9,6 +9,7 @@ import { useSurveyEditor } from "@/composables/useSurveyEditor";
 import { useSurveySaveActions } from "@/composables/useSurveySaveActions";
 import { useSurveyLock } from "@/composables/useSurveyLock";
 import { useFlowPayloadSize } from "@/composables/useFlowPayloadSize";
+import { provideFieldErrors } from "@/composables/useFieldErrors";
 
 import SurveyEditorToolbar from "./SurveyEditorToolbar.vue";
 import SurveyValidationSummary from "./SurveyValidationSummary.vue";
@@ -135,6 +136,9 @@ const {
 	emit
 });
 
+// Alle Formularfelder lesen ihre Fehler hieraus (erst nach dem ersten Speicherversuch sichtbar)
+provideFieldErrors(validationErrors, saveAttempted);
+
 watch(
 	isDirty,
 	val => {
@@ -190,7 +194,6 @@ function handleClone() {
 		<SurveyMetaForm
 			:survey="draftSurvey"
 			:disabled="disabled"
-			:saveAttempted="saveAttempted"
 			@save="handleSave"
 		/>
 
@@ -201,7 +204,6 @@ function handleClone() {
 			:canAddQuestion="canAddQuestion"
 			:isQuestionSaved="isQuestionSaved"
 			:disabled="disabled"
-			:showValidation="saveAttempted"
 			@add-question="(type) => addQuestion(type)"
 			@move-question="(qIdx, dir) => moveQuestion(qIdx, dir)"
 			@remove-question="(id) => removeQuestion(id)"

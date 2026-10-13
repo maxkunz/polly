@@ -6,14 +6,25 @@ import type {
 	ConditionOperator
 } from "./surveyTypes";
 import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
+import { surveyFieldIds, questionFieldIds } from "./surveyFieldIds";
 import { i18n, currentLocaleTag } from "@/i18n";
-import { TTS_TEXT_MAX_CHARS } from "@/constants/surveyConstants";
+import {
+	TTS_TEXT_MAX_CHARS,
+	SURVEY_MAX_QUESTIONS,
+	CHOICE_MIN_OPTIONS,
+	CHOICE_MAX_OPTIONS,
+	RATING_SCALE_MIN,
+	RATING_SCALE_MAX
+} from "@/constants/surveyConstants";
 
 export interface ValidationError {
 	field: string;
 	message: string;
 	questionId?: string;
+	/** DOM-ID des Feldes bzw. Bereichs im Editor (siehe surveyFieldIds) – Ziel für Markierung und Sprung */
 	fieldId?: string;
+	/** Das Feld zeigt die Meldung bereits selbst an (TTS-Limit in PromptTextarea) und wird nur markiert */
+	shownByField?: boolean;
 }
 
 /**
@@ -126,8 +137,30 @@ function ttsTooLongError(
 			max: format.format(TTS_TEXT_MAX_CHARS)
 		}),
 		questionId,
-		fieldId
+		fieldId,
+		shownByField: true
 	};
+}
+
+/**
+ * Prüft, ob der Bedingungswert einer Folgefrage zum Typ der Elternfrage passt.
+ * Sonst scheitert erst der Deploy im Translator (z. B. Option gelöscht, Zahl geleert).
+ */
+function isFollowUpValueValid(parent: SurveyQuestion, value: unknown): boolean {
+	switch (parent.type) {
+		case "yes_no":
+			return typeof value === "boolean" || value === "true" || value === "false";
+		case "choice":
+			return isChoiceOptions(parent.options) && parent.options.labels.some(label => label.id === value);
+		case "rating":
+		case "nps":
+			return (
+				(typeof value === "number" || (typeof value === "string" && value.trim() !== "")) &&
+				Number.isFinite(Number(value))
+			);
+		default:
+			return true;
+	}
 }
 
 export function validateQuestion(
@@ -137,21 +170,21 @@ export function validateQuestion(
 	const { t } = i18n.global;
 	const errors: ValidationError[] = [];
 	const qField = prefix ? `${prefix}.${question.id}` : question.id;
+	const ids = questionFieldIds;
 
 	if (!question.title || !question.title.trim()) {
 		errors.push({
 			field: `${qField}.title`,
 			message: t("validation.questionTitleRequired"),
 			questionId: question.id,
-			fieldId: `q_title_${question.id}`
+			fieldId: ids.title(question.id)
 		});
 	}
 
-	// Fragetitel (prompt) und Reprompt werden im Bot Flow per TTS gesprochen.
-	// Folgefragen haben im Editor eine eigene Reprompt-Feld-ID (fu_reprompt_…).
+	// Fragetitel (prompt) und Reprompt werden im Bot Flow per TTS gesprochen
 	for (const error of [
-		ttsTooLongError(question.title, `${qField}.title`, "surveyQuestionFields.title", `q_title_${question.id}`, question.id),
-		ttsTooLongError(question.reprompt_message, `${qField}.reprompt_message`, "surveyQuestionFields.reprompt", `${prefix ? "fu" : "q"}_reprompt_${question.id}`, question.id)
+		ttsTooLongError(question.title, `${qField}.title`, "surveyQuestionFields.title", ids.title(question.id), question.id),
+		ttsTooLongError(question.reprompt_message, `${qField}.reprompt_message`, "surveyQuestionFields.reprompt", ids.reprompt(question.id), question.id)
 	]) {
 		if (error) errors.push(error);
 	}
@@ -161,7 +194,7 @@ export function validateQuestion(
 			field: `${qField}.name`,
 			message: t("validation.questionNameRequired"),
 			questionId: question.id,
-			fieldId: `q_name_${question.id}`
+			fieldId: ids.name(question.id)
 		});
 	}
 
@@ -170,24 +203,26 @@ export function validateQuestion(
 			errors.push({
 				field: `${qField}.options`,
 				message: t("validation.ratingOptionsInvalid"),
-				questionId: question.id
+				questionId: question.id,
+				fieldId: ids.options(question.id)
 			});
 		} else {
 			const { min_value, max_value } = question.options as RatingOptions;
-			if (min_value < 0 || min_value > 8) {
+			const range = { min: RATING_SCALE_MIN, max: RATING_SCALE_MAX };
+			if (min_value < RATING_SCALE_MIN || min_value > RATING_SCALE_MAX) {
 				errors.push({
 					field: `${qField}.options.min_value`,
-					message: t("validation.ratingMinRange"),
+					message: t("validation.ratingMinRange", range),
 					questionId: question.id,
-					fieldId: `q_rating_min_${question.id}`
+					fieldId: ids.ratingMin(question.id)
 				});
 			}
-			if (max_value < 0 || max_value > 8) {
+			if (max_value < RATING_SCALE_MIN || max_value > RATING_SCALE_MAX) {
 				errors.push({
 					field: `${qField}.options.max_value`,
-					message: t("validation.ratingMaxRange"),
+					message: t("validation.ratingMaxRange", range),
 					questionId: question.id,
-					fieldId: `q_rating_max_${question.id}`
+					fieldId: ids.ratingMax(question.id)
 				});
 			}
 			if (min_value >= max_value) {
@@ -195,7 +230,7 @@ export function validateQuestion(
 					field: `${qField}.options.range`,
 					message: t("validation.ratingMinLessThanMax"),
 					questionId: question.id,
-					fieldId: `q_rating_min_${question.id}`
+					fieldId: ids.ratingMin(question.id)
 				});
 			}
 		}
@@ -204,22 +239,25 @@ export function validateQuestion(
 			errors.push({
 				field: `${qField}.options`,
 				message: t("validation.choiceOptionsInvalid"),
-				questionId: question.id
+				questionId: question.id,
+				fieldId: ids.options(question.id)
 			});
 		} else {
 			const labels = (question.options as ChoiceOptions).labels || [];
-			if (labels.length < 2) {
+			if (labels.length < CHOICE_MIN_OPTIONS) {
 				errors.push({
 					field: `${qField}.options.labels`,
-					message: t("validation.choiceMinOptions"),
-					questionId: question.id
+					message: t("validation.choiceMinOptions", { min: CHOICE_MIN_OPTIONS }),
+					questionId: question.id,
+					fieldId: ids.options(question.id)
 				});
 			}
-			if (labels.length > 5) {
+			if (labels.length > CHOICE_MAX_OPTIONS) {
 				errors.push({
 					field: `${qField}.options.labels`,
-					message: t("validation.choiceMaxOptions"),
-					questionId: question.id
+					message: t("validation.choiceMaxOptions", { max: CHOICE_MAX_OPTIONS }),
+					questionId: question.id,
+					fieldId: ids.options(question.id)
 				});
 			}
 			const duplicates = findDuplicateChoiceLabels(labels);
@@ -229,7 +267,7 @@ export function validateQuestion(
 						field: `${qField}.options.labels[${idx}]`,
 						message: t("validation.choiceOptionEmpty", { number: idx + 1 }),
 						questionId: question.id,
-						fieldId: `opt_${question.id}_${idx}`
+						fieldId: ids.choiceOption(question.id, idx)
 					});
 					return;
 				}
@@ -239,7 +277,7 @@ export function validateQuestion(
 						field: `${qField}.options.labels[${idx}]`,
 						message: t("validation.choiceOptionDuplicate", { number: idx + 1, otherNumber: firstIdx + 1 }),
 						questionId: question.id,
-						fieldId: `opt_${question.id}_${idx}`
+						fieldId: ids.choiceOption(question.id, idx)
 					});
 				}
 			});
@@ -247,6 +285,16 @@ export function validateQuestion(
 	}
 
 	if (question.follow_ups && Array.isArray(question.follow_ups)) {
+		// Der Flow kennt bei Kommentarfragen keine Verzweigung; entsteht durch nachträglichen Typwechsel
+		if (question.type === "comment" && question.follow_ups.length > 0) {
+			errors.push({
+				field: `${qField}.follow_ups`,
+				message: t("validation.followUpsNotAllowed"),
+				questionId: question.id,
+				fieldId: ids.followUps(question.id)
+			});
+		}
+
 		const duplicateOperators = findDuplicateFollowUpOperators(question.type, question.follow_ups);
 		const duplicateValues = findDuplicateFollowUpValues(question.type, question.follow_ups);
 
@@ -255,34 +303,42 @@ export function validateQuestion(
 				errors.push({
 					field: `${qField}.follow_ups[${fuIdx}]`,
 					message: t("validation.followUpMissing"),
-					questionId: question.id
+					questionId: question.id,
+					fieldId: ids.followUps(question.id)
+				});
+				return;
+			}
+
+			const firstIdx = duplicateOperators.get(fuIdx);
+			if (firstIdx !== undefined) {
+				errors.push({
+					field: `${qField}.follow_ups[${fuIdx}].condition.operator`,
+					message: t("validation.followUpOperatorDuplicate", { operator: fu.condition?.operator, number: firstIdx + 1 }),
+					questionId: question.id,
+					fieldId: ids.conditionOperator(question.id, fuIdx)
+				});
+			}
+
+			if (question.type !== "comment" && !isFollowUpValueValid(question, fu.condition?.value)) {
+				errors.push({
+					field: `${qField}.follow_ups[${fuIdx}].condition.value`,
+					message: t("validation.followUpValueRequired"),
+					questionId: question.id,
+					fieldId: ids.conditionValue(question.id, fuIdx)
 				});
 			} else {
-				const firstIdx = duplicateOperators.get(fuIdx);
-				if (firstIdx !== undefined) {
-					errors.push({
-						field: `${qField}.follow_ups[${fuIdx}].condition.operator`,
-						message: t("validation.followUpOperatorDuplicate", { operator: fu.condition?.operator, number: firstIdx + 1 }),
-						questionId: question.id,
-						fieldId: `fu_cond_op_${question.id}_${fuIdx}`
-					});
-				}
 				const firstValueIdx = duplicateValues.get(fuIdx);
 				if (firstValueIdx !== undefined) {
 					errors.push({
 						field: `${qField}.follow_ups[${fuIdx}].condition.value`,
 						message: t("validation.followUpValueDuplicate", { number: firstValueIdx + 1 }),
 						questionId: question.id,
-						fieldId: `fu_cond_val_${question.id}_${fuIdx}`
+						fieldId: ids.conditionValue(question.id, fuIdx)
 					});
 				}
-				errors.push(
-					...validateQuestion(
-						fu.question,
-						`${qField}.follow_up_${fuIdx}`
-					)
-				);
 			}
+
+			errors.push(...validateQuestion(fu.question, `${qField}.follow_up_${fuIdx}`));
 		});
 	}
 
@@ -297,7 +353,7 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 		errors.push({
 			field: "survey.title",
 			message: t("validation.surveyTitleRequired"),
-			fieldId: "survey_title_input"
+			fieldId: surveyFieldIds.title
 		});
 	}
 
@@ -305,14 +361,14 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 		errors.push({
 			field: "survey.name",
 			message: t("validation.surveyNameRequired"),
-			fieldId: "survey_name_input"
+			fieldId: surveyFieldIds.name
 		});
 	}
 
 	// Begrüßung und Verabschiedung werden im Bot Flow per TTS gesprochen
 	for (const error of [
-		ttsTooLongError(survey.greeting_message, "survey.greeting_message", "surveyEditor.meta.greeting", "survey_greeting_input"),
-		ttsTooLongError(survey.closing_message, "survey.closing_message", "surveyEditor.meta.closing", "survey_closing_input")
+		ttsTooLongError(survey.greeting_message, "survey.greeting_message", "surveyEditor.meta.greeting", surveyFieldIds.greeting),
+		ttsTooLongError(survey.closing_message, "survey.closing_message", "surveyEditor.meta.closing", surveyFieldIds.closing)
 	]) {
 		if (error) errors.push(error);
 	}
@@ -322,14 +378,16 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 	if (totalQuestions < 1) {
 		errors.push({
 			field: "survey.questions",
-			message: t("validation.surveyMinQuestions")
+			message: t("validation.surveyMinQuestions"),
+			fieldId: surveyFieldIds.questions
 		});
 	}
 
-	if (totalQuestions > 20) {
+	if (totalQuestions > SURVEY_MAX_QUESTIONS) {
 		errors.push({
 			field: "survey.questions",
-			message: t("validation.surveyMaxQuestions", { count: totalQuestions })
+			message: t("validation.surveyMaxQuestions", { count: totalQuestions, max: SURVEY_MAX_QUESTIONS }),
+			fieldId: surveyFieldIds.questions
 		});
 	}
 
