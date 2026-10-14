@@ -5,7 +5,7 @@ import Card from "primevue/card";
 import InputText from "primevue/inputtext";
 import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
+import { displayTechnicalName } from "@/domain/survey/surveyTypes";
 import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";
 import FieldError from "@/components/ui/FieldError.vue";
@@ -13,9 +13,11 @@ import FieldError from "@/components/ui/FieldError.vue";
 const props = withDefaults(
 	defineProps<{
 		survey: Survey;
+		isSaved?: boolean;
 		disabled?: boolean;
 	}>(),
 	{
+		isSaved: false,
 		disabled: false
 	}
 );
@@ -33,11 +35,7 @@ const { t } = useI18n();
 const { hasError, errorId } = useFieldErrors();
 
 // Nach dem ersten Speichern ist der Name unveränderlich; vorher eine Vorschau aus dem Titel zeigen
-const computedTechnicalName = computed(() =>
-	(props.survey.version ?? 0) >= 1
-		? props.survey.name
-		: ensureTechnicalName(props.survey.name, props.survey.title, props.survey.id, "umfrage")
-);
+const computedTechnicalName = computed(() => displayTechnicalName(props.survey, props.isSaved, "umfrage"));
 </script>
 
 <template>

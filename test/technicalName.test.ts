@@ -3,6 +3,7 @@ import {
 	collectTechnicalNames,
 	createEmptyQuestion,
 	createEmptySurvey,
+	displayTechnicalName,
 	ensureSurveyTechnicalNames,
 	ensureTechnicalName,
 	shortId
@@ -113,6 +114,14 @@ test("collectTechnicalNames erfasst Umfrage, Fragen und Folgefragen", () => {
 	const names = collectTechnicalNames(survey);
 	assert.deepEqual([...names.keys()].sort(), [survey.id, question.id, followUp.id].sort());
 	assert.equal(collectTechnicalNames(null).size, 0);
+});
+
+test("displayTechnicalName: Vorschau aus dem Titel nur für ungespeicherte Elemente", () => {
+	const survey = createEmptySurvey();
+	survey.title = "Neuer Titel";
+	assert.equal(displayTechnicalName(survey, false, "umfrage"), `neuer_titel_${shortId(survey.id)}`);
+	// Gespeichert: Name bleibt, auch wenn er noch wie ein Platzhalter aussieht
+	assert.equal(displayTechnicalName(survey, true, "umfrage"), survey.name);
 });
 
 console.log(`\n${passed} Tests bestanden`);

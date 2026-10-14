@@ -60,6 +60,7 @@ const {
 	validationErrors,
 	totalQuestionsCount,
 	canAddQuestion,
+	isSurveySaved,
 	isQuestionSaved,
 	setSurvey,
 	addQuestion,
@@ -201,6 +202,7 @@ function handleClone() {
 		<!-- Meta Section Card -->
 		<SurveyMetaForm
 			:survey="draftSurvey"
+			:isSaved="isSurveySaved"
 			:disabled="isReadOnly"
 			@save="handleSave"
 		/>

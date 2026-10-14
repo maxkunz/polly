@@ -6,7 +6,7 @@ import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import ToggleSwitch from "primevue/toggleswitch";
 import Select from "primevue/select";
 import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
-import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
+import { displayTechnicalName } from "@/domain/survey/surveyTypes";
 import { getQuestionTypes } from "@/domain/survey/questionTypeCatalog";
 import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";
@@ -32,11 +32,7 @@ const emit = defineEmits<{
 }>();
 
 // Gespeicherte Namen sind unveränderlich; nur bei neuen Fragen eine Vorschau aus dem Titel zeigen
-const displayQuestionName = computed(() =>
-	props.isSaved
-		? props.question.name
-		: ensureTechnicalName(props.question.name, props.question.title, props.question.id, "frage")
-);
+const displayQuestionName = computed(() => displayTechnicalName(props.question, props.isSaved, "frage"));
 
 const { hasError, errorId } = useFieldErrors();
 

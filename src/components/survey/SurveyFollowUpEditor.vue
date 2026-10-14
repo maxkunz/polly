@@ -7,7 +7,7 @@ import Select from "primevue/select";
 import { useConfirm } from "primevue/useconfirm";
 import type { FollowUpRule, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
 import { getFollowUpQuestionTypes } from "@/domain/survey/questionTypeCatalog";
-import { ensureTechnicalName } from "@/domain/survey/surveyTypes";
+import { displayTechnicalName } from "@/domain/survey/surveyTypes";
 import { useQuestionTypeOptions } from "@/composables/useQuestionTypeOptions";
 import { useFieldErrors } from "@/composables/useFieldErrors";
 import { questionFieldIds } from "@/domain/survey/surveyFieldIds";
@@ -52,10 +52,7 @@ const followUpQuestionTypeOptions = computed(() => getFollowUpQuestionTypes());
 const { hasError, errorId } = useFieldErrors();
 
 // Wie bei Hauptfragen: gespeicherter Name unverändert, bei neuen Folgefragen Vorschau aus dem Titel
-const displayName = computed(() => {
-	const q = props.followUp.question;
-	return props.isSaved ? q.name : ensureTechnicalName(q.name, q.title, q.id, "frage");
-});
+const displayName = computed(() => displayTechnicalName(props.followUp.question, props.isSaved, "frage"));
 
 const titleId = computed(() => questionFieldIds.title(props.followUp.question.id));
 const descId = computed(() => questionFieldIds.description(props.followUp.question.id));

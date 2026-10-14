@@ -204,6 +204,19 @@ export function ensureTechnicalName(
 }
 
 /**
+ * Technischer Name für die Anzeige im Editor: Gespeicherte Elemente behalten ihren Namen,
+ * ungespeicherte zeigen eine Vorschau aus dem aktuellen Titel. Maßgeblich bleibt das
+ * Speichern (ensureSurveyTechnicalNames mit den Namen der gespeicherten Fassung).
+ */
+export function displayTechnicalName(
+	element: { name: string; title: string; id: string },
+	isSaved: boolean,
+	defaultSlug: "umfrage" | "frage"
+): string {
+	return isSaved ? element.name : ensureTechnicalName(element.name, element.title, element.id, defaultSlug);
+}
+
+/**
  * Technische Namen der Umfrage und aller Fragen nach ID, z. B. aus der zuletzt gespeicherten
  * Fassung – für ensureSurveyTechnicalNames.
  */

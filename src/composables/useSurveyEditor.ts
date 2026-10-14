@@ -45,15 +45,23 @@ export function useSurveyEditor(initialData?: Survey | null) {
 		return ids;
 	}
 
-	const savedQuestionIds = computed<Set<string>>(() => {
-		if (!initialSnapshot.value) return new Set();
+	/** Zuletzt geladener bzw. gespeicherter Stand; bei neuen Umfragen die leere Vorlage (Version 0). */
+	const savedSurvey = computed<Survey | null>(() => {
+		if (!initialSnapshot.value) return null;
 		try {
-			const parsed = JSON.parse(initialSnapshot.value);
-			return extractAllQuestionIds(parsed);
+			return JSON.parse(initialSnapshot.value);
 		} catch {
-			return new Set();
+			return null;
 		}
 	});
+
+	/** Version 0 = noch nie gespeichert; ab Version 1 ist der technische Name der Umfrage fest. */
+	const isSurveySaved = computed(() => (savedSurvey.value?.version ?? 0) > 0);
+
+	// Ungespeicherte Umfrage (z. B. Klon): Fragen im Ausgangsstand gelten noch nicht als gespeichert
+	const savedQuestionIds = computed(() =>
+		isSurveySaved.value ? extractAllQuestionIds(savedSurvey.value) : new Set<string>()
+	);
 
 	function isQuestionSaved(questionId: string): boolean {
 		return savedQuestionIds.value.has(questionId);
@@ -161,6 +169,7 @@ export function useSurveyEditor(initialData?: Survey | null) {
 		validationErrors,
 		totalQuestionsCount,
 		canAddQuestion,
+		isSurveySaved,
 		isQuestionSaved,
 		setSurvey,
 		addQuestion,
