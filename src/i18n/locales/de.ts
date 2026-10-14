@@ -236,7 +236,6 @@ export const de = {
 		fieldsetAriaLabel: "Folgefrage {number}",
 		delete: "Löschen",
 		deleteAriaLabel: "Folgefrage {number} löschen",
-		removeNested: "Verschachtelte Folgefragen entfernen ({count})",
 		deleteConfirm: {
 			header: "Folgefrage löschen",
 			message: "Möchten Sie diese Folgefrage wirklich entfernen?",
@@ -309,7 +308,7 @@ export const de = {
 		choiceOptionDuplicate: "Option {number} überschneidet sich mit Option {otherNumber} (gleiches Label oder Synonym).",
 		followUpMissing: "Folgefrage fehlt.",
 		followUpsNotAllowed: "Fragen vom Typ Kommentar können keine Folgefragen haben. Bitte die Folgefragen entfernen oder einen anderen Fragetyp wählen.",
-		followUpsTooDeep: "Folgefragen dürfen keine eigenen Folgefragen haben. Bitte die verschachtelten Folgefragen entfernen.",
+		followUpsTooDeep: "Folgefragen dürfen keine eigenen Folgefragen haben.",
 		followUpValueRequired: "Bitte einen gültigen Wert für die Bedingung angeben.",
 		followUpOperatorDuplicate: "Der Komparator \"{operator}\" wird bereits von Folgefrage {number} verwendet. Jeder Komparator darf nur einmal verwendet werden.",
 		followUpValueDuplicate: "Dieser Wert wird bereits von Folgefrage {number} verwendet. Jeder mögliche Antwortwert darf nur eine Folgefrage haben.",

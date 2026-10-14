@@ -338,14 +338,14 @@ export function validateQuestion(
 				}
 			}
 
-			// Nur eine Ebene: Folgefragen dürfen keine eigenen Folgefragen haben (der Editor bietet keine an,
-			// sie können nur aus Altdaten stammen). Darunter wird nicht weiter geprüft – sie sind zu entfernen.
+			// Nur eine Ebene: Folgefragen dürfen keine eigenen Folgefragen haben. Der Editor legt keine an,
+			// die Prüfung sichert nur gegen Fehler ab; darunter wird nicht weiter geprüft.
 			if (fu.question.follow_ups?.length) {
 				errors.push({
 					field: `${qField}.follow_up_${fuIdx}.follow_ups`,
 					message: t("validation.followUpsTooDeep"),
-					questionId: fu.question.id,
-					fieldId: ids.followUps(fu.question.id)
+					questionId: question.id,
+					fieldId: ids.followUps(question.id)
 				});
 			}
 			errors.push(...validateQuestion({ ...fu.question, follow_ups: [] }, `${qField}.follow_up_${fuIdx}`));

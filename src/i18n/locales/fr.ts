@@ -238,7 +238,6 @@ export const fr: MessageSchema = {
 		fieldsetAriaLabel: "Question de suivi {number}",
 		delete: "Supprimer",
 		deleteAriaLabel: "Supprimer la question de suivi {number}",
-		removeNested: "Supprimer les questions de suivi imbriquées ({count})",
 		deleteConfirm: {
 			header: "Supprimer la question de suivi",
 			message: "Voulez-vous vraiment supprimer cette question de suivi ?",
@@ -311,7 +310,7 @@ export const fr: MessageSchema = {
 		choiceOptionDuplicate: "L'option {number} recoupe l'option {otherNumber} (même libellé ou synonyme).",
 		followUpMissing: "La question de suivi est manquante.",
 		followUpsNotAllowed: "Les questions de type commentaire ne peuvent pas avoir de questions de suivi. Veuillez supprimer les questions de suivi ou choisir un autre type de question.",
-		followUpsTooDeep: "Les questions de suivi ne peuvent pas avoir leurs propres questions de suivi. Veuillez supprimer les questions de suivi imbriquées.",
+		followUpsTooDeep: "Les questions de suivi ne peuvent pas avoir leurs propres questions de suivi.",
 		followUpValueRequired: "Veuillez indiquer une valeur valide pour la condition.",
 		followUpOperatorDuplicate: "Le comparateur \"{operator}\" est déjà utilisé par la question de suivi {number}. Chaque comparateur ne peut être utilisé qu'une seule fois.",
 		followUpValueDuplicate: "Cette valeur est déjà utilisée par la question de suivi {number}. Chaque valeur de réponse possible ne peut avoir qu'une seule question de suivi.",

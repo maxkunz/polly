@@ -114,7 +114,7 @@ test("Folgefragen nutzen dieselben Feld-IDs wie Hauptfragen", () => {
 	assert.deepEqual(fieldIdsOf(s), [questionFieldIds.title(FU)]);
 });
 
-test("Folgefragen mit eigenen Folgefragen verweisen auf den Bereich der Folgefrage", () => {
+test("Folgefragen mit eigenen Folgefragen verweisen auf den Folgefragenbereich der Elternfrage", () => {
 	const s = survey([question({ type: "yes_no", follow_ups: [followUp({ operator: "equals", value: true })] })]);
 	const nested = s.questions[0].follow_ups![0].question;
 	nested.type = "yes_no";
@@ -122,7 +122,7 @@ test("Folgefragen mit eigenen Folgefragen verweisen auf den Bereich der Folgefra
 		{ condition: { operator: "equals", value: true }, question: { id: "c4d2b8a0-1111-4222-8333-944455556666", name: "x_c4d2b8a0", type: "comment", title: "" } }
 	];
 	// Nur der Tiefenfehler – die verschachtelte Frage (leerer Titel) wird nicht weiter geprüft
-	assert.deepEqual(fieldIdsOf(s), [questionFieldIds.followUps(FU)]);
+	assert.deepEqual(fieldIdsOf(s), [questionFieldIds.followUps(Q)]);
 });
 
 console.log(`\n${passed} Tests bestanden`);

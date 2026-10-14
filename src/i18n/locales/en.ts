@@ -238,7 +238,6 @@ export const en: MessageSchema = {
 		fieldsetAriaLabel: "Follow-up question {number}",
 		delete: "Delete",
 		deleteAriaLabel: "Delete follow-up question {number}",
-		removeNested: "Remove nested follow-up questions ({count})",
 		deleteConfirm: {
 			header: "Delete follow-up question",
 			message: "Do you really want to remove this follow-up question?",
@@ -311,7 +310,7 @@ export const en: MessageSchema = {
 		choiceOptionDuplicate: "Option {number} overlaps with option {otherNumber} (same label or synonym).",
 		followUpMissing: "Follow-up question is missing.",
 		followUpsNotAllowed: "Comment questions cannot have follow-up questions. Please remove the follow-up questions or choose a different question type.",
-		followUpsTooDeep: "Follow-up questions cannot have follow-up questions of their own. Please remove the nested follow-up questions.",
+		followUpsTooDeep: "Follow-up questions cannot have follow-up questions of their own.",
 		followUpValueRequired: "Please enter a valid value for the condition.",
 		followUpOperatorDuplicate: "The comparator \"{operator}\" is already used by follow-up question {number}. Each comparator may only be used once.",
 		followUpValueDuplicate: "This value is already used by follow-up question {number}. Each possible answer value may only have one follow-up question.",

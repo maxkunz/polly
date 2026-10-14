@@ -239,7 +239,6 @@ export const tlh: MessageSchema = {
 		fieldsetAriaLabel: "tlha' yu' {number}",
 		delete: "yIQaw'",
 		deleteAriaLabel: "tlha' yu' {number} yIQaw'",
-		removeNested: "tlha' yu'mey yIteq ({count})",
 		deleteConfirm: {
 			header: "tlha' yu' yIQaw'",
 			message: "tlha' yu' vam DateqneS'a'?",
@@ -312,7 +311,7 @@ export const tlh: MessageSchema = {
 		choiceOptionDuplicate: "wIv {number} wIv {otherNumber} je rap (per pagh rap mu' rap).",
 		followUpMissing: "tlha' yu' tu'lu'be'.",
 		followUpsNotAllowed: "QIn yu' tlha' yu'mey ghajlaHbe'. tlha' yu'mey yIteq pagh latlh yu' Segh yIwIv.",
-		followUpsTooDeep: "tlha' yu'mey tlha' yu'mey ghajlaHbe'. tlha' yu'mey yIteq.",
+		followUpsTooDeep: "tlha' yu'mey tlha' yu'mey ghajlaHbe'.",
 		followUpValueRequired: "chutvaD mI' lugh yInob.",
 		followUpOperatorDuplicate: "ruchwI' „{operator}“ lo'pu' tlha' yu' {number}. wa'logh neH ruchwI' lo'lu'.",
 		followUpValueDuplicate: "mI' vam lo'pu' tlha' yu' {number}. jang mI' wa' tlha' yu' wa' neH ghaj.",

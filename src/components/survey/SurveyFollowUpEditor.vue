@@ -51,9 +51,6 @@ const followUpQuestionTypeOptions = computed(() => getFollowUpQuestionTypes());
 
 const { hasError, errorId } = useFieldErrors();
 
-const nestedId = computed(() => questionFieldIds.followUps(props.followUp.question.id));
-const nestedCount = computed(() => props.followUp.question.follow_ups?.length ?? 0);
-
 // Wie bei Hauptfragen: gespeicherter Name unverändert, bei neuen Folgefragen Vorschau aus dem Titel
 const displayName = computed(() => {
 	const q = props.followUp.question;
@@ -105,31 +102,6 @@ function confirmDelete() {
 				:aria-label="t('surveyFollowUp.deleteAriaLabel', { number: index + 1 })"
 				:disabled="disabled"
 				@click="confirmDelete"
-			/>
-		</div>
-
-		<!-- Altdaten: verschachtelte Folgefragen sind nicht erlaubt (nur eine Ebene) und hier nur entfernbar.
-		     Fokussierbar als Sprungziel des Validierungsfehlers. -->
-		<div
-			v-if="nestedCount > 0"
-			:id="nestedId"
-			tabindex="-1"
-			role="group"
-			:aria-labelledby="`${nestedId}_text`"
-			class="p-3 rounded-lg border border-red-200 bg-red-50 space-y-2"
-		>
-			<p :id="`${nestedId}_text`" class="flex items-start gap-1 text-xs text-red-700">
-				<i class="pi pi-exclamation-circle text-[11px] mt-0.5" aria-hidden="true" />
-				<span>{{ t("validation.followUpsTooDeep") }}</span>
-			</p>
-			<Button
-				size="small"
-				severity="danger"
-				variant="outlined"
-				icon="pi pi-trash"
-				:label="t('surveyFollowUp.removeNested', { count: nestedCount })"
-				:disabled="disabled"
-				@click="followUp.question.follow_ups = []"
 			/>
 		</div>
 
