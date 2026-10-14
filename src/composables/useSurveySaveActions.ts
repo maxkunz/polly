@@ -3,7 +3,13 @@ import { useToast } from "primevue/usetoast";
 import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, surveyTableId } from "@/services/surveyService";
+import {
+	saveSurveyDetail,
+	fetchSurveyDetail,
+	deleteSurvey,
+	surveyTableId,
+	SurveyDraftConflictError
+} from "@/services/surveyService";
 import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
 import { useAppStore } from "@/stores/appStore";
 import { focusField, focusTopmostField } from "@/composables/useFieldErrors";
@@ -16,10 +22,22 @@ export interface SurveySaveActionsOptions {
 	validationErrors: Ref<Array<{ message: string; fieldId?: string }>>;
 	reset: () => void;
 	markClean: (survey: Survey) => void;
+	/** Ersetzt den Editor-Stand (ohne ungespeicherte Änderungen) */
+	setSurvey: (survey: Survey) => void;
+	/** Nach „Änderungen laden“ im Speicherkonflikt-Dialog; der Editor gibt das Lock frei */
+	onReloaded?: (survey: Survey) => void | Promise<void>;
 	surveyId: string;
 	/** Rohzeile der Umfrage; wird nach dem Speichern mit dem frischen Stand überschrieben */
 	existingRow: Ref<Record<string, any> | null>;
 	isNew?: boolean;
+}
+
+/** Auswahl im Speicherkonflikt-Dialog; Schließen per X/Escape gilt als „cancel“ */
+export type SaveConflictChoice = "overwrite" | "cancel" | "load";
+
+export interface SaveConflictState {
+	expectedVersion: number | null;
+	currentVersion: number | null;
 }
 
 /**
@@ -36,6 +54,52 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const isSaving = ref<boolean>(false);
 	const isDeleting = ref<boolean>(false);
 	const saveAttempted = ref<boolean>(false);
+	/** Offener Speicherkonflikt-Dialog (null = geschlossen) */
+	const saveConflict = ref<SaveConflictState | null>(null);
+	let resolveSaveConflict: ((choice: SaveConflictChoice) => void) | null = null;
+
+	function askSaveConflict(conflict: SurveyDraftConflictError): Promise<SaveConflictChoice> {
+		return new Promise(resolve => {
+			resolveSaveConflict = resolve;
+			saveConflict.value = {
+				expectedVersion: conflict.expectedVersion,
+				currentVersion: conflict.currentVersion
+			};
+		});
+	}
+
+	/** Vom Dialog aufgerufen */
+	function resolveConflict(choice: SaveConflictChoice): void {
+		saveConflict.value = null;
+		const resolve = resolveSaveConflict;
+		resolveSaveConflict = null;
+		resolve?.(choice);
+	}
+
+	/** Lädt den gespeicherten Stand in den Editor; ungespeicherte Änderungen gehen verloren. */
+	async function loadLatest(): Promise<void> {
+		try {
+			const { survey, rawRow } = await fetchSurveyDetail(options.surveyId);
+			options.setSurvey(survey);
+			options.existingRow.value = rawRow;
+			saveAttempted.value = false;
+			await options.onReloaded?.(survey);
+			toast.add({
+				severity: "info",
+				summary: t("surveyEditor.saveConflict.loadedSummary"),
+				detail: t("surveyEditor.saveConflict.loadedDetail", { version: survey.version ?? "–" }),
+				life: 3500
+			});
+		} catch (err: any) {
+			console.error("Reload survey error:", err);
+			toast.add({
+				severity: "error",
+				summary: t("surveyEditor.saveConflict.loadErrorSummary"),
+				detail: err?.message || t("surveyEditor.save.errorFallback"),
+				life: 5000
+			});
+		}
+	}
 
 	/** Bestätigungsdialog als Promise; Schließen ohne Auswahl gilt als Ablehnen. */
 	function askConfirm(keyPrefix: string, params: Record<string, unknown> = {}): Promise<boolean> {
@@ -91,7 +155,24 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 
 		isSaving.value = true;
 		try {
-			const updated = await saveSurveyDetail(options.draftSurvey.value, options.isNew);
+			// Version, auf der der Editor-Stand beruht (Version ist im Editor nicht änderbar)
+			const expectedVersion = options.isNew ? undefined : (options.draftSurvey.value.version ?? null);
+			let updated: Survey;
+			try {
+				updated = await saveSurveyDetail(options.draftSurvey.value, options.isNew, expectedVersion);
+			} catch (err) {
+				if (!(err instanceof SurveyDraftConflictError)) throw err;
+				// Jemand hat zwischenzeitlich gespeichert (z. B. Lock ignoriert)
+				isSaving.value = false;
+				const choice = await askSaveConflict(err);
+				isSaving.value = true;
+				if (choice === "cancel") return null;
+				if (choice === "load") {
+					await loadLatest();
+					return null;
+				}
+				updated = await saveSurveyDetail(options.draftSurvey.value, options.isNew);
+			}
 			options.markClean(updated);
 			saveAttempted.value = false;
 
@@ -192,6 +273,8 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 		isSaving,
 		isDeleting,
 		saveAttempted,
+		saveConflict,
+		resolveConflict,
 		save,
 		discard,
 		remove

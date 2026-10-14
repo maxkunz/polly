@@ -14,7 +14,7 @@ export interface UseSurveyLockOptions {
 	isNew?: boolean;
 	// Read-only (fehlende Rolle polly_write): kein Lock nehmen, kein Konflikt-Dialog
 	readOnly?: Ref<boolean>;
-	/** Nutzer lehnt im Konfliktdialog ab, die Umfrage trotz fremdem Lock zu bearbeiten */
+	/** Nutzer schließt den Konfliktdialog (X/Escape) → zurück zur Übersicht */
 	onBack?: () => void;
 }
 
@@ -25,6 +25,9 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 	const isLockedByMe = ref<boolean>(false);
 	const isConflictDismissed = ref<boolean>(false);
+	/** Nutzer hat im Konfliktdialog „Nur lesen“ gewählt: Editor gesperrt, kein Lock nehmen */
+	const isLockReadOnly = ref<boolean>(false);
+	const conflictLockedBy = ref<string>("");
 
 	async function getCurrentUsername(): Promise<string> {
 		if (appStore.currentUser?.name) {
@@ -65,7 +68,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	}
 
 	async function checkInitialConflict(): Promise<void> {
-		if (options.isNew || options.readOnly?.value) return;
+		if (options.isNew || options.readOnly?.value || isLockReadOnly.value) return;
 
 		try {
 			const lock = parseSurveyLock(options.existingRow.value?.lock);
@@ -87,9 +90,12 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 						isConflictDismissed.value = true;
 					},
 					reject: () => {
-						if (options.onBack) {
-							options.onBack();
-						}
+						conflictLockedBy.value = lock.locked_by ?? "";
+						isLockReadOnly.value = true;
+					},
+					// Schließen per X/Escape (nicht bei accept/reject)
+					onHide: () => {
+						options.onBack?.();
 					}
 				});
 			}
@@ -99,7 +105,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	}
 
 	async function acquireLock(): Promise<void> {
-		if (options.isNew || options.readOnly?.value || isLockedByMe.value) return;
+		if (options.isNew || options.readOnly?.value || isLockReadOnly.value || isLockedByMe.value) return;
 
 		try {
 			const username = await getCurrentUsername();
@@ -130,6 +136,12 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		isLockedByMe.value = false;
 	}
 
+	/** Aus dem Lesemodus heraus doch bearbeiten (entspricht „Trotzdem bearbeiten“ im Dialog) */
+	function editAnyway(): void {
+		isLockReadOnly.value = false;
+		isConflictDismissed.value = true;
+	}
+
 	// Watch for dirty changes -> lock on first change
 	watch(
 		() => options.isDirty.value,
@@ -144,7 +156,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	watch(
 		() => options.existingRow.value,
 		() => {
-			if (!isLockedByMe.value && !isConflictDismissed.value) {
+			if (!isLockedByMe.value && !isConflictDismissed.value && !isLockReadOnly.value) {
 				checkInitialConflict();
 			}
 		},
@@ -171,6 +183,9 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 	return {
 		releaseLock,
-		markLockReleased
+		markLockReleased,
+		isLockReadOnly,
+		conflictLockedBy,
+		editAnyway
 	};
 }

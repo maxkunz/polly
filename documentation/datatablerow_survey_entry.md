@@ -11,7 +11,15 @@ Die Zeile hat mehrere Felder: Prod/Draft/Backup/Stage.
 * key: Eindeutiger Identifikator der Zeile. Setzt sich aus dem Prefix "survey_" und der Umfrage-UUID zusammen (z. B. "survey_e3b0c442-989b-464c-811c-2834b6b10011").
 * lock: Informationen, wer die Umfrage gerade bearbeitet - soll verhindern, dass eine im Editor geöffnete Umfrage parallel von einem zweiten User bearbeitet wird. Das Lock wird nicht schon beim reinen Öffnen/Ansehen gesetzt, sondern erst bei der ersten Änderung im Editor: Dann wird der aktuelle Zeitpunkt in das Feld "locked_since" und der Username in das Feld "locked_by" geschrieben. Beim Speichern der Umfrage sowie beim Verlassen des Editors (auch ohne zu speichern) wird das Lock wieder freigegeben (locked_by/locked_since werden geleert). Ist das Lock älter als 60 Minuten, gilt es als abgelaufen und wird bei der nächsten Prüfung ignoriert (es wird dabei nicht aktiv gelöscht, sondern erst beim nächsten Setzen oder Speichern überschrieben).
 
-Beim Öffnen einer Umfrage wird ein Konflikt-Check durchgeführt: Falls die Umfrage bereits (nicht abgelaufen) gesperrt ist, wird ein Dialog angezeigt mit der Info, dass die Umfrage seit dem Datum in locked_since von locked_by bearbeitet wird. Der User kann sich nun entscheiden, ob er trotzdem bearbeiten (Lock ignorieren) oder abbrechen möchte (→ zurück zur Umfragen-Übersichtsliste).
+Beim Öffnen einer Umfrage wird ein Konflikt-Check durchgeführt: Falls die Umfrage bereits (nicht abgelaufen) gesperrt ist, wird ein Dialog angezeigt mit der Info, dass die Umfrage seit dem Datum in locked_since von locked_by bearbeitet wird. Der User kann sich nun entscheiden:
+- **Trotzdem bearbeiten**: Lock ignorieren, Editor normal nutzbar.
+- **Nur lesen**: Editor schreibgeschützt öffnen (kein Lock wird genommen); ein Hinweisbanner nennt den sperrenden User und bietet „Trotzdem bearbeiten“ nachträglich an.
+- **Dialog schließen (X/Escape)**: zurück zur Umfragen-Übersichtsliste.
+
+Beim Speichern wird geprüft, ob die Version des gespeicherten `Draft` noch der Version entspricht, auf der der Editor-Stand beruht. Hat zwischenzeitlich jemand gespeichert (z. B. weil das Lock ignoriert wurde), erscheint ein Dialog:
+- **Überschreiben**: eigener Stand wird gespeichert (Version zählt von der höheren Version weiter).
+- **Abbrechen** (oder X/Escape): zurück in den Editor, ungespeicherte Änderungen bleiben erhalten.
+- **Änderungen laden**: gespeicherte Fassung wird in den Editor geladen, eigene ungespeicherte Änderungen werden verworfen und das eigene Lock freigegeben.
 
 ## Leeres Beispiel JSON
 

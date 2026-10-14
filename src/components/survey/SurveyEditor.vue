@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { watch, onBeforeUnmount, toRef } from "vue";
+import { watch, onBeforeUnmount, toRef, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Message from "primevue/message";
+import Button from "primevue/button";
 
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { cloneSurvey } from "@/domain/survey/surveyTypes";
@@ -17,6 +18,7 @@ import SurveyFlowSizeHint from "./SurveyFlowSizeHint.vue";
 import SurveyMetaForm from "./SurveyMetaForm.vue";
 import SurveyQuestionsSection from "./SurveyQuestionsSection.vue";
 import SurveyStickySaveBar from "./SurveyStickySaveBar.vue";
+import SurveySaveConflictDialog from "./SurveySaveConflictDialog.vue";
 
 const props = withDefaults(
 	defineProps<{
@@ -39,6 +41,8 @@ const existingRow = defineModel<Record<string, any> | null>("existingRow", { def
 
 const emit = defineEmits<{
 	(e: "saved", updated: Survey): void;
+	/** Gespeicherter Stand wurde nach einem Speicherkonflikt neu geladen */
+	(e: "reloaded", survey: Survey): void;
 	(e: "back"): void;
 	(e: "deploy"): void;
 	(e: "report"): void;
@@ -69,7 +73,7 @@ const {
 
 const flowPayloadSize = useFlowPayloadSize(draftSurvey);
 
-const { markLockReleased, releaseLock } = useSurveyLock({
+const { markLockReleased, releaseLock, isLockReadOnly, conflictLockedBy, editAnyway } = useSurveyLock({
 	surveyId: props.surveyId,
 	existingRow,
 	isDirty,
@@ -77,6 +81,9 @@ const { markLockReleased, releaseLock } = useSurveyLock({
 	readOnly: toRef(props, "disabled"),
 	onBack: () => emit("back")
 });
+
+// Gesperrt durch fehlende Schreibrechte oder durch „Nur lesen“ im Lock-Konfliktdialog
+const isReadOnly = computed(() => props.disabled || isLockReadOnly.value);
 
 watch(
 	() => props.survey,
@@ -88,13 +95,19 @@ watch(
 	{ deep: true }
 );
 
-const { isSaving, isDeleting, saveAttempted, save, discard, remove } = useSurveySaveActions({
+const { isSaving, isDeleting, saveAttempted, saveConflict, resolveConflict, save, discard, remove } = useSurveySaveActions({
 	draftSurvey,
 	isDirty,
 	isValid,
 	validationErrors,
 	reset,
 	markClean,
+	setSurvey,
+	onReloaded: async survey => {
+		// Editor ist wieder unverändert – eigenes Lock wie beim Verwerfen freigeben
+		await releaseLock();
+		emit("reloaded", survey);
+	},
 	surveyId: props.surveyId,
 	existingRow,
 	isNew: props.isNew
@@ -147,6 +160,17 @@ function handleClone() {
 		<Message v-if="disabled" severity="info" :closable="false">
 			{{ t("permissions.readOnlyBanner") }}
 		</Message>
+		<Message v-else-if="isLockReadOnly" severity="warn" :closable="false">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<span>{{ t("surveyLock.readOnlyBanner", { user: conflictLockedBy }) }}</span>
+				<Button
+					:label="t('surveyLock.conflict.acceptLabel')"
+					severity="danger"
+					size="small"
+					@click="editAnyway"
+				/>
+			</div>
+		</Message>
 
 		<!-- Top Action Header & Breadcrumb -->
 		<SurveyEditorToolbar
@@ -154,7 +178,7 @@ function handleClone() {
 			:isSaving="isSaving"
 			:isDeleting="isDeleting"
 			:version="draftSurvey.version"
-			:disabled="disabled"
+			:disabled="isReadOnly"
 			:isNew="isNew"
 			@back="emit('back')"
 			@discard="handleDiscard"
@@ -177,7 +201,7 @@ function handleClone() {
 		<!-- Meta Section Card -->
 		<SurveyMetaForm
 			:survey="draftSurvey"
-			:disabled="disabled"
+			:disabled="isReadOnly"
 			@save="handleSave"
 		/>
 
@@ -187,7 +211,7 @@ function handleClone() {
 			:totalQuestionsCount="totalQuestionsCount"
 			:canAddQuestion="canAddQuestion"
 			:isQuestionSaved="isQuestionSaved"
-			:disabled="disabled"
+			:disabled="isReadOnly"
 			@add-question="(type) => addQuestion(type)"
 			@move-question="(qIdx, dir) => moveQuestion(qIdx, dir)"
 			@remove-question="(id) => removeQuestion(id)"
@@ -199,9 +223,11 @@ function handleClone() {
 		<SurveyStickySaveBar
 			:isDirty="isDirty"
 			:isSaving="isSaving"
-			:disabled="disabled"
+			:disabled="isReadOnly"
 			@back="emit('back')"
 			@save="handleSave"
 		/>
+
+		<SurveySaveConflictDialog :conflict="saveConflict" @choose="resolveConflict" />
 	</div>
 </template>

@@ -150,6 +150,16 @@ export const de = {
 			toastSummary: "Zurückgesetzt",
 			toastDetail: "Änderungen wurden verworfen."
 		},
+		saveConflict: {
+			header: "Umfrage wurde zwischenzeitlich geändert",
+			message: "An dieser Umfrage wurden zwischenzeitlich Änderungen gespeichert, z. B. von einem anderen Nutzer (Ihr Stand basiert auf v{expected}, gespeichert ist v{current}). Möchten Sie die gespeicherte Fassung mit Ihren Änderungen überschreiben oder die gespeicherte Fassung laden? Beim Laden gehen Ihre ungespeicherten Änderungen verloren.",
+			overwriteLabel: "Überschreiben",
+			cancelLabel: "Abbrechen",
+			loadLabel: "Änderungen laden",
+			loadedSummary: "Neu geladen",
+			loadedDetail: "Die gespeicherte Fassung v{version} wurde geladen.",
+			loadErrorSummary: "Laden fehlgeschlagen"
+		},
 		deleteConfirm: {
 			header: "Umfrage löschen",
 			message: "Möchten Sie die Umfrage „{title}“ wirklich unwiderruflich löschen? Alle gesammelten Ergebnisse der Umfrage werden dabei ebenfalls endgültig gelöscht.",
@@ -170,10 +180,11 @@ export const de = {
 		unknownUser: "Unbekannter Benutzer",
 		conflict: {
 			header: "Umfrage wird bereits bearbeitet",
-			message: "Diese Umfrage wird seit {date} von „{user}“ bearbeitet. Möchten Sie die Sperre ignorieren oder abbrechen?",
+			message: "Diese Umfrage wird seit {date} von „{user}“ bearbeitet. Möchten Sie die Umfrage trotzdem bearbeiten oder nur ansehen?",
 			acceptLabel: "Trotzdem bearbeiten",
-			rejectLabel: "Abbrechen"
-		}
+			rejectLabel: "Nur anschauen"
+		},
+		readOnlyBanner: "Schreibgeschützt: Diese Umfrage wird gerade von „{user}“ bearbeitet. Änderungen sind deaktiviert."
 	},
 
 	surveyQuestions: {

@@ -152,6 +152,16 @@ export const fr: MessageSchema = {
 			toastSummary: "Réinitialisé",
 			toastDetail: "Les modifications ont été abandonnées."
 		},
+		saveConflict: {
+			header: "L'enquête a été modifiée entre-temps",
+			message: "Des modifications de cette enquête ont été enregistrées entre-temps, par ex. par un autre utilisateur (votre version est basée sur v{expected}, la version enregistrée est v{current}). Voulez-vous écraser la version enregistrée avec vos modifications ou charger la version enregistrée ? Le chargement supprime vos modifications non enregistrées.",
+			overwriteLabel: "Écraser",
+			cancelLabel: "Annuler",
+			loadLabel: "Charger les modifications",
+			loadedSummary: "Rechargée",
+			loadedDetail: "La version enregistrée v{version} a été chargée.",
+			loadErrorSummary: "Échec du chargement"
+		},
 		deleteConfirm: {
 			header: "Supprimer l'enquête",
 			message: "Voulez-vous vraiment supprimer définitivement l'enquête « {title} » ? Tous les résultats collectés pour cette enquête seront également supprimés définitivement.",
@@ -172,10 +182,11 @@ export const fr: MessageSchema = {
 		unknownUser: "Utilisateur inconnu",
 		conflict: {
 			header: "Enquête déjà en cours de modification",
-			message: "Cette enquête est en cours de modification par « {user} » depuis {date}. Voulez-vous ignorer le verrou ou annuler ?",
+			message: "Cette enquête est en cours de modification par « {user} » depuis {date}. Voulez-vous la modifier quand même ou l'ouvrir en lecture seule ?",
 			acceptLabel: "Modifier quand même",
-			rejectLabel: "Annuler"
-		}
+			rejectLabel: "Lecture seule"
+		},
+		readOnlyBanner: "Lecture seule : cette enquête est en cours de modification par « {user} ». Les modifications sont désactivées."
 	},
 
 	surveyQuestions: {

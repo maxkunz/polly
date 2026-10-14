@@ -415,6 +415,7 @@ onBeforeUnmount(() => {
 				:disabled="!app.canWrite"
 				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleSurveySaved"
+				@reloaded="handleSurveySaved"
 				@back="handleBackToList"
 				@deploy="handleDeploy"
 				@report="handleReport"

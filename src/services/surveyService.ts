@@ -228,11 +228,30 @@ export async function rollbackSurvey(surveyId: string, expectedProdVersion: numb
 	});
 }
 
+/** Der gespeicherte Draft hat eine andere Version als die, auf der der Editor-Stand beruht. */
+export class SurveyDraftConflictError extends Error {
+	constructor(
+		public readonly expectedVersion: number | null,
+		public readonly currentVersion: number | null
+	) {
+		super(`Draft changed (expected v${expectedVersion ?? "–"}, current v${currentVersion ?? "–"})`);
+		this.name = "SurveyDraftConflictError";
+	}
+}
+
 /**
  * Speichert den Draft und gibt dabei das Umfrage-Lock frei. Stage/Prod/Backup bleiben auf dem
  * aktuellen Stand der Zeile.
+ *
+ * `expectedDraftVersion` ist die Version, auf der der Editor-Stand beruht. Weicht der gespeicherte
+ * Draft ab (z. B. hat jemand trotz Lock zwischenzeitlich gespeichert), wird mit
+ * `SurveyDraftConflictError` abgebrochen. `undefined` überspringt die Prüfung (Überschreiben).
  */
-export async function saveSurveyDetail(survey: Survey, isNew?: boolean): Promise<Survey> {
+export async function saveSurveyDetail(
+	survey: Survey,
+	isNew?: boolean,
+	expectedDraftVersion?: number | null
+): Promise<Survey> {
 	const resolvedTableId = await surveyTableId();
 
 	const updatedSurvey: Survey = JSON.parse(JSON.stringify(survey));
@@ -245,13 +264,17 @@ export async function saveSurveyDetail(survey: Survey, isNew?: boolean): Promise
 		await addDataTableRow(resolvedTableId, buildSurveyRowPayload(survey.id, null, patch));
 	} else {
 		await updateSurveyRow(survey.id, currentRow => {
+			const currentVersion = readFieldVersion(currentRow.Draft);
+			if (expectedDraftVersion !== undefined && currentVersion !== expectedDraftVersion) {
+				throw new SurveyDraftConflictError(expectedDraftVersion, currentVersion);
+			}
 			const savedDraft = parseDraft(currentRow.Draft);
 			// Bereits gespeicherte technische Namen sind Reporting-Schlüssel und werden unverändert
 			// übernommen; nur neu hinzugekommene Fragen erhalten einmalig einen Namen aus dem Titel.
 			ensureSurveyTechnicalNames(updatedSurvey, collectTechnicalNames(savedDraft));
 			// Von der höheren Version aus zählen: Hat jemand zwischenzeitlich gespeichert, bekäme
 			// ein anderer Inhalt sonst dieselbe Versionsnummer (Deploy-Prüfungen vergleichen Versionen).
-			const latest = Math.max(survey.version ?? 0, readFieldVersion(currentRow.Draft) ?? 0);
+			const latest = Math.max(survey.version ?? 0, currentVersion ?? 0);
 			updatedSurvey.version = latest + 1;
 			return { Draft: JSON.stringify(updatedSurvey), lock: EMPTY_SURVEY_LOCK };
 		});

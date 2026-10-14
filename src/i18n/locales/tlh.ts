@@ -153,6 +153,16 @@ export const tlh: MessageSchema = {
 			toastSummary: "choHHa'lu'pu'",
 			toastDetail: "choHmey woDlu'pu'."
 		},
+		saveConflict: {
+			header: "yu'ghItlh choHta' latlh",
+			message: "yu'ghItlh vam choHmey pollu'ta' (v{expected} Dalo', v{current} pollu'). choHmeylIj DapollaHneS'a' pagh v{current} DalI'neS'a'? DalI'chugh choHmeylIj chImmo' Qaw'lu'.",
+			overwriteLabel: "yIQaw'",
+			cancelLabel: "yIqIl",
+			loadLabel: "choHmey yIlI'",
+			loadedSummary: "lI'lu'pu'",
+			loadedDetail: "v{version} lI'lu'pu'.",
+			loadErrorSummary: "lI'laHbe'"
+		},
 		deleteConfirm: {
 			header: "yu'ghItlh yIQaw'",
 			message: "yu'ghItlh „{title}“ DaQaw'qu'neS'a'? yu'ghItlh jangmey Hoch Qaw'lu'qu' je.",
@@ -173,10 +183,11 @@ export const tlh: MessageSchema = {
 		unknownUser: "lo'wI' Sovbe'lu'bogh",
 		conflict: {
 			header: "yu'ghItlh choHtaH latlh",
-			message: "{date} vo' „{user}“ yu'ghItlh vam choHtaH. ngaQ DaSaHbe'neS'a' pagh DaqIlneS'a'?",
+			message: "{date} vo' „{user}“ yu'ghItlh vam choHtaH. DachoHneS'a' pagh DalaDneS'a' neH?",
 			acceptLabel: "yIchoH, vaj",
-			rejectLabel: "yIqIl"
-		}
+			rejectLabel: "laD neH"
+		},
+		readOnlyBanner: "laD neH: DaH yu'ghItlh vam choHtaH „{user}“. choHlu'laHbe'."
 	},
 
 	surveyQuestions: {

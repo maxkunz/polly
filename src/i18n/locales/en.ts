@@ -152,6 +152,16 @@ export const en: MessageSchema = {
 			toastSummary: "Reset",
 			toastDetail: "Changes were discarded."
 		},
+		saveConflict: {
+			header: "Survey has been changed in the meantime",
+			message: "Changes to this survey have been saved in the meantime, e.g. by another user (your version is based on v{expected}, the saved one is v{current}). Do you want to overwrite the saved version with your changes or load the saved version? Loading discards your unsaved changes.",
+			overwriteLabel: "Overwrite",
+			cancelLabel: "Cancel",
+			loadLabel: "Load changes",
+			loadedSummary: "Reloaded",
+			loadedDetail: "The saved version v{version} has been loaded.",
+			loadErrorSummary: "Loading failed"
+		},
 		deleteConfirm: {
 			header: "Delete survey",
 			message: "Do you really want to permanently delete the survey „{title}“? All collected results of the survey will be permanently deleted as well.",
@@ -172,10 +182,11 @@ export const en: MessageSchema = {
 		unknownUser: "Unknown user",
 		conflict: {
 			header: "Survey is already being edited",
-			message: "This survey has been edited by „{user}“ since {date}. Do you want to ignore the lock or cancel?",
+			message: "This survey has been edited by „{user}“ since {date}. Do you want to edit it anyway or open it read-only?",
 			acceptLabel: "Edit anyway",
-			rejectLabel: "Cancel"
-		}
+			rejectLabel: "Read only"
+		},
+		readOnlyBanner: "Read-only: this survey is currently being edited by „{user}“. Editing is disabled."
 	},
 
 	surveyQuestions: {
