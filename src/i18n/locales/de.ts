@@ -20,7 +20,8 @@ export const de = {
 		de: "Deutsch",
 		en: "English",
 		fr: "Français",
-		tlh: "tlhIngan Hol (i18n-Test)"
+		tlh: "tlhIngan Hol (i18n-Test)",
+		la: "Latein (i18n-Test)"
 	},
 
 	modules: {
@@ -119,7 +120,7 @@ export const de = {
 			greeting: "Begrüßungsnachricht",
 			closing: "Verabschiedungsnachricht",
 			placeholders: {
-				title: "z. B. Kundenzufriedenheit 2026",
+				title: "z. B. Kundenzufriedenheit",
 				description: "Interne Beschreibung oder Kontext zur Umfrage...",
 				greeting: "Vielen Dank, dass Sie sich kurz Zeit nehmen...",
 				closing: "Vielen Dank für Ihr wertvolles Feedback!"
@@ -490,6 +491,10 @@ export const de = {
 			updateSuccess: "Botflow aktualisiert",
 			updateSuccessDetail: "Der Botflow wurde erfolgreich aus der aktuellen Vorlage aktualisiert.",
 			updateFailed: "Botflow konnte nicht aktualisiert werden",
+			exportTemplates: "Flow-Templates exportieren",
+			exportMissing: "Botflow oder Inbound-Flow fehlen in den Setup-Metadaten.",
+			exportSuccess: "Botflow und Inbound-Flow wurden mit Platzhaltern exportiert.",
+			exportFailed: "Fehler beim Flow-Export.",
 			uninstall: "Deinstallieren"
 		}
 	},

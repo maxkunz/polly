@@ -22,7 +22,8 @@ export const fr: MessageSchema = {
 		de: "Deutsch",
 		en: "English",
 		fr: "Français",
-		tlh: "tlhIngan Hol (i18n-Test)"
+		tlh: "tlhIngan Hol (i18n-Test)",
+		la: "Latin (i18n-Test)"
 	},
 
 	modules: {
@@ -121,7 +122,7 @@ export const fr: MessageSchema = {
 			greeting: "Message de bienvenue",
 			closing: "Message de fin",
 			placeholders: {
-				title: "p. ex. Satisfaction client 2026",
+				title: "p. ex. Satisfaction client",
 				description: "Description interne ou contexte de l'enquête...",
 				greeting: "Merci de prendre quelques instants...",
 				closing: "Merci pour vos précieux retours !"
@@ -492,6 +493,10 @@ export const fr: MessageSchema = {
 			updateSuccess: "Bot Flow mis à jour",
 			updateSuccessDetail: "Le Bot Flow a été mis à jour avec succès à partir du modèle actuel.",
 			updateFailed: "Impossible de mettre à jour le Bot Flow",
+			exportTemplates: "Exporter les modèles de flux",
+			exportMissing: "Le flux bot ou le flux entrant est absent des métadonnées d'installation.",
+			exportSuccess: "Le flux bot et le flux entrant ont été exportés avec des espaces réservés.",
+			exportFailed: "Erreur lors de l'exportation des flux.",
 			uninstall: "Désinstaller"
 		}
 	},

@@ -3,20 +3,22 @@ import { de, type MessageSchema } from "./locales/de";
 import { en } from "./locales/en";
 import { fr } from "./locales/fr";
 import { tlh } from "./locales/tlh";
+import { la } from "./locales/la";
 import { primevueDe } from "./primevue/de";
 import { primevueEn } from "./primevue/en";
 import { primevueFr } from "./primevue/fr";
 import { primevueTlh } from "./primevue/tlh";
+import { primevueLa } from "./primevue/la";
 
-/** Reihenfolge = Reihenfolge in der Sprachauswahl. tlh (Klingonisch) dient als Testsprache. */
-export const SUPPORTED_LOCALES = ["de", "en", "fr", "tlh"] as const;
+/** Reihenfolge = Reihenfolge in der Sprachauswahl. tlh (Klingonisch) und la (Latein) sind Testsprachen. */
+export const SUPPORTED_LOCALES = ["de", "en", "fr", "tlh", "la"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /**
  * Nur in der Dev-Ansicht wählbar. Werden nicht gespeichert: devView ist nach jedem Laden aus,
  * sonst bliebe ein Nutzer ohne sichtbare Auswahl in der Testsprache hängen.
  */
-const DEV_ONLY_LOCALES: readonly SupportedLocale[] = ["tlh"];
+const DEV_ONLY_LOCALES: readonly SupportedLocale[] = ["tlh", "la"];
 
 export function isDevOnlyLocale(locale: string): boolean {
 	return DEV_ONLY_LOCALES.includes(locale as SupportedLocale);
@@ -28,13 +30,15 @@ const localeTags: Record<SupportedLocale, string> = {
 	de: "de-DE",
 	en: "en-US",
 	fr: "fr-FR",
-	tlh: "tlh"
+	tlh: "tlh",
+	la: "la"
 };
 const primevueLocales: Record<SupportedLocale, typeof primevueDe> = {
 	de: primevueDe,
 	en: primevueEn,
 	fr: primevueFr,
-	tlh: primevueTlh
+	tlh: primevueTlh,
+	la: primevueLa
 };
 
 function isSupportedLocale(value: unknown): value is SupportedLocale {
@@ -57,7 +61,7 @@ export const i18n = createI18n({
 	legacy: false,
 	locale: initialLocale,
 	fallbackLocale: "de",
-	messages: { de, en, fr, tlh }
+	messages: { de, en, fr, tlh, la }
 });
 
 export function primevueLocaleFor(locale: SupportedLocale) {

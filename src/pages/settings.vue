@@ -30,7 +30,7 @@ usePageControlBar("settings", () => ({
 	actions: []
 }));
 
-// Testsprachen (Klingonisch) nur in der Dev-Ansicht anbieten
+// Testsprachen (Klingonisch, Latein) nur in der Dev-Ansicht anbieten
 const languageOptions = computed(() =>
 	SUPPORTED_LOCALES.filter(value => app.devView || !isDevOnlyLocale(value)).map(value => ({
 		label: t(`language.${value}`),
@@ -76,14 +76,24 @@ async function exportTemplateConfig() {
 	try {
 		const currentSetup = setup.value;
 		if (!currentSetup?.botFlow?.id || !currentSetup.botFlow.name || !currentSetup.inboundFlow?.id || !currentSetup.inboundFlow.name) {
-			throw new Error("Botflow oder Inbound-Flow fehlen in den Setup-Metadaten.");
+			throw new Error(t("settings.setup.exportMissing"));
 		}
 		await startBotFlowUpdate(currentSetup.botFlow.id, currentSetup.botFlow.name);
 		await startInboundFlowUpdate(currentSetup.inboundFlow.id, currentSetup.inboundFlow.name);
-		alert("Botflow und Inbound-Flow wurden mit Platzhaltern exportiert.");
-	} catch (error: any) {
+		toast.add({
+			severity: "success",
+			summary: t("settings.setup.exportTemplates"),
+			detail: t("settings.setup.exportSuccess"),
+			life: 5000
+		});
+	} catch (error) {
 		console.error("Flow-Export fehlgeschlagen:", error);
-		alert(error?.message || "Fehler beim Flow-Export.");
+		toast.add({
+			severity: "error",
+			summary: t("settings.setup.exportFailed"),
+			detail: getErrorMessage(error),
+			life: 10000
+		});
 	} finally {
 		isExporting.value = false;
 	}
@@ -196,7 +206,7 @@ function startUninstall() {
 							</div>
 							<div class="flex flex-wrap items-center gap-2">
 								<Button
-									label="Flow-Templates exportieren"
+									:label="t('settings.setup.exportTemplates')"
 									icon="pi pi-download"
 									severity="secondary"
 									text

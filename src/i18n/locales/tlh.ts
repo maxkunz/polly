@@ -23,7 +23,8 @@ export const tlh: MessageSchema = {
 		de: "Deutsch",
 		en: "English",
 		fr: "Français",
-		tlh: "tlhIngan Hol (Klingonisch)"
+		tlh: "tlhIngan Hol (Klingonisch)",
+		la: "Latin (i18n-Test)"
 	},
 
 	modules: {
@@ -122,7 +123,7 @@ export const tlh: MessageSchema = {
 			greeting: "nuqneH QIn",
 			closing: "Qapla' QIn",
 			placeholders: {
-				title: "mu'mey: ghotpu' belmoH 2026",
+				title: "mu'mey: ghotpu' belmoH",
 				description: "yu'ghItlh Del qoD...",
 				greeting: "poH Danobmo' qatlho'...",
 				closing: "QIn lo'laH Danobmo' qatlho'!"
@@ -493,6 +494,10 @@ export const tlh: MessageSchema = {
 			updateSuccess: "Botflow chu'moHlu'pu'",
 			updateSuccessDetail: "mIw chu' vo' Botflow chu'moHlu'pu'. Qapla'!",
 			updateFailed: "Botflow chu'moHlaHbe'lu'",
+			exportTemplates: "mIw ghunmey yIlIH",
+			exportMissing: "Botflow pagh Inbound-Flow tu'lu'be' setup mu'meyDaq.",
+			exportSuccess: "Botflow je Inbound-Flow lIHlu'pu' ghunmey-vetlh.",
+			exportFailed: "mIw lIHmeH Qagh.",
 			uninstall: "yIjomHa'"
 		}
 	},

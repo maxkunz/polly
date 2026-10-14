@@ -38,7 +38,7 @@ Nicht offensichtliche Regeln daraus (Auszug):
 
 ## Konventionen
 
-- UI-Texte **immer** über vue-i18n (`src/i18n/locales/de.ts` ist das Schema, `en.ts`, `fr.ts` und `tlh.ts` (Klingonisch, Testsprache, nur in der Dev-Ansicht wählbar und nie gespeichert) müssen dieselben Keys haben; neue Sprachen in `SUPPORTED_LOCALES` (`src/i18n/index.ts`) eintragen). Default/Fallback ist `de`. PrimeVue-Locales separat in `src/i18n/primevue/`.
+- UI-Texte **immer** über vue-i18n (`src/i18n/locales/de.ts` ist das Schema, `en.ts`, `fr.ts`, `tlh.ts` und `la.ts` (Klingonisch, Testsprache, nur in der Dev-Ansicht wählbar und nie gespeichert) müssen dieselben Keys haben; neue Sprachen in `SUPPORTED_LOCALES` (`src/i18n/index.ts`) eintragen). Default/Fallback ist `de`. PrimeVue-Locales separat in `src/i18n/primevue/`.
 - Code-Kommentare, Doku und Commit-Messages auf Deutsch.
 - Frontend: `<script setup lang="ts">`, Alias `@/` → `src/`. Einrückung mit Tabs im Frontend, 2 Spaces in `amplify/`.
 - Module/Sidebar werden in `src/app/modules.ts` registriert (`isActive` steuert Sichtbarkeit).

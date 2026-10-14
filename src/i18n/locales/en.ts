@@ -22,7 +22,8 @@ export const en: MessageSchema = {
 		de: "Deutsch",
 		en: "English",
 		fr: "Français",
-		tlh: "tlhIngan Hol (i18n-Test)"
+		tlh: "tlhIngan Hol (i18n-Test)",
+		la: "Latin (i18n-Test)"
 	},
 
 	modules: {
@@ -121,7 +122,7 @@ export const en: MessageSchema = {
 			greeting: "Greeting message",
 			closing: "Closing message",
 			placeholders: {
-				title: "e.g. Customer satisfaction 2026",
+				title: "e.g. Customer satisfaction",
 				description: "Internal description or context for the survey...",
 				greeting: "Thank you for taking a moment...",
 				closing: "Thank you for your valuable feedback!"
@@ -492,6 +493,10 @@ export const en: MessageSchema = {
 			updateSuccess: "Bot flow updated",
 			updateSuccessDetail: "The bot flow was successfully updated from the current template.",
 			updateFailed: "Could not update bot flow",
+			exportTemplates: "Export flow templates",
+			exportMissing: "Bot flow or inbound flow is missing in the setup metadata.",
+			exportSuccess: "Bot flow and inbound flow were exported with placeholders.",
+			exportFailed: "Error exporting the flows.",
 			uninstall: "Uninstall"
 		}
 	},
