@@ -3,8 +3,7 @@ import { useToast } from "primevue/usetoast";
 import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
-import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, resolveDataTableId } from "@/services/surveyService";
+import { saveSurveyDetail, fetchSurveyDetail, deleteSurvey, surveyTableId } from "@/services/surveyService";
 import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
 import { useAppStore } from "@/stores/appStore";
 import { focusField, focusTopmostField } from "@/composables/useFieldErrors";
@@ -17,21 +16,17 @@ export interface SurveySaveActionsOptions {
 	validationErrors: Ref<Array<{ message: string; fieldId?: string }>>;
 	reset: () => void;
 	markClean: (survey: Survey) => void;
-	datatableId?: string;
 	surveyId: string;
-	existingRow?: Ref<Record<string, any> | null>;
+	/** Rohzeile der Umfrage; wird nach dem Speichern mit dem frischen Stand überschrieben */
+	existingRow: Ref<Record<string, any> | null>;
 	isNew?: boolean;
-	onRowRefreshed?: (freshRow: Record<string, any>) => void;
-	onSaved?: (updated: Survey, freshRow?: Record<string, any>) => void;
-	onDiscarded?: () => void;
-	onDeleted?: () => void;
-	emit: {
-		(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
-		(e: "back"): void;
-		(e: "deleted"): void;
-	};
 }
 
+/**
+ * Speichern, Verwerfen und Löschen im Editor inkl. Rückfragen und Toasts.
+ * Die Funktionen melden per Rückgabewert, ob die Aktion ausgeführt wurde; was danach
+ * passiert (Lock, Navigation), entscheidet der Editor.
+ */
 export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const toast = useToast();
 	const confirm = useConfirm();
@@ -42,10 +37,37 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 	const isDeleting = ref<boolean>(false);
 	const saveAttempted = ref<boolean>(false);
 
-	async function handleSave() {
+	/** Bestätigungsdialog als Promise; Schließen ohne Auswahl gilt als Ablehnen. */
+	function askConfirm(keyPrefix: string, params: Record<string, unknown> = {}): Promise<boolean> {
+		return new Promise(resolve => {
+			let resolved = false;
+			const finish = (result: boolean) => {
+				if (!resolved) {
+					resolved = true;
+					resolve(result);
+				}
+			};
+			confirm.require({
+				header: t(`${keyPrefix}.header`),
+				message: t(`${keyPrefix}.message`, params),
+				icon: "pi pi-exclamation-triangle",
+				acceptLabel: t(`${keyPrefix}.acceptLabel`),
+				rejectLabel: t(`${keyPrefix}.rejectLabel`),
+				acceptClass: "p-button-danger",
+				// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
+				defaultFocus: "reject",
+				accept: () => finish(true),
+				reject: () => finish(false),
+				onHide: () => finish(false)
+			});
+		});
+	}
+
+	/** Speichert den Entwurf. Liefert die gespeicherte Umfrage oder null (ungültig, keine Rechte, Fehler). */
+	async function save(): Promise<Survey | null> {
 		// Zweite Absicherung neben den deaktivierten Buttons
 		await app.refreshRoles();
-		if (!app.canWrite) return;
+		if (!app.canWrite) return null;
 		saveAttempted.value = true;
 		if (!options.isValid.value || !options.draftSurvey.value) {
 			const errors = options.validationErrors.value;
@@ -64,32 +86,17 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			if (!focusTopmostField(fieldIds)) {
 				focusField(surveyFieldIds.validationSummary);
 			}
-			return;
+			return null;
 		}
-
-		ensureSurveyTechnicalNames(options.draftSurvey.value);
 
 		isSaving.value = true;
 		try {
-			const updated = await saveSurveyDetail(
-				options.datatableId,
-				options.surveyId,
-				options.draftSurvey.value,
-				options.isNew
-			);
+			const updated = await saveSurveyDetail(options.draftSurvey.value, options.isNew);
 			options.markClean(updated);
 			saveAttempted.value = false;
 
-			let freshRow: Record<string, any> | undefined;
 			try {
-				const res = await fetchSurveyDetail(options.datatableId, options.surveyId);
-				freshRow = res.rawRow;
-				if (options.existingRow) {
-					options.existingRow.value = freshRow;
-				}
-				if (options.onRowRefreshed) {
-					options.onRowRefreshed(freshRow);
-				}
+				options.existingRow.value = (await fetchSurveyDetail(options.surveyId)).rawRow;
 			} catch (fetchErr) {
 				console.warn("Could not refresh raw row after save:", fetchErr);
 			}
@@ -100,12 +107,7 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				detail: t("surveyEditor.save.successDetail", { title: updated.title }),
 				life: 3500
 			});
-
-			if (options.onSaved) {
-				options.onSaved(updated, freshRow);
-			}
-
-			options.emit("saved", updated, freshRow);
+			return updated;
 		} catch (err: any) {
 			console.error("Save survey error:", err);
 			toast.add({
@@ -114,111 +116,84 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 				detail: err?.message || t("surveyEditor.save.errorFallback"),
 				life: 5000
 			});
+			return null;
 		} finally {
 			isSaving.value = false;
 		}
 	}
 
-	function handleDiscard() {
-		if (!options.isDirty.value) return;
+	/** Verwirft ungespeicherte Änderungen nach Rückfrage. true, wenn verworfen wurde. */
+	async function discard(): Promise<boolean> {
+		if (!options.isDirty.value) return false;
+		if (!(await askConfirm("surveyEditor.discardConfirm"))) return false;
 
-		confirm.require({
-			header: t("surveyEditor.discardConfirm.header"),
-			message: t("surveyEditor.discardConfirm.message"),
-			icon: "pi pi-exclamation-triangle",
-			acceptLabel: t("surveyEditor.discardConfirm.acceptLabel"),
-			rejectLabel: t("surveyEditor.discardConfirm.rejectLabel"),
-			acceptClass: "p-button-danger",
-			// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
-			defaultFocus: "reject",
-			accept: () => {
-				options.reset();
-				saveAttempted.value = false;
-				if (options.onDiscarded) {
-					options.onDiscarded();
-				}
-				toast.add({
-					severity: "info",
-					summary: t("surveyEditor.discardConfirm.toastSummary"),
-					detail: t("surveyEditor.discardConfirm.toastDetail"),
-					life: 2500
-				});
-			}
+		options.reset();
+		saveAttempted.value = false;
+		toast.add({
+			severity: "info",
+			summary: t("surveyEditor.discardConfirm.toastSummary"),
+			detail: t("surveyEditor.discardConfirm.toastDetail"),
+			life: 2500
 		});
+		return true;
 	}
 
-	async function handleDelete() {
+	/** Löscht die Umfrage nach Rückfrage und stößt das Löschen der Ergebnisse an. true, wenn gelöscht wurde. */
+	async function remove(): Promise<boolean> {
 		await app.refreshRoles();
-		if (!app.canWrite) return;
+		if (!app.canWrite) return false;
 		const title = options.draftSurvey.value?.title || options.surveyId;
-		confirm.require({
-			header: t("surveyEditor.deleteConfirm.header"),
-			message: t("surveyEditor.deleteConfirm.message", { title }),
-			icon: "pi pi-exclamation-triangle",
-			acceptLabel: t("surveyEditor.deleteConfirm.acceptLabel"),
-			rejectLabel: t("surveyEditor.deleteConfirm.rejectLabel"),
-			acceptClass: "p-button-danger",
-			// Fokus auf "Abbrechen", damit Enter nicht versehentlich bestätigt (Barrierefreiheit)
-			defaultFocus: "reject",
-			accept: async () => {
-				isDeleting.value = true;
-				try {
-					await deleteSurvey(options.datatableId, options.surveyId);
-					toast.add({
-						severity: "success",
-						summary: t("surveyEditor.deleteConfirm.successSummary"),
-						detail: t("surveyEditor.deleteConfirm.successDetail", { title }),
-						life: 3500
-					});
-					// Erst nach dem Entfernen aus der Data Table: das Backend löscht nur Ergebnisse nicht mehr existierender Umfragen
-					try {
-						const tableId = await resolveDataTableId(options.datatableId);
-						await requestSurveyResultsDeletion(options.surveyId, tableId);
-						toast.add({
-							severity: "info",
-							summary: t("surveyEditor.deleteConfirm.resultsSummary"),
-							detail: t("surveyEditor.deleteConfirm.resultsDetail"),
-							life: 5000
-						});
-					} catch (resultsErr: any) {
-						console.error("Delete survey results error:", resultsErr);
-						toast.add({
-							severity: "warn",
-							summary: t("surveyEditor.deleteConfirm.resultsErrorSummary"),
-							detail: resultsErr?.message || t("surveyEditor.deleteConfirm.resultsErrorFallback"),
-							life: 8000
-						});
-					}
-					if (options.onDeleted) {
-						options.onDeleted();
-					}
-					options.emit("deleted");
-				} catch (err: any) {
-					console.error("Delete survey error:", err);
-					toast.add({
-						severity: "error",
-						summary: t("surveyEditor.deleteConfirm.errorSummary"),
-						detail: err?.message || t("surveyEditor.deleteConfirm.errorFallback"),
-						life: 5000
-					});
-				} finally {
-					isDeleting.value = false;
-				}
-			}
-		});
-	}
+		if (!(await askConfirm("surveyEditor.deleteConfirm", { title }))) return false;
 
-	function handleBack() {
-		options.emit("back");
+		isDeleting.value = true;
+		try {
+			await deleteSurvey(options.surveyId);
+			toast.add({
+				severity: "success",
+				summary: t("surveyEditor.deleteConfirm.successSummary"),
+				detail: t("surveyEditor.deleteConfirm.successDetail", { title }),
+				life: 3500
+			});
+		} catch (err: any) {
+			console.error("Delete survey error:", err);
+			toast.add({
+				severity: "error",
+				summary: t("surveyEditor.deleteConfirm.errorSummary"),
+				detail: err?.message || t("surveyEditor.deleteConfirm.errorFallback"),
+				life: 5000
+			});
+			return false;
+		} finally {
+			isDeleting.value = false;
+		}
+
+		// Erst nach dem Entfernen aus der Data Table: das Backend löscht nur Ergebnisse nicht mehr existierender Umfragen
+		try {
+			await requestSurveyResultsDeletion(options.surveyId, await surveyTableId());
+			toast.add({
+				severity: "info",
+				summary: t("surveyEditor.deleteConfirm.resultsSummary"),
+				detail: t("surveyEditor.deleteConfirm.resultsDetail"),
+				life: 5000
+			});
+		} catch (resultsErr: any) {
+			console.error("Delete survey results error:", resultsErr);
+			toast.add({
+				severity: "warn",
+				summary: t("surveyEditor.deleteConfirm.resultsErrorSummary"),
+				detail: resultsErr?.message || t("surveyEditor.deleteConfirm.resultsErrorFallback"),
+				life: 8000
+			});
+		}
+		return true;
 	}
 
 	return {
 		isSaving,
 		isDeleting,
 		saveAttempted,
-		handleSave,
-		handleDiscard,
-		handleDelete,
-		handleBack
+		save,
+		discard,
+		remove
 	};
 }

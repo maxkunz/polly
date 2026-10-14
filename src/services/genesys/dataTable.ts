@@ -102,7 +102,7 @@ export async function listDataTableRows(datatableId: string, pageSize: number = 
         showbrief: false
     });
 
-    console.log("Rohdaten in listDataTableRows:", res);
+    // console.log("Rohdaten in listDataTableRows:", res);
 
     // Wenn 'entities' direkt in res liegt:
     if (res && res.entities) {
@@ -144,7 +144,7 @@ export async function listAllDataTableRows(datatableId: string, pageSize: number
 export async function OneRowDataTable(datatableId: string, rowId: string) {
     const { architectApi } = useAppStore().genesys;
     const res = await architectApi.getFlowsDatatableRow(datatableId, rowId, { showbrief: false });
-    console.log("OneRowDataTable getFlowsDatatableRow", res);
+    // console.log("OneRowDataTable getFlowsDatatableRow", res);
     return res; // Einzelnes Zeilen-Objekt (getFlowsDatatableRow liefert kein .entities Array)
 }
 // UPDATE ROW 

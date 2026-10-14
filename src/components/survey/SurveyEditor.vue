@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, toRef } from "vue";
+import { watch, onBeforeUnmount, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import Message from "primevue/message";
 
@@ -21,21 +21,24 @@ import SurveyStickySaveBar from "./SurveyStickySaveBar.vue";
 const props = withDefaults(
 	defineProps<{
 		survey: Survey;
-		datatableId?: string;
 		surveyId: string;
-		existingRow?: Record<string, any>;
 		disabled?: boolean;
 		isNew?: boolean;
 	}>(),
 	{
-		datatableId: undefined,
 		disabled: false,
 		isNew: false
 	}
 );
 
+/**
+ * Rohzeile der Umfrage (Draft/Stage/Prod/Backup/lock). Lock und Speichern aktualisieren sie;
+ * per v-model:existingRow bleibt die Seite auf demselben Stand. Bei neuen Umfragen ohne Bindung lokal.
+ */
+const existingRow = defineModel<Record<string, any> | null>("existingRow", { default: null });
+
 const emit = defineEmits<{
-	(e: "saved", updated: Survey, freshRow?: Record<string, any>): void;
+	(e: "saved", updated: Survey): void;
 	(e: "back"): void;
 	(e: "deploy"): void;
 	(e: "report"): void;
@@ -45,16 +48,6 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-
-const existingRowRef = ref<Record<string, any> | null>(props.existingRow ?? null);
-
-watch(
-	() => props.existingRow,
-	newVal => {
-		existingRowRef.value = newVal ?? null;
-	},
-	{ deep: true }
-);
 
 const {
 	survey: draftSurvey,
@@ -76,23 +69,13 @@ const {
 
 const flowPayloadSize = useFlowPayloadSize(draftSurvey);
 
-const {
-	isLockedByMe,
-	markLockReleased,
-	releaseLock
-} = useSurveyLock({
-	datatableId: props.datatableId,
+const { markLockReleased, releaseLock } = useSurveyLock({
 	surveyId: props.surveyId,
-	existingRow: existingRowRef,
+	existingRow,
 	isDirty,
 	isNew: props.isNew,
 	readOnly: toRef(props, "disabled"),
-	onRowRefreshed: freshRow => {
-		existingRowRef.value = freshRow;
-	},
-	onBack: () => {
-		emit("back");
-	}
+	onBack: () => emit("back")
 });
 
 watch(
@@ -105,39 +88,40 @@ watch(
 	{ deep: true }
 );
 
-const {
-	isSaving,
-	isDeleting,
-	saveAttempted,
-	handleSave,
-	handleDiscard,
-	handleDelete,
-	handleBack
-} = useSurveySaveActions({
+const { isSaving, isDeleting, saveAttempted, save, discard, remove } = useSurveySaveActions({
 	draftSurvey,
 	isDirty,
 	isValid,
 	validationErrors,
 	reset,
 	markClean,
-	datatableId: props.datatableId,
 	surveyId: props.surveyId,
-	existingRow: existingRowRef,
-	isNew: props.isNew,
-	onRowRefreshed: freshRow => {
-		existingRowRef.value = freshRow;
-	},
-	onSaved: () => {
-		markLockReleased();
-	},
-	onDiscarded: () => {
-		releaseLock();
-	},
-	emit
+	existingRow,
+	isNew: props.isNew
 });
 
 // Alle Formularfelder lesen ihre Fehler hieraus (erst nach dem ersten Speicherversuch sichtbar)
 provideFieldErrors(validationErrors, saveAttempted);
+
+async function handleSave(): Promise<void> {
+	const updated = await save();
+	if (!updated) return;
+	// Speichern gibt das Lock in der Data Table frei
+	markLockReleased();
+	emit("saved", updated);
+}
+
+async function handleDiscard(): Promise<void> {
+	if (await discard()) {
+		await releaseLock();
+	}
+}
+
+async function handleDelete(): Promise<void> {
+	if (await remove()) {
+		emit("deleted");
+	}
+}
 
 watch(
 	isDirty,
@@ -172,7 +156,7 @@ function handleClone() {
 			:version="draftSurvey.version"
 			:disabled="disabled"
 			:isNew="isNew"
-			@back="handleBack"
+			@back="emit('back')"
 			@discard="handleDiscard"
 			@save="handleSave"
 			@deploy="emit('deploy')"
@@ -216,7 +200,7 @@ function handleClone() {
 			:isDirty="isDirty"
 			:isSaving="isSaving"
 			:disabled="disabled"
-			@back="handleBack"
+			@back="emit('back')"
 			@save="handleSave"
 		/>
 	</div>

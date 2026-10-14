@@ -20,7 +20,9 @@ export const en: MessageSchema = {
 		title: "Sprache / Language",
 		label: "Language",
 		de: "Deutsch",
-		en: "English"
+		en: "English",
+		fr: "Français",
+		tlh: "tlhIngan Hol (i18n-Test)"
 	},
 
 	modules: {
@@ -274,6 +276,7 @@ export const en: MessageSchema = {
 		hint: "Optionally provide synonyms separated by commas, e.g. „orange, tangerine, mandarin“. The first word is the option, all others are synonyms.",
 		optionSrLabel: "Option {number}",
 		optionPlaceholder: "Option {number}, synonym 1, synonym 2",
+		defaultLabel: "Option {number}",
 		removeAriaLabel: "Remove option {number}"
 	},
 

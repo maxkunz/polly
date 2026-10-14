@@ -14,9 +14,10 @@ import { readFieldVersion } from "@/domain/survey/surveyRow";
 const props = defineProps<{
 	survey: Survey;
 	surveyId: string;
-	datatableId?: string;
-	existingRow: Record<string, any>;
 }>();
+
+/** Rohzeile der Umfrage; Deploy und Rollback aktualisieren sie, die Seite bleibt per v-model auf demselben Stand */
+const existingRow = defineModel<Record<string, any> | null>("existingRow", { required: true });
 
 const emit = defineEmits<{
 	(e: "back"): void;
@@ -39,14 +40,6 @@ onBeforeUnmount(() => {
 	emit("update:isDirty", false);
 });
 
-// Local ref so useSurveyDeployment can update it reactively after each deploy
-const localRow = ref<Record<string, any> | null>({ ...props.existingRow });
-watch(
-	() => props.existingRow,
-	v => { localRow.value = { ...v }; },
-	{ deep: true }
-);
-
 const {
 	isDeploying,
 	deployError,
@@ -60,13 +53,12 @@ const {
 	deployToProd,
 	rollback
 } = useSurveyDeployment({
-	datatableId: props.datatableId,
 	surveyId: props.surveyId,
-	existingRow: localRow
+	existingRow
 });
 
 // Version des aktuell geladenen Drafts (nach einem Deploy-Fehler ggf. neuer als beim Öffnen)
-const draftVersion = computed(() => readFieldVersion(localRow.value?.Draft) ?? props.survey.version ?? 1);
+const draftVersion = computed(() => readFieldVersion(existingRow.value?.Draft) ?? props.survey.version ?? 1);
 
 // Tooltip nur bei fehlender Rolle polly_deploy
 const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions.missingDeploy")));

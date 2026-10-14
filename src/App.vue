@@ -11,7 +11,7 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
 import ControlToolbar from "@/components/layout/ControlToolbar.vue";
 import { useControlBarStore } from "@/stores/controlBarStore";
-import { primevueLocaleFor, type SupportedLocale } from "@/i18n";
+import { isDevOnlyLocale, primevueLocaleFor, restoreStoredLocale, type SupportedLocale } from "@/i18n";
 
 const app = useAppStore();
 const toast = useToast();
@@ -27,6 +27,14 @@ watch(
 		primevue.config.locale = primevueLocaleFor(newLocale as SupportedLocale);
 	},
 	{ immediate: true }
+);
+
+// Testsprache nur in der Dev-Ansicht: beim Ausschalten zur gespeicherten Sprache zurück
+watch(
+	() => app.devView,
+	devView => {
+		if (!devView && isDevOnlyLocale(locale.value)) restoreStoredLocale();
+	}
 );
 
 function handleKeydown(e: KeyboardEvent): void {

@@ -12,7 +12,7 @@ import PageHeader from "@/components/layout/PageHeader.vue";
 import { useAppStore } from "@/stores/appStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
-import { setLocale, type SupportedLocale } from "@/i18n";
+import { setLocale, isDevOnlyLocale, SUPPORTED_LOCALES, type SupportedLocale } from "@/i18n";
 import { startBotFlowUpdate, startInboundFlowUpdate } from "@/services/SetupExportFlow";
 import { updateInstalledBotFlow } from "@/services/SetupUpdate";
 import { getErrorMessage } from "@/services/genesys/retry";
@@ -30,10 +30,13 @@ usePageControlBar("settings", () => ({
 	actions: []
 }));
 
-const languageOptions = computed(() => [
-	{ label: t("language.de"), value: "de" as SupportedLocale },
-	{ label: t("language.en"), value: "en" as SupportedLocale }
-]);
+// Testsprachen (Klingonisch) nur in der Dev-Ansicht anbieten
+const languageOptions = computed(() =>
+	SUPPORTED_LOCALES.filter(value => app.devView || !isDevOnlyLocale(value)).map(value => ({
+		label: t(`language.${value}`),
+		value
+	}))
+);
 
 const selectedLocale = computed<SupportedLocale>({
 	get: () => locale.value as SupportedLocale,

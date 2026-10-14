@@ -32,9 +32,12 @@ const surveyClosingId = surveyFieldIds.closing;
 const { t } = useI18n();
 const { hasError, errorId } = useFieldErrors();
 
-const computedTechnicalName = computed(() => {
-	return ensureTechnicalName(props.survey.name, props.survey.title, props.survey.id, "umfrage");
-});
+// Nach dem ersten Speichern ist der Name unveränderlich; vorher eine Vorschau aus dem Titel zeigen
+const computedTechnicalName = computed(() =>
+	(props.survey.version ?? 0) >= 1
+		? props.survey.name
+		: ensureTechnicalName(props.survey.name, props.survey.title, props.survey.id, "umfrage")
+);
 </script>
 
 <template>

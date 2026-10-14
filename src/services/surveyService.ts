@@ -1,6 +1,6 @@
 import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow, listAllDataTableRows } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
+import { collectTechnicalNames, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import {
 	EMPTY_SURVEY_LOCK,
 	buildSurveyRowPayload,
@@ -16,10 +16,8 @@ import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
 import { getErrorStatus } from "./genesys/retry";
 import { i18n, currentLocaleTag } from "@/i18n";
 
-export async function resolveDataTableId(datatableId?: string): Promise<string> {
-	if (datatableId && datatableId.trim()) {
-		return datatableId;
-	}
+/** ID der Umfrage-Data-Table (aus meta.setup bzw. der Start-URL) */
+export async function surveyTableId(): Promise<string> {
 	return await useAppStore().ensureDataTableId();
 }
 
@@ -35,14 +33,10 @@ export interface LoadSurveyResult {
 export interface SurveyListItem {
 	id: string;
 	title: string;
-	[key: string]: any;
 }
 
-export async function fetchSurveyDetail(
-	datatableId: string | undefined,
-	surveyId: string
-): Promise<LoadSurveyResult> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
+export async function fetchSurveyDetail(surveyId: string): Promise<LoadSurveyResult> {
+	const resolvedTableId = await surveyTableId();
 	const rowKey = surveyRowKey(surveyId);
 	const row = await OneRowDataTable(resolvedTableId, rowKey);
 
@@ -121,17 +115,11 @@ async function writeSurveyList(
 	}
 }
 
-export async function syncSurveyInList(
-	datatableId: string | undefined,
-	survey: Survey
-): Promise<SurveyListItem[]> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
-	const { items: currentList, row: listRow } = await readSurveyList(resolvedTableId);
+async function syncSurveyInList(datatableId: string, survey: Survey): Promise<SurveyListItem[]> {
+	const { items: currentList, row: listRow } = await readSurveyList(datatableId);
 
-	const displayName = survey.title?.trim() || survey.name?.trim() || "Unbenannte Umfrage";
-	const existingIndex = currentList.findIndex(
-		item => String(item.id ?? item.key) === String(survey.id)
-	);
+	const displayName = survey.title?.trim() || survey.name?.trim() || i18n.global.t("surveys.list.unnamedSurvey");
+	const existingIndex = currentList.findIndex(item => item.id === survey.id);
 
 	if (existingIndex !== -1) {
 		currentList[existingIndex] = {
@@ -146,7 +134,7 @@ export async function syncSurveyInList(
 		});
 	}
 
-	await writeSurveyList(resolvedTableId, currentList, listRow);
+	await writeSurveyList(datatableId, currentList, listRow);
 	return currentList;
 }
 
@@ -161,11 +149,10 @@ export async function syncSurveyInList(
  * „nichts schreiben“, oder wirft, um abzubrechen. Rückgabe ist die Zeile nach dem Schreiben.
  */
 async function updateSurveyRow(
-	datatableId: string | undefined,
 	surveyId: string,
 	change: (currentRow: Record<string, any>) => SurveyRowPatch | null
 ): Promise<Record<string, any>> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
+	const resolvedTableId = await surveyTableId();
 	const rowKey = surveyRowKey(surveyId);
 	const currentRow = await OneRowDataTable(resolvedTableId, rowKey);
 	if (!currentRow) {
@@ -189,12 +176,11 @@ export type DeployTarget = "Stage" | "Prod";
  * andere Version zu deployen.
  */
 export async function deploySurvey(
-	datatableId: string | undefined,
 	surveyId: string,
 	target: DeployTarget,
 	expectedDraftVersion: number | null
 ): Promise<void> {
-	await updateSurveyRow(datatableId, surveyId, currentRow => {
+	await updateSurveyRow(surveyId, currentRow => {
 		const draftVersion = readFieldVersion(currentRow.Draft);
 		if (draftVersion !== expectedDraftVersion) {
 			throw new Error(
@@ -238,12 +224,8 @@ export async function deploySurvey(
  * Stellt die Backup-Version auf Prod wieder her. Abbruch, wenn sich Prod seit der Anzeige
  * geändert hat (`expectedProdVersion`) – sonst würde ein anderes Backup zurückgespielt als angezeigt.
  */
-export async function rollbackSurvey(
-	datatableId: string | undefined,
-	surveyId: string,
-	expectedProdVersion: number | null
-): Promise<void> {
-	await updateSurveyRow(datatableId, surveyId, currentRow => {
+export async function rollbackSurvey(surveyId: string, expectedProdVersion: number | null): Promise<void> {
+	await updateSurveyRow(surveyId, currentRow => {
 		if (readFieldVersion(currentRow.Prod) !== expectedProdVersion) {
 			throw new Error(i18n.global.t("deployment.prodChanged"));
 		}
@@ -255,25 +237,23 @@ export async function rollbackSurvey(
  * Speichert den Draft und gibt dabei das Umfrage-Lock frei. Stage/Prod/Backup bleiben auf dem
  * aktuellen Stand der Zeile.
  */
-export async function saveSurveyDetail(
-	datatableId: string | undefined,
-	surveyId: string,
-	survey: Survey,
-	isNew?: boolean
-): Promise<Survey> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
+export async function saveSurveyDetail(survey: Survey, isNew?: boolean): Promise<Survey> {
+	const resolvedTableId = await surveyTableId();
 
 	const updatedSurvey: Survey = JSON.parse(JSON.stringify(survey));
 	updatedSurvey.updated_at = new Date().toISOString();
-	// Ensure technical names exist for survey & all questions without modifying already established names
-	ensureSurveyTechnicalNames(updatedSurvey);
 
 	if (isNew) {
+		ensureSurveyTechnicalNames(updatedSurvey);
 		updatedSurvey.version = (survey.version ?? 0) + 1;
 		const patch = { Draft: JSON.stringify(updatedSurvey), lock: EMPTY_SURVEY_LOCK };
-		await addDataTableRow(resolvedTableId, buildSurveyRowPayload(surveyId, null, patch));
+		await addDataTableRow(resolvedTableId, buildSurveyRowPayload(survey.id, null, patch));
 	} else {
-		await updateSurveyRow(resolvedTableId, surveyId, currentRow => {
+		await updateSurveyRow(survey.id, currentRow => {
+			const savedDraft = parseDraft(currentRow.Draft);
+			// Bereits gespeicherte technische Namen sind Reporting-Schlüssel und werden unverändert
+			// übernommen; nur neu hinzugekommene Fragen erhalten einmalig einen Namen aus dem Titel.
+			ensureSurveyTechnicalNames(updatedSurvey, collectTechnicalNames(savedDraft));
 			// Von der höheren Version aus zählen: Hat jemand zwischenzeitlich gespeichert, bekäme
 			// ein anderer Inhalt sonst dieselbe Versionsnummer (Deploy-Prüfungen vergleichen Versionen).
 			const latest = Math.max(survey.version ?? 0, readFieldVersion(currentRow.Draft) ?? 0);
@@ -282,17 +262,22 @@ export async function saveSurveyDetail(
 		});
 	}
 
-	// Also sync the survey in the survey_list row
 	await syncSurveyInList(resolvedTableId, updatedSurvey);
-
 	return updatedSurvey;
 }
 
-export async function deleteSurvey(
-	datatableId: string | undefined,
-	surveyId: string
-): Promise<void> {
-	const resolvedTableId = await resolveDataTableId(datatableId);
+/** Draft-Zelle als Survey; null, wenn leer oder nicht lesbar. */
+function parseDraft(raw: unknown): Survey | null {
+	if (!raw || raw === "{}") return null;
+	try {
+		return typeof raw === "string" ? JSON.parse(raw) : (raw as Survey);
+	} catch {
+		return null;
+	}
+}
+
+export async function deleteSurvey(surveyId: string): Promise<void> {
+	const resolvedTableId = await surveyTableId();
 	const rowKey = surveyRowKey(surveyId);
 
 	// Liste zuerst lesen: Ist sie nicht lesbar, wird abgebrochen, bevor etwas gelöscht ist
@@ -300,9 +285,7 @@ export async function deleteSurvey(
 
 	await deleteDataTableRow(resolvedTableId, rowKey);
 
-	const updatedList = currentList.filter(
-		item => String(item.id ?? item.key) !== String(surveyId)
-	);
+	const updatedList = currentList.filter(item => item.id !== surveyId);
 	await writeSurveyList(resolvedTableId, updatedList, listRow);
 }
 
@@ -454,26 +437,18 @@ export function checkSurveyLockConflict(
 	};
 }
 
-export async function acquireSurveyLock(
-	datatableId: string | undefined,
-	surveyId: string,
-	username: string
-): Promise<Record<string, any>> {
+export async function acquireSurveyLock(surveyId: string, username: string): Promise<Record<string, any>> {
 	const newLock: SurveyLockData = {
 		locked_by: username,
 		locked_since: new Date().toISOString()
 	};
-	return await updateSurveyRow(datatableId, surveyId, () => ({ lock: JSON.stringify(newLock) }));
+	return await updateSurveyRow(surveyId, () => ({ lock: JSON.stringify(newLock) }));
 }
 
 /** Gibt das Lock frei, sofern es nicht inzwischen von jemand anderem gehalten wird. */
-export async function releaseSurveyLock(
-	datatableId: string | undefined,
-	surveyId: string,
-	username?: string
-): Promise<Record<string, any> | null> {
+export async function releaseSurveyLock(surveyId: string, username?: string): Promise<Record<string, any> | null> {
 	try {
-		return await updateSurveyRow(datatableId, surveyId, currentRow => {
+		return await updateSurveyRow(surveyId, currentRow => {
 			const currentLock = parseSurveyLock(currentRow.lock);
 			const isHeldByOther =
 				username &&

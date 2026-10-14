@@ -1,3 +1,5 @@
+import { i18n } from "@/i18n";
+
 export type QuestionType = "yes_no" | "choice" | "rating" | "nps" | "comment";
 
 export type ConditionOperator = "equals" | "less_than" | "greater_than";
@@ -94,10 +96,11 @@ export function createDefaultRatingOptions(): RatingOptions {
 }
 
 export function createDefaultChoiceOptions(): ChoiceOptions {
+	const { t } = i18n.global;
 	return {
 		labels: [
-			{ id: crypto.randomUUID(), label: "Option 1" },
-			{ id: crypto.randomUUID(), label: "Option 2" }
+			{ id: crypto.randomUUID(), label: t("choiceOptions.defaultLabel", { number: 1 }) },
+			{ id: crypto.randomUUID(), label: t("choiceOptions.defaultLabel", { number: 2 }) }
 		]
 	};
 }
@@ -200,24 +203,41 @@ export function ensureTechnicalName(
 	return generateTechnicalName(title, id, defaultSlug);
 }
 
-export function ensureQuestionTechnicalNames(question: SurveyQuestion): void {
-	question.name = ensureTechnicalName(question.name, question.title, question.id, "frage");
-	if (question.follow_ups && Array.isArray(question.follow_ups)) {
-		for (const fu of question.follow_ups) {
-			if (fu.question) {
-				ensureQuestionTechnicalNames(fu.question);
-			}
+/**
+ * Technische Namen der Umfrage und aller Fragen nach ID, z. B. aus der zuletzt gespeicherten
+ * Fassung – für ensureSurveyTechnicalNames.
+ */
+export function collectTechnicalNames(survey: Survey | null | undefined): Map<string, string> {
+	const names = new Map<string, string>();
+	if (!survey) return names;
+	if (survey.id && survey.name?.trim()) names.set(survey.id, survey.name.trim());
+
+	const visit = (questions: SurveyQuestion[] | undefined) => {
+		for (const q of questions ?? []) {
+			if (q.id && q.name?.trim()) names.set(q.id, q.name.trim());
+			visit((q.follow_ups ?? []).map(fu => fu.question).filter(Boolean));
 		}
-	}
+	};
+	visit(survey.questions);
+	return names;
 }
 
-export function ensureSurveyTechnicalNames(survey: Survey): void {
-	survey.name = ensureTechnicalName(survey.name, survey.title, survey.id, "umfrage");
-	if (survey.questions && Array.isArray(survey.questions)) {
-		for (const q of survey.questions) {
-			ensureQuestionTechnicalNames(q);
+/**
+ * Setzt die technischen Namen von Umfrage und Fragen. Namen, die bereits gespeichert wurden
+ * (`savedNames`, nach ID), werden unverändert übernommen – ab der zweiten gespeicherten Version
+ * sind sie damit unveränderlich, auch wenn sie noch wie ein Platzhalter aussehen. Nur neue
+ * Elemente erhalten einmalig einen aus dem Titel erzeugten Namen.
+ */
+export function ensureSurveyTechnicalNames(survey: Survey, savedNames = new Map<string, string>()): void {
+	survey.name = savedNames.get(survey.id) ?? ensureTechnicalName(survey.name, survey.title, survey.id, "umfrage");
+
+	const visit = (question: SurveyQuestion) => {
+		question.name = savedNames.get(question.id) ?? ensureTechnicalName(question.name, question.title, question.id, "frage");
+		for (const fu of question.follow_ups ?? []) {
+			if (fu.question) visit(fu.question);
 		}
-	}
+	};
+	for (const q of survey.questions ?? []) visit(q);
 }
 
 export function createEmptySurvey(): Survey {

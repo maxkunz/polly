@@ -18,7 +18,9 @@ export const de = {
 		title: "Sprache / Language",
 		label: "Sprache",
 		de: "Deutsch",
-		en: "English"
+		en: "English",
+		fr: "Français",
+		tlh: "tlhIngan Hol (i18n-Test)"
 	},
 
 	modules: {
@@ -272,6 +274,7 @@ export const de = {
 		hint: "Optional Synonyme durch Komma getrennt angeben, z. B. „Orange, Apfelsine, Saftorange“. Das erste Wort ist die Option, alle weiteren sind Synonyme.",
 		optionSrLabel: "Option {number}",
 		optionPlaceholder: "Option {number}, Synonym 1, Synonym 2",
+		defaultLabel: "Option {number}",
 		removeAriaLabel: "Option {number} entfernen"
 	},
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+	collectTechnicalNames,
 	createEmptyQuestion,
 	createEmptySurvey,
 	ensureSurveyTechnicalNames,
@@ -67,6 +68,51 @@ test("neue Umfrage erhält beim ersten Speichern Namen aus den Titeln", () => {
 	ensureSurveyTechnicalNames(survey);
 	assert.equal(survey.name, `umfrage_test_${shortId(survey.id)}`);
 	assert.equal(question.name, `frage_zum_service_${shortId(question.id)}`);
+});
+
+test("ab der zweiten Version bleiben gespeicherte Namen unverändert, auch wenn sie wie ein Platzhalter aussehen", () => {
+	// Version 1 gespeichert mit Titel "Umfrage" → Name entspricht exakt dem Platzhalter
+	const survey = createEmptySurvey();
+	survey.title = "Umfrage";
+	const question = createEmptyQuestion("comment");
+	question.title = "Frage";
+	survey.questions.push(question);
+	ensureSurveyTechnicalNames(survey);
+	assert.equal(survey.name, `umfrage_${shortId(survey.id)}`);
+	const saved = JSON.parse(JSON.stringify(survey));
+
+	// Version 2: Titel geändert → Namen kommen aus der gespeicherten Fassung
+	survey.title = "Kundenzufriedenheit";
+	question.title = "Wie zufrieden?";
+	ensureSurveyTechnicalNames(survey, collectTechnicalNames(saved));
+	assert.equal(survey.name, `umfrage_${shortId(survey.id)}`);
+	assert.equal(question.name, `frage_${shortId(question.id)}`);
+});
+
+test("neue Fragen in späteren Versionen erhalten einmalig einen Namen aus dem Titel", () => {
+	const survey = createEmptySurvey();
+	survey.title = "Test";
+	survey.questions.push(createEmptyQuestion("comment"));
+	survey.questions[0].title = "Erste";
+	ensureSurveyTechnicalNames(survey);
+	const saved = JSON.parse(JSON.stringify(survey));
+
+	const added = createEmptyQuestion("yes_no");
+	added.title = "Neue Frage";
+	survey.questions.push(added);
+	ensureSurveyTechnicalNames(survey, collectTechnicalNames(saved));
+	assert.equal(added.name, `neue_frage_${shortId(added.id)}`);
+});
+
+test("collectTechnicalNames erfasst Umfrage, Fragen und Folgefragen", () => {
+	const survey = createEmptySurvey();
+	const question = createEmptyQuestion("yes_no");
+	const followUp = createEmptyQuestion("comment");
+	question.follow_ups = [{ condition: { operator: "equals", value: true }, question: followUp }];
+	survey.questions.push(question);
+	const names = collectTechnicalNames(survey);
+	assert.deepEqual([...names.keys()].sort(), [survey.id, question.id, followUp.id].sort());
+	assert.equal(collectTechnicalNames(null).size, 0);
 });
 
 console.log(`\n${passed} Tests bestanden`);

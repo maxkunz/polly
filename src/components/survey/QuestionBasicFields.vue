@@ -31,9 +31,12 @@ const emit = defineEmits<{
 	(e: "type-change", newType: QuestionType): void;
 }>();
 
-const displayQuestionName = computed(() => {
-	return ensureTechnicalName(props.question.name, props.question.title, props.question.id, "frage");
-});
+// Gespeicherte Namen sind unveränderlich; nur bei neuen Fragen eine Vorschau aus dem Titel zeigen
+const displayQuestionName = computed(() =>
+	props.isSaved
+		? props.question.name
+		: ensureTechnicalName(props.question.name, props.question.title, props.question.id, "frage")
+);
 
 const { hasError, errorId } = useFieldErrors();
 

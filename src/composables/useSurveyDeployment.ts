@@ -8,7 +8,6 @@ import { readFieldVersion } from "@/domain/survey/surveyRow";
 import { measureFlowPayload, type FlowPayloadSize } from "@/services/flowPayloadBudget";
 
 export interface UseSurveyDeploymentOptions {
-	datatableId?: string;
 	surveyId: string;
 	existingRow: Ref<Record<string, any> | null>;
 }
@@ -42,7 +41,6 @@ function parseField(row: Record<string, any> | null, field: string): Survey | nu
 }
 
 export function useSurveyDeployment({
-	datatableId,
 	surveyId,
 	existingRow
 }: UseSurveyDeploymentOptions): UseSurveyDeploymentReturn {
@@ -71,7 +69,7 @@ export function useSurveyDeployment({
 	const isDraftTooLarge = computed(() => draftPayloadSize.value?.level === "exceeded");
 
 	async function refresh(): Promise<void> {
-		const res = await fetchSurveyDetail(datatableId, surveyId);
+		const res = await fetchSurveyDetail(surveyId);
 		existingRow.value = res.rawRow;
 	}
 
@@ -96,15 +94,15 @@ export function useSurveyDeployment({
 
 	// Übergeben wird jeweils die angezeigte Version: Hat sie sich inzwischen geändert, bricht der Service ab
 	async function deployToStage(): Promise<void> {
-		await run(() => deploySurvey(datatableId, surveyId, "Stage", readFieldVersion(existingRow.value?.Draft)));
+		await run(() => deploySurvey(surveyId, "Stage", readFieldVersion(existingRow.value?.Draft)));
 	}
 
 	async function deployToProd(): Promise<void> {
-		await run(() => deploySurvey(datatableId, surveyId, "Prod", readFieldVersion(existingRow.value?.Draft)));
+		await run(() => deploySurvey(surveyId, "Prod", readFieldVersion(existingRow.value?.Draft)));
 	}
 
 	async function rollback(): Promise<void> {
-		await run(() => rollbackSurvey(datatableId, surveyId, readFieldVersion(existingRow.value?.Prod)));
+		await run(() => rollbackSurvey(surveyId, readFieldVersion(existingRow.value?.Prod)));
 	}
 
 	return {

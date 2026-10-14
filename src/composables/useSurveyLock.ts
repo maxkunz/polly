@@ -7,19 +7,18 @@ import {
 	parseSurveyLock,
 	checkSurveyLockConflict,
 	acquireSurveyLock,
-	releaseSurveyLock,
-	type SurveyLockData
+	releaseSurveyLock
 } from "@/services/surveyService";
 
 export interface UseSurveyLockOptions {
-	datatableId?: string;
 	surveyId: string;
+	/** Rohzeile der Umfrage; wird nach Lock-Änderungen mit dem frischen Stand überschrieben */
 	existingRow: Ref<Record<string, any> | null>;
 	isDirty: Ref<boolean>;
 	isNew?: boolean;
 	// Read-only (fehlende Rolle polly_write): kein Lock nehmen, kein Konflikt-Dialog
 	readOnly?: Ref<boolean>;
-	onRowRefreshed?: (freshRow: Record<string, any>) => void;
+	/** Nutzer lehnt im Konfliktdialog ab, die Umfrage trotz fremdem Lock zu bearbeiten */
 	onBack?: () => void;
 }
 
@@ -30,8 +29,6 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 	const isLockedByMe = ref<boolean>(false);
 	const isConflictDismissed = ref<boolean>(false);
-	const isCheckingConflict = ref<boolean>(false);
-	const currentLockData = ref<SurveyLockData | null>(null);
 
 	async function getCurrentUsername(): Promise<string> {
 		if (appStore.currentUser?.name) {
@@ -74,11 +71,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	async function checkInitialConflict(): Promise<void> {
 		if (options.isNew || options.readOnly?.value) return;
 
-		isCheckingConflict.value = true;
 		try {
-			const rawLock = options.existingRow.value?.lock;
-			const lock = parseSurveyLock(rawLock);
-			currentLockData.value = lock;
+			const lock = parseSurveyLock(options.existingRow.value?.lock);
 
 			const username = await getCurrentUsername();
 			const conflict = checkSurveyLockConflict(lock, username);
@@ -105,33 +99,18 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 			}
 		} catch (err) {
 			console.warn("Failed to check survey lock conflict:", err);
-		} finally {
-			isCheckingConflict.value = false;
 		}
 	}
 
-	async function acquireLock(force = false): Promise<boolean> {
-		if (options.isNew) return true;
-		if (options.readOnly?.value) return false;
-		if (isLockedByMe.value && !force) return true;
+	async function acquireLock(): Promise<void> {
+		if (options.isNew || options.readOnly?.value || isLockedByMe.value) return;
 
 		try {
 			const username = await getCurrentUsername();
-			const updatedRow = await acquireSurveyLock(options.datatableId, options.surveyId, username);
-
-			if (updatedRow) {
-				options.existingRow.value = updatedRow;
-				currentLockData.value = parseSurveyLock(updatedRow.lock);
-				if (options.onRowRefreshed) {
-					options.onRowRefreshed(updatedRow);
-				}
-			}
-
+			options.existingRow.value = await acquireSurveyLock(options.surveyId, username);
 			isLockedByMe.value = true;
-			return true;
 		} catch (err) {
 			console.error("Failed to acquire survey lock:", err);
-			return false;
 		}
 	}
 
@@ -140,14 +119,9 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 
 		try {
 			const username = await getCurrentUsername();
-			const updatedRow = await releaseSurveyLock(options.datatableId, options.surveyId, username);
-
+			const updatedRow = await releaseSurveyLock(options.surveyId, username);
 			if (updatedRow) {
 				options.existingRow.value = updatedRow;
-				currentLockData.value = parseSurveyLock(updatedRow.lock);
-				if (options.onRowRefreshed) {
-					options.onRowRefreshed(updatedRow);
-				}
 			}
 		} catch (err) {
 			console.warn("Failed to release survey lock:", err);
@@ -200,13 +174,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	});
 
 	return {
-		isLockedByMe,
-		isConflictDismissed,
-		isCheckingConflict,
-		currentLockData,
-		acquireLock,
 		releaseLock,
-		markLockReleased,
-		checkInitialConflict
+		markLockReleased
 	};
 }

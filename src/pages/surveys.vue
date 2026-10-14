@@ -11,7 +11,7 @@ import { useAppStore } from "@/stores/appStore";
 import { useControlBarStore } from "@/stores/controlBarStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
-import { fetchSurveyDetail } from "@/services/surveyService";
+import { fetchSurveyDetail, type SurveyListItem } from "@/services/surveyService";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { createEmptySurvey } from "@/domain/survey/surveyTypes";
 import SurveyEditor from "@/components/survey/SurveyEditor.vue";
@@ -108,52 +108,45 @@ function handleBeforeUnload(e: BeforeUnloadEvent): void {
 	}
 }
 
-const isNewSurvey = computed(() => route.query.new === "1");
-const newSurveyDraft = ref<Survey | null>(null);
-
-const isCloneSurvey = computed(() => route.query.clone === "1");
-const cloneSurveyDraft = ref<Survey | null>(null);
+// Neue bzw. geklonte, noch nicht gespeicherte Umfrage (?new=1 / ?clone=1)
+const creationMode = computed<"new" | "clone" | null>(() => {
+	if (route.query.new === "1") return "new";
+	if (route.query.clone === "1") return "clone";
+	return null;
+});
+const creationDraft = ref<Survey | null>(null);
 
 async function handleCreateNew(): Promise<void> {
 	await app.refreshRoles();
 	if (!app.canWrite) return;
-	newSurveyDraft.value = createEmptySurvey();
+	creationDraft.value = createEmptySurvey();
 	router.push({ name: "surveys", query: { new: "1" } });
 }
 
 function handleClone(clonedSurvey: Survey): void {
 	if (!app.canWrite) return;
-	cloneSurveyDraft.value = clonedSurvey;
+	creationDraft.value = clonedSurvey;
 	router.push({ name: "surveys", query: { clone: "1" } });
 }
 
 watch(
-	isNewSurvey,
-	(newVal) => {
-		if (newVal && !newSurveyDraft.value) {
-			newSurveyDraft.value = createEmptySurvey();
-		} else if (!newVal) {
-			newSurveyDraft.value = null;
+	creationMode,
+	mode => {
+		if (!mode) {
+			creationDraft.value = null;
+		} else if (!creationDraft.value) {
+			// Ein Klon existiert nur im Speicher; ?clone=1 ohne Klon (z. B. nach Reload) führt zur Liste
+			if (mode === "new") creationDraft.value = createEmptySurvey();
+			else handleBackToList();
 		}
 	},
 	{ immediate: true }
 );
 
-watch(
-	isCloneSurvey,
-	(newVal) => {
-		if (newVal && !cloneSurveyDraft.value) {
-			handleBackToList();
-		} else if (!newVal) {
-			cloneSurveyDraft.value = null;
-		}
-	}
-);
-
 // Direktaufruf von ?new=1 / ?clone=1 ohne Rolle polly_write: zurück zur Liste.
 // Erst nach der Initialisierung prüfen, da die Rollen beim Login geladen werden.
 watch(
-	() => [isNewSurvey.value || isCloneSurvey.value, app.initialized, app.canWrite] as const,
+	() => [creationMode.value !== null, app.initialized, app.canWrite] as const,
 	([isCreating, initialized, canWrite]) => {
 		if (isCreating && initialized && !canWrite) {
 			handleBackToList();
@@ -162,19 +155,11 @@ watch(
 	{ immediate: true }
 );
 
-async function handleNewSurveySaved(updated: Survey): Promise<void> {
+async function handleCreatedSurveySaved(updated: Survey): Promise<void> {
 	isCurrentSurveyDirty.value = false;
 	isQueueMappingDirty.value = false;
 	await loadSurveysList();
-	newSurveyDraft.value = null;
-	router.push({ name: "surveys", query: { id: updated.id } });
-}
-
-async function handleCloneSurveySaved(updated: Survey): Promise<void> {
-	isCurrentSurveyDirty.value = false;
-	isQueueMappingDirty.value = false;
-	await loadSurveysList();
-	cloneSurveyDraft.value = null;
+	creationDraft.value = null;
 	router.push({ name: "surveys", query: { id: updated.id } });
 }
 
@@ -187,10 +172,8 @@ const searchQuery = computed(() =>
 const filteredSurveys = computed(() => {
 	const q = searchQuery.value;
 	if (!q) return surveysList.value;
-	return surveysList.value.filter((s: any) => {
-		const title = (s.title || s.name || "").toLowerCase();
-		const id = String(s.id || s.key || "").toLowerCase();
-		return title.includes(q) || id.includes(q);
+	return surveysList.value.filter(s => {
+		return (s.title ?? "").toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
 	});
 });
 
@@ -207,19 +190,20 @@ const isReportView = computed(
 	() => route.query.report === "1" && !!selectedSurveyId.value
 );
 
-const selectedSurvey = computed(() => {
-	if (!selectedSurveyId.value || !surveysList.value.length) return null;
-	return (
-		surveysList.value.find(
-			(s: any, index: number) => String(s.id ?? s.key ?? index) === selectedSurveyId.value
-		) ?? null
-	);
-});
+const selectedSurvey = computed(
+	() => surveysList.value.find(s => s.id === selectedSurveyId.value) ?? null
+);
 
-function selectSurvey(survey: any, index: number): void {
-	const id = String(survey.id ?? survey.key ?? index);
-	router.push({ name: "surveys", query: { id } });
+function selectSurvey(survey: SurveyListItem): void {
+	router.push({ name: "surveys", query: { id: survey.id } });
 }
+
+const pageTitle = computed(() => {
+	if (creationMode.value === "new") return t("surveys.newSurveyTitle");
+	if (creationMode.value === "clone") return t("surveys.cloneSurveyTitle");
+	const survey = selectedSurveyDetail.value ?? selectedSurvey.value;
+	return survey?.title || moduleMeta.value?.title || "";
+});
 
 function handleBackToList(): void {
 	router.push({ name: "surveys" });
@@ -233,13 +217,8 @@ function handleReport(): void {
 	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, report: "1" } });
 }
 
-function handleReportBack(): void {
-	if (selectedSurveyId.value) {
-		router.push({ name: "surveys", query: { id: selectedSurveyId.value } });
-	}
-}
-
-function handleDeployBack(): void {
+/** Aus Deploy- bzw. Report-Ansicht zurück in den Editor */
+function handleBackToEditor(): void {
 	if (selectedSurveyId.value) {
 		router.push({ name: "surveys", query: { id: selectedSurveyId.value } });
 	}
@@ -254,21 +233,11 @@ watch(
 	}
 );
 
-function handleSurveySaved(updated: Survey, freshRow?: Record<string, any>): void {
+// Rohzeile (rawRowData, per v-model) und Umfrageliste aktualisieren Editor bzw. Service selbst
+function handleSurveySaved(updated: Survey): void {
 	isCurrentSurveyDirty.value = false;
 	isQueueMappingDirty.value = false;
 	selectedSurveyDetail.value = updated;
-	if (freshRow) {
-		rawRowData.value = freshRow;
-	}
-	// Update in survey list if present
-	const found = surveysList.value.find(
-		(s: any) => String(s.id ?? s.key) === updated.id
-	);
-	if (found) {
-		found.title = updated.title;
-		found.name = updated.name;
-	}
 }
 
 async function handleSurveyDeleted(): Promise<void> {
@@ -291,7 +260,7 @@ async function loadSurveyDetail(surveyId: string): Promise<void> {
 	rawRowData.value = null;
 
 	try {
-		const res = await fetchSurveyDetail(undefined, surveyId);
+		const res = await fetchSurveyDetail(surveyId);
 		selectedSurveyDetail.value = res.survey;
 		rawRowData.value = res.rawRow;
 	} catch (e: any) {
@@ -320,11 +289,11 @@ usePageControlBar(
 	"surveys",
 	() => ({
 		search: {
-			enabled: !selectedSurveyId.value && !isNewSurvey.value && !isCloneSurvey.value,
+			enabled: !selectedSurveyId.value && !creationMode.value,
 			placeholder: t("surveys.searchPlaceholder"),
 			query: ""
 		},
-		actions: (selectedSurveyId.value || isNewSurvey.value || isCloneSurvey.value)
+		actions: (selectedSurveyId.value || creationMode.value)
 			? [
 					{
 						id: "surveys.back",
@@ -352,7 +321,7 @@ usePageControlBar(
 					}
 			  ]
 	}),
-	[() => selectedSurveyId.value, () => isNewSurvey.value, () => isCloneSurvey.value, () => locale.value]
+	[() => selectedSurveyId.value, () => creationMode.value, () => locale.value]
 );
 
 async function loadSurveysList(): Promise<void> {
@@ -384,7 +353,7 @@ onBeforeUnmount(() => {
 		<div class="mb-6">
 			<PageHeader
 				v-if="moduleMeta"
-				:title="isNewSurvey ? t('surveys.newSurveyTitle') : (isCloneSurvey ? t('surveys.cloneSurveyTitle') : (selectedSurveyDetail ? (selectedSurveyDetail.title || selectedSurveyDetail.name) : (selectedSurvey ? (selectedSurvey.title || selectedSurvey.name || moduleMeta.title) : moduleMeta.title)))"
+				:title="pageTitle"
 				:iconKey="moduleMeta.key"
 				:color="moduleMeta.color"
 				titleTag="h1"
@@ -392,30 +361,16 @@ onBeforeUnmount(() => {
 			/>
 		</div>
 
-		<!-- New Survey Draft Editor -->
-		<div v-if="isNewSurvey && newSurveyDraft">
+		<!-- Neue bzw. geklonte Umfrage (noch ohne Data-Table-Zeile) -->
+		<div v-if="creationMode && creationDraft">
 			<SurveyEditor
-				:survey="newSurveyDraft"
-				:surveyId="newSurveyDraft.id"
-				:existingRow="undefined"
+				:key="creationDraft.id"
+				:survey="creationDraft"
+				:surveyId="creationDraft.id"
 				:isNew="true"
 				:disabled="!app.canWrite"
 				v-model:isDirty="isCurrentSurveyDirty"
-				@saved="handleNewSurveySaved"
-				@back="handleBackToList"
-			/>
-		</div>
-
-		<!-- Cloned Survey Draft Editor -->
-		<div v-else-if="isCloneSurvey && cloneSurveyDraft">
-			<SurveyEditor
-				:survey="cloneSurveyDraft"
-				:surveyId="cloneSurveyDraft.id"
-				:existingRow="undefined"
-				:isNew="true"
-				:disabled="!app.canWrite"
-				v-model:isDirty="isCurrentSurveyDirty"
-				@saved="handleCloneSurveySaved"
+				@saved="handleCreatedSurveySaved"
 				@back="handleBackToList"
 			/>
 		</div>
@@ -456,7 +411,7 @@ onBeforeUnmount(() => {
 				v-else-if="selectedSurveyDetail && !isDeployView && !isReportView"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId"
-				:existingRow="rawRowData ?? undefined"
+				v-model:existingRow="rawRowData"
 				:disabled="!app.canWrite"
 				v-model:isDirty="isCurrentSurveyDirty"
 				@saved="handleSurveySaved"
@@ -472,9 +427,9 @@ onBeforeUnmount(() => {
 				v-else-if="isDeployView && selectedSurveyDetail && rawRowData"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId!"
-				:existingRow="rawRowData"
+				v-model:existingRow="rawRowData"
 				v-model:isDirty="isQueueMappingDirty"
-				@back="handleDeployBack"
+				@back="handleBackToEditor"
 			/>
 
 			<!-- Report View -->
@@ -482,7 +437,7 @@ onBeforeUnmount(() => {
 				v-else-if="isReportView && selectedSurveyDetail"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId!"
-				@back="handleReportBack"
+				@back="handleBackToEditor"
 			/>
 
 			<!-- Empty Draft fallback -->
@@ -543,22 +498,22 @@ onBeforeUnmount(() => {
 					<div v-else-if="filteredSurveys.length > 0">
 						<ul class="divide-y divide-[var(--p-content-border-color)]" role="list">
 							<li
-								v-for="(survey, index) in filteredSurveys"
-								:key="survey.id || survey.key || index"
+								v-for="survey in filteredSurveys"
+								:key="survey.id"
 								class="transition hover:bg-[var(--p-surface-50)] rounded-xl"
 							>
 								<button
 									type="button"
 									class="w-full text-left py-4 px-4 flex items-center justify-between gap-4 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--p-primary-color)] rounded-xl"
-									:aria-label="t('surveys.list.openAriaLabel', { title: survey.title || survey.name || t('surveys.list.unnamedSurvey') })"
-									@click="selectSurvey(survey, index)"
+									:aria-label="t('surveys.list.openAriaLabel', { title: survey.title || t('surveys.list.unnamedSurvey') })"
+									@click="selectSurvey(survey)"
 								>
 									<div class="space-y-1 min-w-0">
 										<div class="font-semibold text-sm text-[var(--p-text-color)] truncate">
-											{{ survey.title || survey.name || t('surveys.list.unnamedSurvey') }}
+											{{ survey.title || t('surveys.list.unnamedSurvey') }}
 										</div>
 										<div class="text-xs text-[var(--p-text-muted-color)] flex items-center gap-3">
-											<span>ID: <code class="font-mono">{{ String(survey.id || survey.key || index) }}</code></span>
+											<span>ID: <code class="font-mono">{{ survey.id }}</code></span>
 										</div>
 									</div>
 									<div class="flex items-center gap-2 text-[var(--p-text-muted-color)] shrink-0">

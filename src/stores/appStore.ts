@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import platformClient from "purecloud-platform-client-v2";
 import * as genesysHelper from "@/services/genesys_helper";
 import { findDataTableByName } from "@/services/genesys/dataTable";
-import { readSurveyList } from "@/services/surveyService";
+import { readSurveyList, type SurveyListItem } from "@/services/surveyService";
 import { getGenesysRegion } from "@/services/genesys/region";
 import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
@@ -48,7 +48,7 @@ export const useAppStore = defineStore("app", {
 		rolesLoadedAt: 0,
 
 		domain: new Domain(),
-		surveys: [] as any[],
+		surveys: [] as SurveyListItem[],
 
 		dropdowns: {} as Record<string, { selected: any }>,
 
