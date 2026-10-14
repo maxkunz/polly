@@ -238,6 +238,7 @@ export const fr: MessageSchema = {
 		fieldsetAriaLabel: "Question de suivi {number}",
 		delete: "Supprimer",
 		deleteAriaLabel: "Supprimer la question de suivi {number}",
+		removeNested: "Supprimer les questions de suivi imbriquées ({count})",
 		deleteConfirm: {
 			header: "Supprimer la question de suivi",
 			message: "Voulez-vous vraiment supprimer cette question de suivi ?",
@@ -310,6 +311,7 @@ export const fr: MessageSchema = {
 		choiceOptionDuplicate: "L'option {number} recoupe l'option {otherNumber} (même libellé ou synonyme).",
 		followUpMissing: "La question de suivi est manquante.",
 		followUpsNotAllowed: "Les questions de type commentaire ne peuvent pas avoir de questions de suivi. Veuillez supprimer les questions de suivi ou choisir un autre type de question.",
+		followUpsTooDeep: "Les questions de suivi ne peuvent pas avoir leurs propres questions de suivi. Veuillez supprimer les questions de suivi imbriquées.",
 		followUpValueRequired: "Veuillez indiquer une valeur valide pour la condition.",
 		followUpOperatorDuplicate: "Le comparateur \"{operator}\" est déjà utilisé par la question de suivi {number}. Chaque comparateur ne peut être utilisé qu'une seule fois.",
 		followUpValueDuplicate: "Cette valeur est déjà utilisée par la question de suivi {number}. Chaque valeur de réponse possible ne peut avoir qu'une seule question de suivi.",
@@ -318,6 +320,24 @@ export const fr: MessageSchema = {
 		surveyMinQuestions: "Une enquête doit contenir au moins 1 question.",
 		surveyMaxQuestions: "Une enquête peut contenir au maximum {max} questions (questions de suivi comprises). Actuellement : {count}.",
 		ttsTextTooLong: "« {field} » est trop long ({length} sur {max} caractères maximum). Les textes lus par synthèse vocale ne doivent pas dépasser {max} caractères. Veuillez raccourcir le texte."
+	},
+
+	translator: {
+		yesNoInvalidValue: "Valeur de condition invalide pour le type de question yes_no : {value}",
+		equalsOnly: "Le type de question {type} n'autorise que l'opérateur \"equals\".",
+		duplicateYesNo: "Plusieurs questions de suivi pour la condition \"{value}\".",
+		choiceOptionsMissing: "Le type de question choice nécessite des options de réponse (options.labels).",
+		unknownLabelId: "Option de réponse inconnue \"{labelId}\" dans une condition de suivi.",
+		duplicateChoice: "Plusieurs questions de suivi pour la même option de réponse \"{labelId}\".",
+		ratingOptionsMissing: "Le type de question rating nécessite une échelle (options.min_value/max_value).",
+		duplicateOperator: "L'opérateur \"{operator}\" est utilisé plusieurs fois dans les questions de suivi.",
+		valueNotNumeric: "La valeur de condition \"{value}\" n'est pas un nombre.",
+		commentNoFollowUps: "Le type de question comment ne peut pas avoir de questions de suivi.",
+		unknownType: "Type de question inconnu \"{type}\".",
+		noQuestions: "L'enquête ne contient aucune question.",
+		emptyDraft: "Le brouillon est vide, le déploiement a été annulé.",
+		invalidJson: "Le brouillon n'a pas pu être lu en JSON : {error}",
+		questionContext: "{message} (question : {question})"
 	},
 
 	deployment: {

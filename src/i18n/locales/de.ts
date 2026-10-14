@@ -236,6 +236,7 @@ export const de = {
 		fieldsetAriaLabel: "Folgefrage {number}",
 		delete: "Löschen",
 		deleteAriaLabel: "Folgefrage {number} löschen",
+		removeNested: "Verschachtelte Folgefragen entfernen ({count})",
 		deleteConfirm: {
 			header: "Folgefrage löschen",
 			message: "Möchten Sie diese Folgefrage wirklich entfernen?",
@@ -308,6 +309,7 @@ export const de = {
 		choiceOptionDuplicate: "Option {number} überschneidet sich mit Option {otherNumber} (gleiches Label oder Synonym).",
 		followUpMissing: "Folgefrage fehlt.",
 		followUpsNotAllowed: "Fragen vom Typ Kommentar können keine Folgefragen haben. Bitte die Folgefragen entfernen oder einen anderen Fragetyp wählen.",
+		followUpsTooDeep: "Folgefragen dürfen keine eigenen Folgefragen haben. Bitte die verschachtelten Folgefragen entfernen.",
 		followUpValueRequired: "Bitte einen gültigen Wert für die Bedingung angeben.",
 		followUpOperatorDuplicate: "Der Komparator \"{operator}\" wird bereits von Folgefrage {number} verwendet. Jeder Komparator darf nur einmal verwendet werden.",
 		followUpValueDuplicate: "Dieser Wert wird bereits von Folgefrage {number} verwendet. Jeder mögliche Antwortwert darf nur eine Folgefrage haben.",
@@ -316,6 +318,24 @@ export const de = {
 		surveyMinQuestions: "Eine Umfrage muss mindestens 1 Frage enthalten.",
 		surveyMaxQuestions: "Eine Umfrage darf maximal {max} Fragen enthalten (inkl. Folgefragen). Aktuell: {count}.",
 		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text."
+	},
+
+	translator: {
+		yesNoInvalidValue: "Ungültiger Bedingungswert für Fragetyp yes_no: {value}",
+		equalsOnly: "Fragetyp {type} erlaubt nur den Operator \"equals\".",
+		duplicateYesNo: "Mehrere Folgefragen für die Bedingung \"{value}\".",
+		choiceOptionsMissing: "Fragetyp choice benötigt Auswahloptionen (options.labels).",
+		unknownLabelId: "Unbekannte Auswahloption \"{labelId}\" in einer Folgefrage-Bedingung.",
+		duplicateChoice: "Mehrere Folgefragen für dieselbe Auswahloption \"{labelId}\".",
+		ratingOptionsMissing: "Fragetyp rating benötigt eine Skala (options.min_value/max_value).",
+		duplicateOperator: "Operator \"{operator}\" ist bei den Folgefragen mehrfach vorhanden.",
+		valueNotNumeric: "Bedingungswert \"{value}\" ist keine Zahl.",
+		commentNoFollowUps: "Fragetyp comment darf keine Folgefragen haben.",
+		unknownType: "Unbekannter Fragetyp \"{type}\".",
+		noQuestions: "Die Umfrage enthält keine Fragen.",
+		emptyDraft: "Der Entwurf ist leer, das Deployment wurde abgebrochen.",
+		invalidJson: "Der Entwurf konnte nicht als JSON gelesen werden: {error}",
+		questionContext: "{message} (Frage: {question})"
 	},
 
 	deployment: {

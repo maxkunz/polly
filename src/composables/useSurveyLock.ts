@@ -3,12 +3,8 @@ import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/appStore";
 import { currentLocaleTag } from "@/i18n";
-import {
-	parseSurveyLock,
-	checkSurveyLockConflict,
-	acquireSurveyLock,
-	releaseSurveyLock
-} from "@/services/surveyService";
+import { parseSurveyLock, checkSurveyLockConflict } from "@/domain/survey/surveyLock";
+import { acquireSurveyLock, releaseSurveyLock } from "@/services/surveyService";
 
 export interface UseSurveyLockOptions {
 	surveyId: string;

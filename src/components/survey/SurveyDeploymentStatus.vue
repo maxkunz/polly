@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import Tag from "primevue/tag";
-import type { Survey } from "@/domain/survey/surveyTypes";
+import type { FlowSurvey } from "@/services/surveyFlowTranslator";
 import { currentLocaleTag } from "@/i18n";
 
 const props = withDefaults(
 	defineProps<{
 		label: string;
-		survey: Survey | null;
+		survey: FlowSurvey | null;
 		severity?: "info" | "success" | "warn" | "secondary";
 	}>(),
 	{ severity: "secondary" }

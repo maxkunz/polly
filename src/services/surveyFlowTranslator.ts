@@ -6,6 +6,7 @@ import type {
 	SurveyQuestion
 } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions, isRatingOptions } from "@/domain/survey/surveyTypes";
+import { i18n } from "@/i18n";
 
 /**
  * Wandelt den Baum aus Haupt- und Folgefragen des Editor-Formats (siehe
@@ -14,10 +15,16 @@ import { isChoiceOptions, isRatingOptions } from "@/domain/survey/surveyTypes";
  * `documentation/survey_translator_for_flow.md`).
  */
 
+/**
+ * Fehler beim Übersetzen; die Meldung erscheint im UI (Deploy-Ansicht). `key` ist ein Schlüssel
+ * unter `translator.*` in den Sprachdateien; mit `question` wird die betroffene Frage angehängt.
+ */
 export class SurveyFlowTranslationError extends Error {
-	constructor(message: string, questionId?: string, questionName?: string) {
-		const context = questionName ?? questionId;
-		super(context ? `${message} (Frage: ${context})` : message);
+	constructor(key: string, params: Record<string, unknown> = {}, question?: SurveyQuestion) {
+		const { t } = i18n.global;
+		const message = t(`translator.${key}`, params);
+		const context = question?.name ?? question?.id;
+		super(context ? t("translator.questionContext", { message, question: context }) : message);
 		this.name = "SurveyFlowTranslationError";
 	}
 }
@@ -130,18 +137,18 @@ function toBoolean(value: boolean | string | number, question: SurveyQuestion): 
 		return false;
 	}
 	throw new SurveyFlowTranslationError(
-		`Ungültiger Bedingungswert für Fragetyp yes_no: ${JSON.stringify(value)}`,
-		question.id,
-		question.name
+		"yesNoInvalidValue",
+		{ value: JSON.stringify(value) },
+		question
 	);
 }
 
 function requireEqualsOperator(question: SurveyQuestion, operator: ConditionOperator): void {
 	if (operator !== "equals") {
 		throw new SurveyFlowTranslationError(
-			`Fragetyp ${question.type} erlaubt nur den Operator "equals"`,
-			question.id,
-			question.name
+			"equalsOnly",
+			{ type: question.type },
+			question
 		);
 	}
 }
@@ -162,9 +169,9 @@ function buildYesNoOptions(
 		if (isYes) {
 			if (yesSet) {
 				throw new SurveyFlowTranslationError(
-					`Mehrfache Folgefrage für die Bedingung "true"`,
-					question.id,
-					question.name
+					"duplicateYesNo",
+					{ value: "true" },
+					question
 				);
 			}
 			yesNextQuestionId = followUp.question.id;
@@ -172,9 +179,9 @@ function buildYesNoOptions(
 		} else {
 			if (noSet) {
 				throw new SurveyFlowTranslationError(
-					`Mehrfache Folgefrage für die Bedingung "false"`,
-					question.id,
-					question.name
+					"duplicateYesNo",
+					{ value: "false" },
+					question
 				);
 			}
 			noNextQuestionId = followUp.question.id;
@@ -194,9 +201,9 @@ function buildChoiceFields(
 ): { labels: string[]; synonyms: string[]; next_question_ids: (string | null)[] } {
 	if (!isChoiceOptions(question.options)) {
 		throw new SurveyFlowTranslationError(
-			`Fragetyp choice benötigt options.labels`,
-			question.id,
-			question.name
+			"choiceOptionsMissing",
+			{},
+			question
 		);
 	}
 
@@ -213,16 +220,16 @@ function buildChoiceFields(
 
 		if (index === -1) {
 			throw new SurveyFlowTranslationError(
-				`Unbekannte Label-ID "${labelId}" in einer Folgefrage-Bedingung`,
-				question.id,
-				question.name
+				"unknownLabelId",
+				{ labelId },
+				question
 			);
 		}
 		if (usedLabelIds.has(labelId)) {
 			throw new SurveyFlowTranslationError(
-				`Mehrfache Folgefrage für dieselbe Auswahlmöglichkeit "${labelId}"`,
-				question.id,
-				question.name
+				"duplicateChoice",
+				{ labelId },
+				question
 			);
 		}
 		usedLabelIds.add(labelId);
@@ -235,9 +242,9 @@ function buildChoiceFields(
 function buildRatingOptions(question: SurveyQuestion): FlowRatingQuestion["options"] {
 	if (!isRatingOptions(question.options)) {
 		throw new SurveyFlowTranslationError(
-			`Fragetyp rating benötigt options.min_value/max_value`,
-			question.id,
-			question.name
+			"ratingOptionsMissing",
+			{},
+			question
 		);
 	}
 
@@ -260,18 +267,18 @@ function buildConditionalNextQuestion(
 		const operator = followUp.condition.operator;
 		if (byOperator.has(operator)) {
 			throw new SurveyFlowTranslationError(
-				`Operator "${operator}" ist bei den Folgefragen mehrfach vorhanden`,
-				question.id,
-				question.name
+				"duplicateOperator",
+				{ operator },
+				question
 			);
 		}
 
 		const numericValue = Number(followUp.condition.value);
 		if (Number.isNaN(numericValue)) {
 			throw new SurveyFlowTranslationError(
-				`Bedingungswert "${followUp.condition.value}" ist nicht numerisch`,
-				question.id,
-				question.name
+				"valueNotNumeric",
+				{ value: String(followUp.condition.value) },
+				question
 			);
 		}
 
@@ -316,9 +323,9 @@ function flattenQuestion(
 		case "comment": {
 			if (followUps.length > 0) {
 				throw new SurveyFlowTranslationError(
-					`Fragetyp comment darf keine Folgefragen haben`,
-					question.id,
-					question.name
+					"commentNoFollowUps",
+					{},
+					question
 				);
 			}
 			out.push({ ...base, type: "comment" });
@@ -347,9 +354,9 @@ function flattenQuestion(
 		}
 		default: {
 			throw new SurveyFlowTranslationError(
-				`Unbekannter Fragetyp "${question.type}"`,
-				question.id,
-				question.name
+				"unknownType",
+				{ type: question.type },
+				question
 			);
 		}
 	}
@@ -365,7 +372,7 @@ function flattenQuestion(
  */
 export function translateSurveyObject(survey: Survey): FlowSurvey {
 	if (!survey || !Array.isArray(survey.questions) || survey.questions.length === 0) {
-		throw new SurveyFlowTranslationError("Survey enthält keine Fragen");
+		throw new SurveyFlowTranslationError("noQuestions");
 	}
 
 	const mainQuestions = survey.questions;
@@ -408,7 +415,7 @@ export function translateSurveyForFlow(
 	draft: Survey | string | Record<string, any>
 ): string {
 	if (!draft) {
-		throw new SurveyFlowTranslationError("Survey-Entwurf ist leer, Deployment abgebrochen");
+		throw new SurveyFlowTranslationError("emptyDraft");
 	}
 
 	let surveyObj: Survey;
@@ -416,9 +423,7 @@ export function translateSurveyForFlow(
 		try {
 			surveyObj = JSON.parse(draft);
 		} catch (error) {
-			throw new SurveyFlowTranslationError(
-				`Survey-Entwurf konnte nicht als JSON gelesen werden: ${(error as Error).message}`
-			);
+			throw new SurveyFlowTranslationError("invalidJson", { error: (error as Error).message });
 		}
 	} else {
 		surveyObj = draft as Survey;

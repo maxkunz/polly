@@ -239,6 +239,7 @@ export const tlh: MessageSchema = {
 		fieldsetAriaLabel: "tlha' yu' {number}",
 		delete: "yIQaw'",
 		deleteAriaLabel: "tlha' yu' {number} yIQaw'",
+		removeNested: "tlha' yu'mey yIteq ({count})",
 		deleteConfirm: {
 			header: "tlha' yu' yIQaw'",
 			message: "tlha' yu' vam DateqneS'a'?",
@@ -311,6 +312,7 @@ export const tlh: MessageSchema = {
 		choiceOptionDuplicate: "wIv {number} wIv {otherNumber} je rap (per pagh rap mu' rap).",
 		followUpMissing: "tlha' yu' tu'lu'be'.",
 		followUpsNotAllowed: "QIn yu' tlha' yu'mey ghajlaHbe'. tlha' yu'mey yIteq pagh latlh yu' Segh yIwIv.",
+		followUpsTooDeep: "tlha' yu'mey tlha' yu'mey ghajlaHbe'. tlha' yu'mey yIteq.",
 		followUpValueRequired: "chutvaD mI' lugh yInob.",
 		followUpOperatorDuplicate: "ruchwI' „{operator}“ lo'pu' tlha' yu' {number}. wa'logh neH ruchwI' lo'lu'.",
 		followUpValueDuplicate: "mI' vam lo'pu' tlha' yu' {number}. jang mI' wa' tlha' yu' wa' neH ghaj.",
@@ -319,6 +321,24 @@ export const tlh: MessageSchema = {
 		surveyMinQuestions: "yu meq 1 yu' rav ghajnIS.",
 		surveyMaxQuestions: "yu'ghItlh {max} yu' law'qu' ghajlaH (tlha' yu'mey tu'lu'). DaH: {count}.",
 		ttsTextTooLong: "„{field}“ tIq law'qu' ({length} / {max} ngutlh law'qu'). TTS ghItlh {max} ngutlh law'qu' ghajlaH. ghItlh yIHabmoH."
+	},
+
+	translator: {
+		yesNoInvalidValue: "yes_no yu' Segh mab mIw lughbe': {value}",
+		equalsOnly: "{type} yu' Segh \"equals\" neH chaw'.",
+		duplicateYesNo: "\"{value}\" mab tlha' yu'mey law' tu'lu'.",
+		choiceOptionsMissing: "choice yu' Segh wIvmey (options.labels) poQ.",
+		unknownLabelId: "tlha' yu' mab wIv Sovbe'lu'bogh \"{labelId}\" tu'lu'.",
+		duplicateChoice: "wIv \"{labelId}\" tlha' yu'mey law' tu'lu'.",
+		ratingOptionsMissing: "rating yu' Segh Hutlh (options.min_value/max_value) poQ.",
+		duplicateOperator: "\"{operator}\" ra'wI' tlha' yu'mey law' lo'lu'.",
+		valueNotNumeric: "mab mIw \"{value}\" mI' ghaHbe'.",
+		commentNoFollowUps: "comment yu' Segh tlha' yu'mey ghajlaHbe'.",
+		unknownType: "yu' Segh Sovbe'lu'bogh \"{type}\".",
+		noQuestions: "yu'ghItlh yu'mey ghajbe'.",
+		emptyDraft: "Draft chIm, Deployment mev.",
+		invalidJson: "Draft JSON laDlaHbe'lu': {error}",
+		questionContext: "{message} (yu': {question})"
 	},
 
 	deployment: {

@@ -1,7 +1,6 @@
 import { ref, computed } from "vue";
-import type { Ref, ComputedRef } from "vue";
 import type { QueueMappingData, QueueMappingEntry, QueueConflict } from "@/domain/queueMapping/queueMappingTypes";
-import { fetchQueueMapping, saveQueueMapping } from "@/services/surveyService";
+import { fetchQueueMapping, saveQueueMapping } from "@/services/queueMappingService";
 import { i18n } from "@/i18n";
 import { useAppStore } from "@/stores/appStore";
 
@@ -9,29 +8,7 @@ export interface UseQueueMappingOptions {
 	surveyId: string;
 }
 
-export interface UseQueueMappingReturn {
-	isLoading: Ref<boolean>;
-	isSaving: Ref<boolean>;
-	loadError: Ref<string | null>;
-	saveError: Ref<string | null>;
-
-	queueNamesText: Ref<string>;
-	deliveryRate: Ref<number>;
-
-	allMappings: Ref<QueueMappingData>;
-	surveyMappings: ComputedRef<QueueMappingEntry[]>;
-	parsedQueues: ComputedRef<string[]>;
-	isDirty: ComputedRef<boolean>;
-	activeConflicts: ComputedRef<QueueConflict[]>;
-
-	load(): Promise<void>;
-	executeSave(): Promise<boolean>;
-	resetForm(): void;
-}
-
-export function useQueueMapping({
-	surveyId
-}: UseQueueMappingOptions): UseQueueMappingReturn {
+export function useQueueMapping({ surveyId }: UseQueueMappingOptions) {
 	const isLoading = ref<boolean>(false);
 	const isSaving = ref<boolean>(false);
 	const loadError = ref<string | null>(null);
@@ -158,7 +135,6 @@ export function useQueueMapping({
 		saveError,
 		queueNamesText,
 		deliveryRate,
-		allMappings,
 		surveyMappings,
 		parsedQueues,
 		isDirty,

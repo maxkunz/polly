@@ -1,4 +1,4 @@
-import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow, listAllDataTableRows } from "@/services/genesys/dataTable";
+import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { collectTechnicalNames, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import {
@@ -8,9 +8,8 @@ import {
 	surveyRowKey,
 	type SurveyRowPatch
 } from "@/domain/survey/surveyRow";
-import type { QueueMappingData, QueueMappingEntry } from "@/domain/queueMapping/queueMappingTypes";
 import { useAppStore } from "@/stores/appStore";
-import { SURVEY_LOCK_TTL_MINUTES } from "@/constants/surveyConstants";
+import { isSurveyLockStale, parseSurveyLock, type SurveyLockData } from "@/domain/survey/surveyLock";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
 import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
 import { getErrorStatus } from "./genesys/retry";
@@ -19,10 +18,6 @@ import { i18n, currentLocaleTag } from "@/i18n";
 /** ID der Umfrage-Data-Table (aus meta.setup bzw. der Start-URL) */
 export async function surveyTableId(): Promise<string> {
 	return await useAppStore().ensureDataTableId();
-}
-
-async function resolveMappingDataTableId(): Promise<string> {
-	return await useAppStore().ensureMappingDataTableId();
 }
 
 export interface LoadSurveyResult {
@@ -287,154 +282,6 @@ export async function deleteSurvey(surveyId: string): Promise<void> {
 
 	const updatedList = currentList.filter(item => item.id !== surveyId);
 	await writeSurveyList(resolvedTableId, updatedList, listRow);
-}
-
-/**
- * Wandelt eine rohe Zeile der Mapping-Tabelle (<projectTag>_polly_mapping) in einen
- * QueueMappingEntry um. Die Key-Spalte trägt zwar den Titel "QueueName", ihr JSON-Property-
- * Name ist aber wie bei jeder Data-Table-Zeile schlicht "key".
- */
-function rowToQueueMappingEntry(row: Record<string, any>): QueueMappingEntry {
-	return {
-		queueName: String(row.key ?? row.queueName ?? ""),
-		surveyId: String(row.SurveyId ?? row.surveyId ?? ""),
-		deliveryRate: Number(row.DeliveryRate ?? row.deliveryRate ?? 0)
-	};
-}
-
-export async function fetchQueueMapping(): Promise<QueueMappingData> {
-	const resolvedTableId = await resolveMappingDataTableId();
-	try {
-		const rows = await listAllDataTableRows(resolvedTableId);
-		return rows.map(rowToQueueMappingEntry);
-	} catch (e) {
-		console.warn("Could not load queue mapping rows from data table:", e);
-		return [];
-	}
-}
-
-export async function saveQueueMapping(
-	surveyId: string,
-	queues: string[],
-	deliveryRate: number
-): Promise<QueueMappingData> {
-	const resolvedTableId = await resolveMappingDataTableId();
-
-	// Clean inputs: unique, trimmed non-empty queues
-	const cleanedQueues = Array.from(
-		new Set(
-			queues
-				.map(q => q.trim())
-				.filter(q => q.length > 0)
-		)
-	);
-	const cleanedQueuesLower = new Set(cleanedQueues.map(q => q.toLowerCase()));
-
-	const safeDeliveryRate = Math.max(1, Math.min(100, Math.round(deliveryRate)));
-
-	const currentRows = await listAllDataTableRows(resolvedTableId);
-
-	// 1. Zeilen dieser Umfrage löschen, deren Queue nicht mehr in der neuen Liste steht
-	for (const row of currentRows) {
-		const entry = rowToQueueMappingEntry(row);
-		if (entry.surveyId === surveyId && !cleanedQueuesLower.has(entry.queueName.toLowerCase())) {
-			await deleteDataTableRow(resolvedTableId, entry.queueName);
-		}
-	}
-
-	// 2. Für jede gewünschte Queue: bestehende Zeile übernehmen (ggf. mit korrigierter
-	//    Schreibweise neu anlegen) oder neu erzeugen
-	for (const queueName of cleanedQueues) {
-		const existingRow = currentRows.find(
-			row => rowToQueueMappingEntry(row).queueName.toLowerCase() === queueName.toLowerCase()
-		);
-
-		if (existingRow) {
-			const existingKey = String(existingRow.key ?? existingRow.queueName ?? "");
-			if (existingKey === queueName) {
-				await updateDataTableRow(resolvedTableId, queueName, {
-					SurveyId: surveyId,
-					DeliveryRate: safeDeliveryRate
-				});
-			} else {
-				// Schreibweise unterscheidet sich vom Key: alte Zeile ersetzen statt umbenennen
-				await deleteDataTableRow(resolvedTableId, existingKey);
-				await addDataTableRow(resolvedTableId, {
-					key: queueName,
-					SurveyId: surveyId,
-					DeliveryRate: safeDeliveryRate
-				});
-			}
-		} else {
-			await addDataTableRow(resolvedTableId, {
-				key: queueName,
-				SurveyId: surveyId,
-				DeliveryRate: safeDeliveryRate
-			});
-		}
-	}
-
-	return await fetchQueueMapping();
-}
-
-export interface SurveyLockData {
-	locked_by: string;
-	locked_since: string;
-}
-
-export function parseSurveyLock(lockRaw: unknown): SurveyLockData {
-	const defaultLock: SurveyLockData = { locked_by: "", locked_since: "" };
-	if (!lockRaw) return defaultLock;
-	if (typeof lockRaw === "object") {
-		return {
-			locked_by: String((lockRaw as any).locked_by ?? "").trim(),
-			locked_since: String((lockRaw as any).locked_since ?? "").trim()
-		};
-	}
-	if (typeof lockRaw === "string") {
-		try {
-			const parsed = JSON.parse(lockRaw);
-			return {
-				locked_by: String(parsed?.locked_by ?? "").trim(),
-				locked_since: String(parsed?.locked_since ?? "").trim()
-			};
-		} catch {
-			return defaultLock;
-		}
-	}
-	return defaultLock;
-}
-
-export function isSurveyLockStale(
-	lock: SurveyLockData,
-	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES
-): boolean {
-	if (!lock.locked_by || !lock.locked_since) {
-		return true;
-	}
-	const lockedAt = new Date(lock.locked_since).getTime();
-	if (Number.isNaN(lockedAt)) {
-		return true;
-	}
-	const diffMinutes = (Date.now() - lockedAt) / (1000 * 60);
-	return diffMinutes >= ttlMinutes;
-}
-
-export function checkSurveyLockConflict(
-	lock: SurveyLockData,
-	currentUsername: string,
-	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES
-): { hasConflict: boolean; lock: SurveyLockData } {
-	if (isSurveyLockStale(lock, ttlMinutes)) {
-		return { hasConflict: false, lock };
-	}
-	const cleanCurrent = currentUsername.trim().toLowerCase();
-	const cleanLockBy = lock.locked_by.trim().toLowerCase();
-	const isOwnedByMe = Boolean(cleanCurrent && cleanLockBy === cleanCurrent);
-	return {
-		hasConflict: !isOwnedByMe,
-		lock
-	};
 }
 
 export async function acquireSurveyLock(surveyId: string, username: string): Promise<Record<string, any>> {

@@ -338,7 +338,17 @@ export function validateQuestion(
 				}
 			}
 
-			errors.push(...validateQuestion(fu.question, `${qField}.follow_up_${fuIdx}`));
+			// Nur eine Ebene: Folgefragen dürfen keine eigenen Folgefragen haben (der Editor bietet keine an,
+			// sie können nur aus Altdaten stammen). Darunter wird nicht weiter geprüft – sie sind zu entfernen.
+			if (fu.question.follow_ups?.length) {
+				errors.push({
+					field: `${qField}.follow_up_${fuIdx}.follow_ups`,
+					message: t("validation.followUpsTooDeep"),
+					questionId: fu.question.id,
+					fieldId: ids.followUps(fu.question.id)
+				});
+			}
+			errors.push(...validateQuestion({ ...fu.question, follow_ups: [] }, `${qField}.follow_up_${fuIdx}`));
 		});
 	}
 
