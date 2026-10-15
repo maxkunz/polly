@@ -23,7 +23,9 @@ Optionen (jeweils auch per Umgebungsvariable):
   --table / DATA_TABLE_NAME
                           Name der Data Table (Default "Polly Mock Surveys")
   -n / SESSIONS           Anzahl Sessions (Default 200)
-  -p / PARALLEL           gleichzeitige Sessions (Default 10)
+  -p / PARALLEL           maximal gleichzeitige Sessions (Default 10). Die tatsächliche Parallelität
+                          regelt sich selbst: bei 429/5xx (z. B. Lambda-Throttling) wird sie
+                          halbiert, bei Erfolg langsam wieder erhöht (AIMD).
   --abort-pct / ABORT_PCT Anteil abgebrochener Sessions in % (Default 15)
   --skip-comment-pct / SKIP_COMMENT_PCT
                           Anteil Sessions ohne Schlusskommentar in % (Default 10)
@@ -31,6 +33,13 @@ Optionen (jeweils auch per Umgebungsvariable):
                           (Default: answers.txt neben dem Skript)
   -v / --verbose          mehr Infos: Quelle der Umfrage, Fragenbaum, pro Request das
                           gesendete JSON (formatiert) samt HTTP-Status und Antwortzeit
+  -k / --insecure / INSECURE=1
+                          TLS-Zertifikate nicht prüfen (z. B. bei fehlender Zwischenzertifikat-
+                          Kette, "CERTIFICATE_VERIFY_FAILED"). Nur zum Testen verwenden!
+  --socks5 / SOCKS5_PROXY [user:pass@]host:port
+                          alle Verbindungen (API und Genesys) über einen SOCKS5-Proxy leiten,
+                          DNS wird dabei auch über den Proxy aufgelöst.
+                          Benötigt: pip install pysocks
   API_URL, GENESYS_REGION wie in survey_responses.sh
 
 ACHTUNG: Schreibt echte Daten in die deployte API.
@@ -41,6 +50,8 @@ import json
 import os
 import random
 import signal
+import socket
+import ssl
 import sys
 import threading
 import time
@@ -55,6 +66,7 @@ DEFAULT_TABLE_NAME = "Polly Mock Surveys"  # POLLY_DATA_TABLE_NAME in src/consta
 
 
 VERBOSE = False
+SSL_CONTEXT = None  # mit --insecure: Kontext ohne Zertifikatsprüfung
 _print_lock = threading.Lock()
 
 
@@ -63,6 +75,28 @@ def vprint(*parts):
     if VERBOSE:
         with _print_lock:
             print(*parts, flush=True)
+
+
+def insecure_ssl_context():
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def enable_socks5(proxy):
+    """Setzt einen globalen SOCKS5-Proxy (greift für http.client und urllib in allen Threads)."""
+    try:
+        import socks
+    except ImportError:
+        sys.exit("Error: --socks5 benötigt PySocks (pip install pysocks)")
+    u = urllib.parse.urlsplit(proxy if "//" in proxy else f"//{proxy}")
+    if not u.hostname or not u.port:
+        sys.exit(f"Error: SOCKS5-Proxy '{proxy}' ungültig, erwartet [user:pass@]host:port")
+    socks.set_default_proxy(socks.SOCKS5, u.hostname, u.port, rdns=True,
+                            username=urllib.parse.unquote(u.username) if u.username else None,
+                            password=urllib.parse.unquote(u.password) if u.password else None)
+    socket.socket = socks.socksocket
 
 
 def env_int(name, default):
@@ -145,19 +179,57 @@ def walk(questions, answer, path):
 
 # ---------------------------------------------------------------- HTTP
 
+class Limiter:
+    """Begrenzt gleichzeitige Requests adaptiv (AIMD): Erfolg erhöht das Limit langsam,
+    Throttling (429/5xx) halbiert es, höchstens einmal pro Sekunde."""
+
+    def __init__(self, maximum, start):
+        self.cond = threading.Condition()
+        self.maximum = maximum
+        self.limit = float(min(start, maximum))
+        self.active = 0
+        self.throttles = 0
+        self.last_cut = 0.0
+
+    def acquire(self):
+        with self.cond:
+            while self.active >= int(self.limit):
+                self.cond.wait()
+            self.active += 1
+
+    def release(self, ok, throttled):
+        with self.cond:
+            self.active -= 1
+            if throttled:
+                self.throttles += 1
+                now = time.monotonic()
+                if now - self.last_cut > 1.0:
+                    self.last_cut = now
+                    self.limit = max(1.0, self.limit / 2)
+            elif ok:
+                self.limit = min(float(self.maximum), self.limit + 1.0 / self.limit)
+            self.cond.notify_all()
+
+    def current(self):
+        with self.cond:
+            return int(self.limit)
+
+
 class Stats:
     def __init__(self):
         self.lock = threading.Lock()
         self.times = []
         self.fails = []
+        self.by_status = {}
 
     def ok(self, t):
         with self.lock:
             self.times.append(t)
 
-    def fail(self, msg):
+    def fail(self, msg, status=0):
         with self.lock:
             self.fails.append(msg)
+            self.by_status[status] = self.by_status.get(status, 0) + 1
 
 
 class Connection:
@@ -172,7 +244,8 @@ class Connection:
 
     def post(self, body, headers):
         if self.conn is None:
-            self.conn = self.cls(self.host, self.port, timeout=30)
+            kwargs = {"context": SSL_CONTEXT} if SSL_CONTEXT and self.cls is http.client.HTTPSConnection else {}
+            self.conn = self.cls(self.host, self.port, timeout=30, **kwargs)
         try:
             self.conn.request("POST", self.path, body=body, headers=headers)
             resp = self.conn.getresponse()
@@ -187,21 +260,23 @@ class Connection:
             self.conn = None
 
 
-def post(conn, headers, payload, label, stats, stop):
-    """POST mit bis zu 3 Versuchen bei 429/5xx/Netzwerkfehlern.
+def post(conn, headers, payload, label, stats, stop, limiter):
+    """POST mit bis zu 6 Versuchen bei 429/5xx/Netzwerkfehlern; die Parallelität regelt `limiter`.
 
     Bei 401 (Token abgelaufen/ungültig) gibt es nur einen zweiten Versuch; schlägt auch der
     fehl, wird der ganze Lauf abgebrochen, statt jeden Request einzeln mit Pause zu wiederholen.
     """
     body = json.dumps(payload).encode("utf-8")
     status, text = 0, ""
-    for attempt in range(1, 4):
+    for attempt in range(1, 7):
+        limiter.acquire()
         start = time.monotonic()
         try:
             status, text = conn.post(body, headers)
         except Exception as e:  # Netzwerkfehler
             status, text = 0, str(e)
         elapsed = time.monotonic() - start
+        limiter.release(status in (200, 201), status == 429 or status >= 500)
         vprint(f"--> {label} (Versuch {attempt})\n"
                f"{json.dumps(payload, indent=2, ensure_ascii=False)}\n"
                f"<-- HTTP {status} in {elapsed:.3f} s" + (f" {text}" if status not in (200, 201) else ""))
@@ -219,10 +294,10 @@ def post(conn, headers, payload, label, stats, stop):
         elif status == 0 and attempt == 1:
             continue  # veraltete Keep-Alive-Verbindung: sofort mit neuer Verbindung wiederholen
         elif status in (0, 429) or status >= 500:
-            time.sleep(attempt * 2)
+            time.sleep(min(attempt * 2, 10) * random.uniform(0.5, 1.5))  # Jitter gegen Gleichtakt
         else:
             break
-    stats.fail(f"{label} -> HTTP {status} {text}")
+    stats.fail(f"{label} -> HTTP {status} {text}", status)
 
 
 # ---------------------------------------------------------------- Session
@@ -264,7 +339,7 @@ def build_requests(survey, conv, answer, args):
     return reqs
 
 
-def run_session(n, survey, answer, args, url, headers, run_id, stats, stop):
+def run_session(n, survey, answer, args, url, headers, run_id, stats, stop, limiter):
     if stop.is_set():
         return False
     conn = Connection(url)
@@ -272,7 +347,7 @@ def run_session(n, survey, answer, args, url, headers, run_id, stats, stop):
         for label, payload in build_requests(survey, f"{run_id}-{n}", answer, args):
             if stop.is_set():
                 break
-            post(conn, headers, payload, label, stats, stop)
+            post(conn, headers, payload, label, stats, stop, limiter)
     finally:
         conn.close()
     return True
@@ -286,7 +361,7 @@ def genesys_get(region, token, path, params=None):
         url += "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")
@@ -358,9 +433,20 @@ def main():
     ap.add_argument("--skip-comment-pct", type=float, default=env_int("SKIP_COMMENT_PCT", 10))
     ap.add_argument("-v", "--verbose", action="store_true", help="Details und gesendetes JSON pro Request ausgeben")
     ap.add_argument("--answers", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "answers.txt"))
+    ap.add_argument("-k", "--insecure", action="store_true",
+                    default=os.environ.get("INSECURE", "") not in ("", "0", "false"),
+                    help="TLS-Zertifikate nicht prüfen (nur zum Testen)")
+    ap.add_argument("--socks5", default=os.environ.get("SOCKS5_PROXY"), metavar="HOST:PORT",
+                    help="Verbindungen über SOCKS5-Proxy leiten (benötigt pysocks)")
     args = ap.parse_args()
-    global VERBOSE
+    global VERBOSE, SSL_CONTEXT
     VERBOSE = args.verbose
+    if args.socks5:
+        enable_socks5(args.socks5)
+        print(f"==== SOCKS5-Proxy: {args.socks5.rpartition('@')[2]} ====", file=sys.stderr)
+    if args.insecure:
+        SSL_CONTEXT = insecure_ssl_context()
+        print("!!! --insecure: TLS-Zertifikate werden NICHT geprüft", file=sys.stderr)
     if [bool(args.survey), bool(args.surveyid), bool(args.surveytitle)].count(True) != 1:
         ap.error("genau eine Quelle angeben: JSON-Datei, --surveyid oder --surveytitle")
 
@@ -401,6 +487,7 @@ def main():
     answer = make_answer_fn(comments)
     stats = Stats()
     stop = threading.Event()
+    limiter = Limiter(args.parallel, start=4)
 
     # Ctrl-C: keine neuen Sessions mehr starten, laufende zu Ende bringen.
     # Ein zweites Ctrl-C bricht sofort ab.
@@ -424,7 +511,7 @@ def main():
     with ThreadPoolExecutor(max_workers=args.parallel) as pool:
         futures = []
         for i in range(1, args.sessions + 1):
-            futures.append(pool.submit(run_session, i, survey, answer, args, url, headers, run_id, stats, stop))
+            futures.append(pool.submit(run_session, i, survey, answer, args, url, headers, run_id, stats, stop, limiter))
         for i, fut in enumerate(futures, 1):
             if fut.result():
                 started += 1
@@ -432,13 +519,19 @@ def main():
                 with stats.lock:
                     n = len(stats.times)
                     avg = f"{sum(stats.times) / n:.3f} (n={n})" if n else "-"
-                print(f"  fertig: {i}/{args.sessions} | Ø Antwortzeit: {avg}")
+                print(f"  fertig: {i}/{args.sessions} | Ø Antwortzeit: {avg} | "
+                      f"Parallelität: {limiter.current()}/{args.parallel} | Throttling: {limiter.throttles}")
 
     n = len(stats.times)
     avg = f"{sum(stats.times) / n:.3f} s" if n else "-"
     state = "Abgebrochen" if stop.is_set() else "Fertig"
     print(f"\n==== {state}: {started}/{args.sessions} Sessions, {n} Requests erfolgreich, "
           f"{len(stats.fails)} fehlgeschlagen, Ø Antwortzeit {avg} ====")
+    if limiter.throttles:
+        print(f"Throttling/5xx-Antworten (inkl. Wiederholungen): {limiter.throttles}, "
+              f"Parallelität zuletzt {limiter.current()} von maximal {args.parallel}")
+    if stats.by_status:
+        print("Fehler nach Status: " + ", ".join(f"HTTP {k}: {v}" for k, v in sorted(stats.by_status.items())))
     if stats.fails:
         print("Erste Fehler:")
         print("\n".join(stats.fails[:10]))
