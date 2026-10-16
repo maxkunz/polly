@@ -107,6 +107,14 @@ const ratingScaleArray = computed<number[]>(() => {
 					{{ val }}
 				</span>
 			</div>
+			<!-- Labels der Skalenenden (nur im Web sichtbar) -->
+			<div
+				v-if="ratingOptions.min_label || ratingOptions.max_label"
+				class="flex justify-between gap-4 mt-1 text-xs text-[var(--p-text-muted-color)]"
+			>
+				<span>{{ ratingOptions.min_label }}</span>
+				<span class="text-right">{{ ratingOptions.max_label }}</span>
+			</div>
 		</div>
 	</div>
 </template>

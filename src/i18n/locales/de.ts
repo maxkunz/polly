@@ -119,11 +119,15 @@ export const de = {
 			description: "Beschreibung",
 			greeting: "Begrüßungsnachricht",
 			closing: "Verabschiedungsnachricht",
+			baseUrl: "Basis-URL für Einladungslinks (Web)",
+			baseUrlHint: "Optional. Absolute https-URL, z. B. die Seite, in die die Umfrage eingebettet ist. Mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Ohne Angabe zeigt der Link auf die Polly-Umfrageseite.",
+			language: "Sprache der Web-Umfrage",
 			placeholders: {
 				title: "z. B. Kundenzufriedenheit",
 				description: "Interne Beschreibung oder Kontext zur Umfrage...",
 				greeting: "Vielen Dank, dass Sie sich kurz Zeit nehmen...",
-				closing: "Vielen Dank für Ihr wertvolles Feedback!"
+				closing: "Vielen Dank für Ihr wertvolles Feedback!",
+				baseUrl: "https://www.beispiel.de/umfrage/{placeholder}"
 			}
 		},
 		save: {
@@ -277,7 +281,12 @@ export const de = {
 		scaleLabel: "Bewertungsskala konfigurieren ({min} bis max. {max}):",
 		min: "Minimalwert ({min} bis {max})",
 		max: "Maximalwert ({min} bis {max})",
-		previewLabel: "Vorschau der Skala:"
+		previewLabel: "Vorschau der Skala:",
+		minLabel: "Label für den Minimalwert (optional)",
+		maxLabel: "Label für den Maximalwert (optional)",
+		labelsHint: "Wird nur in Web-Umfragen an den Enden der Skala angezeigt und nicht vorgelesen.",
+		minLabelPlaceholder: "z. B. sehr schlecht",
+		maxLabelPlaceholder: "z. B. ausgezeichnet"
 	},
 
 	choiceOptions: {
@@ -328,7 +337,11 @@ export const de = {
 		surveyNameRequired: "Der Name der Umfrage darf nicht leer sein.",
 		surveyMinQuestions: "Eine Umfrage muss mindestens 1 Frage enthalten.",
 		surveyMaxQuestions: "Eine Umfrage darf maximal {max} Fragen enthalten (inkl. Folgefragen). Aktuell: {count}.",
-		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text."
+		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text.",
+		baseUrlInvalid: "Die Basis-URL muss eine gültige, absolute https-URL sein, z. B. https://www.beispiel.de/umfrage/{placeholder}.",
+		baseUrlTokenCount: "Die Basis-URL darf den Platzhalter {placeholder} höchstens einmal enthalten.",
+		languageInvalid: "Bitte eine gültige Sprache wählen.",
+		scaleLabelTooLong: "„{field}“ ist zu lang (maximal {max} Zeichen)."
 	},
 
 	translator: {

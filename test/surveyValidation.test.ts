@@ -125,4 +125,45 @@ test("Folgefragen mit eigenen Folgefragen verweisen auf den Folgefragenbereich d
 	assert.deepEqual(fieldIdsOf(s), [questionFieldIds.followUps(Q)]);
 });
 
+function fieldsOf(s: Survey): string[] {
+	return validateSurvey(s).map(e => e.field);
+}
+
+test("Basis-URL: leer und gültige https-URLs sind erlaubt", () => {
+	for (const baseUrl of [undefined, "", "  ", "https://example.com", "https://example.com/{token}", "https://example.com/umfrage?x=1", "https://example.com/?t={token}"]) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: baseUrl }), [], String(baseUrl));
+	}
+});
+
+test("Basis-URL: http, relative URLs, Leerzeichen und mehrere Platzhalter verweisen auf das Feld", () => {
+	for (const baseUrl of ["http://example.com", "example.com", "/s/{token}", "https://exa mple.com", "https://", "javascript:alert(1)", "https://example.com/{token}/{token}"]) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: baseUrl }), [surveyFieldIds.baseUrl], baseUrl);
+	}
+});
+
+test("Sprache: nur de, en, fr; fehlend ist erlaubt", () => {
+	for (const language of [undefined, "de", "en", "fr"] as const) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), language }), [], String(language));
+	}
+	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), language: "xx" as never }), [surveyFieldIds.language]);
+});
+
+test("Min/Max-Labels bei rating und nps sind auf 100 Zeichen begrenzt", () => {
+	const ok = "a".repeat(100);
+	const tooLong = "a".repeat(101);
+	assert.deepEqual(fieldIdsOf(survey([question({ type: "nps", options: { min_label: ok, max_label: ok } })])), []);
+	assert.deepEqual(
+		fieldIdsOf(survey([question({ type: "nps", options: { min_label: tooLong, max_label: tooLong } })])),
+		[questionFieldIds.minLabel(Q), questionFieldIds.maxLabel(Q)]
+	);
+	assert.deepEqual(
+		fieldsOf(survey([question({ type: "rating", options: { min_value: 1, max_value: 5, max_label: tooLong } })])),
+		[`${Q}.options.max_label`]
+	);
+	assert.deepEqual(
+		fieldIdsOf(survey([question({ type: "rating", options: { min_value: 1, max_value: 5, max_label: tooLong } })])),
+		[questionFieldIds.maxLabel(Q)]
+	);
+});
+
 console.log(`\n${passed} Tests bestanden`);

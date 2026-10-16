@@ -2,7 +2,9 @@ import type {
 	ConditionOperator,
 	FollowUpRule,
 	QuestionType,
+	ScaleLabels,
 	Survey,
+	SurveyLanguage,
 	SurveyQuestion
 } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions, isRatingOptions } from "@/domain/survey/surveyTypes";
@@ -72,12 +74,14 @@ export interface FlowRatingQuestion extends FlowQuestionBase {
 		values: number[];
 		min_value: number;
 		max_value: number;
-	};
+	} & ScaleLabels;
 	conditional_next_question: FlowCondition[];
 }
 
 export interface FlowNpsQuestion extends FlowQuestionBase {
 	type: "nps";
+	/** Nur vorhanden, wenn mindestens ein Min/Max-Label gesetzt ist (Web-Kanal). */
+	options?: ScaleLabels;
 	conditional_next_question: FlowCondition[];
 }
 
@@ -95,6 +99,8 @@ export interface FlowSurvey {
 	description: string;
 	greeting_prompt: string;
 	closing_prompt: string;
+	/** Sprache der Web-Umfrageseite; nur gesetzt, wenn der Draft sie enthält. */
+	language?: SurveyLanguage;
 	created_at?: string;
 	updated_at?: string;
 	start_question_id: string | null;
@@ -254,7 +260,16 @@ function buildRatingOptions(question: SurveyQuestion): FlowRatingQuestion["optio
 		values.push(value);
 	}
 
-	return { values, min_value, max_value };
+	return { values, min_value, max_value, ...buildScaleLabels(question.options) };
+}
+
+/** Min/Max-Labels für das Flow-JSON: nur gesetzte (nicht leere) Labels werden übernommen. */
+function buildScaleLabels(options: unknown): ScaleLabels {
+	const { min_label, max_label } = (options ?? {}) as ScaleLabels;
+	return {
+		...(min_label?.trim() ? { min_label } : {}),
+		...(max_label?.trim() ? { max_label } : {})
+	};
 }
 
 function buildConditionalNextQuestion(
@@ -349,7 +364,9 @@ function flattenQuestion(
 		}
 		case "nps": {
 			const conditional_next_question = buildConditionalNextQuestion(question, followUps);
-			out.push({ ...base, type: "nps", conditional_next_question });
+			const labels = buildScaleLabels(question.options);
+			const options = Object.keys(labels).length > 0 ? { options: labels } : {};
+			out.push({ ...base, type: "nps", ...options, conditional_next_question });
 			break;
 		}
 		default: {
@@ -390,6 +407,7 @@ export function translateSurveyObject(survey: Survey): FlowSurvey {
 		description: survey.description ?? "",
 		greeting_prompt: survey.greeting_message ?? "",
 		closing_prompt: survey.closing_message ?? "",
+		...(survey.language ? { language: survey.language } : {}),
 		created_at: survey.created_at,
 		updated_at: survey.updated_at,
 		start_question_id: mainQuestions[0].id,

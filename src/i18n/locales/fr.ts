@@ -121,11 +121,15 @@ export const fr: MessageSchema = {
 			description: "Description",
 			greeting: "Message de bienvenue",
 			closing: "Message de fin",
+			baseUrl: "URL de base des liens d'invitation (web)",
+			baseUrlHint: "Facultatif. URL https absolue, p. ex. la page dans laquelle le sondage est intégré. {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Sans valeur, le lien pointe vers la page de sondage Polly.",
+			language: "Langue du sondage web",
 			placeholders: {
 				title: "p. ex. Satisfaction client",
 				description: "Description interne ou contexte de l'enquête...",
 				greeting: "Merci de prendre quelques instants...",
-				closing: "Merci pour vos précieux retours !"
+				closing: "Merci pour vos précieux retours !",
+				baseUrl: "https://www.exemple.fr/sondage/{placeholder}"
 			}
 		},
 		save: {
@@ -279,7 +283,12 @@ export const fr: MessageSchema = {
 		scaleLabel: "Configurer l'échelle d'évaluation ({min} à {max} max.) :",
 		min: "Valeur minimale ({min} à {max})",
 		max: "Valeur maximale ({min} à {max})",
-		previewLabel: "Aperçu de l'échelle :"
+		previewLabel: "Aperçu de l'échelle :",
+		minLabel: "Libellé de la valeur minimale (facultatif)",
+		maxLabel: "Libellé de la valeur maximale (facultatif)",
+		labelsHint: "Affiché uniquement aux extrémités de l'échelle dans les sondages web et non lu à voix haute.",
+		minLabelPlaceholder: "p. ex. très mauvais",
+		maxLabelPlaceholder: "p. ex. excellent"
 	},
 
 	choiceOptions: {
@@ -330,7 +339,11 @@ export const fr: MessageSchema = {
 		surveyNameRequired: "Le nom de l'enquête ne doit pas être vide.",
 		surveyMinQuestions: "Une enquête doit contenir au moins 1 question.",
 		surveyMaxQuestions: "Une enquête peut contenir au maximum {max} questions (questions de suivi comprises). Actuellement : {count}.",
-		ttsTextTooLong: "« {field} » est trop long ({length} sur {max} caractères maximum). Les textes lus par synthèse vocale ne doivent pas dépasser {max} caractères. Veuillez raccourcir le texte."
+		ttsTextTooLong: "« {field} » est trop long ({length} sur {max} caractères maximum). Les textes lus par synthèse vocale ne doivent pas dépasser {max} caractères. Veuillez raccourcir le texte.",
+		baseUrlInvalid: "L'URL de base doit être une URL https absolue valide, p. ex. https://www.exemple.fr/sondage/{placeholder}.",
+		baseUrlTokenCount: "L'URL de base ne peut contenir le paramètre {placeholder} qu'une seule fois.",
+		languageInvalid: "Veuillez choisir une langue valide.",
+		scaleLabelTooLong: "« {field} » est trop long ({max} caractères maximum)."
 	},
 
 	translator: {

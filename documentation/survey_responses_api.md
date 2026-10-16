@@ -77,6 +77,8 @@ Das Feld `questionName` ist der unveränderliche technische Bezeichner der Frage
 | `choice` | `string` (Label der gewählten Option) | `"Dashboard-Analysen"` | `counts["Dashboard-Analysen"]`, `totalResponses` |
 | `comment` | `string` (transkribierter Text) | `"Sehr freundlich"` | Nur `totalResponses` (keine Häufigkeitsverteilung) |
 
+> **Kanal (`channel`) und `tokenId`:** Sitzungen aus dem Architect Flow (`POST /survey-responses`) haben kein Feld `channel` (gelesen als `flow`). Sitzungen der Web-Umfrage (`POST /web-survey/submit`, siehe [polly_web.md](polly_web.md)) werden direkt mit `status: "completed"`, `channel: "web"` und `tokenId` (= `token_id` der Einladung) gespeichert; `responseId` ist dort eine zufällige UUID. `channel` erscheint im CSV-Export als letzte Spalte `Channel`.
+
 > Bei `choice` kennt das flow-optimierte JSON (siehe @survey_translator_for_flow.md) keine Options-IDs mehr, sondern nur noch die Labels der Auswahlmöglichkeiten - der Flow kann daher nur das Label als `value` senden, keine ID.
 
 ---

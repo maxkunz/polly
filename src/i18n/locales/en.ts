@@ -121,11 +121,15 @@ export const en: MessageSchema = {
 			description: "Description",
 			greeting: "Greeting message",
 			closing: "Closing message",
+			baseUrl: "Base URL for invitation links (web)",
+			baseUrlHint: "Optional. Absolute https URL, e.g. the page the survey is embedded in. Use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended. Without it, the link points to the Polly survey page.",
+			language: "Web survey language",
 			placeholders: {
 				title: "e.g. Customer satisfaction",
 				description: "Internal description or context for the survey...",
 				greeting: "Thank you for taking a moment...",
-				closing: "Thank you for your valuable feedback!"
+				closing: "Thank you for your valuable feedback!",
+				baseUrl: "https://www.example.com/survey/{placeholder}"
 			}
 		},
 		save: {
@@ -279,7 +283,12 @@ export const en: MessageSchema = {
 		scaleLabel: "Configure rating scale ({min} to max. {max}):",
 		min: "Minimum value ({min} to {max})",
 		max: "Maximum value ({min} to {max})",
-		previewLabel: "Scale preview:"
+		previewLabel: "Scale preview:",
+		minLabel: "Label for the minimum value (optional)",
+		maxLabel: "Label for the maximum value (optional)",
+		labelsHint: "Only shown at the ends of the scale in web surveys and not read aloud.",
+		minLabelPlaceholder: "e.g. very poor",
+		maxLabelPlaceholder: "e.g. excellent"
 	},
 
 	choiceOptions: {
@@ -330,7 +339,11 @@ export const en: MessageSchema = {
 		surveyNameRequired: "The survey name must not be empty.",
 		surveyMinQuestions: "A survey must contain at least 1 question.",
 		surveyMaxQuestions: "A survey may contain a maximum of {max} questions (incl. follow-up questions). Currently: {count}.",
-		ttsTextTooLong: "“{field}” is too long ({length} of max. {max} characters). Texts read out by text-to-speech may be at most {max} characters long. Please shorten the text."
+		ttsTextTooLong: "“{field}” is too long ({length} of max. {max} characters). Texts read out by text-to-speech may be at most {max} characters long. Please shorten the text.",
+		baseUrlInvalid: "The base URL must be a valid, absolute https URL, e.g. https://www.example.com/survey/{placeholder}.",
+		baseUrlTokenCount: "The base URL may contain the placeholder {placeholder} at most once.",
+		languageInvalid: "Please choose a valid language.",
+		scaleLabelTooLong: "“{field}” is too long (max. {max} characters)."
 	},
 
 	translator: {

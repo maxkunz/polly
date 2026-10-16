@@ -122,11 +122,15 @@ export const tlh: MessageSchema = {
 			description: "Delmey",
 			greeting: "nuqneH QIn",
 			closing: "Qapla' QIn",
+			baseUrl: "Web QIn ra'ghom URL (Web)",
+			baseUrlHint: "ghItlh. https URL, {placeholder} 'ej ?token=…. URL vItlhutlh: Polly QIn ra'ghom.",
+			language: "Web QIn Hol",
 			placeholders: {
 				title: "mu'mey: ghotpu' belmoH",
 				description: "yu'ghItlh Del qoD...",
 				greeting: "poH Danobmo' qatlho'...",
-				closing: "QIn lo'laH Danobmo' qatlho'!"
+				closing: "QIn lo'laH Danobmo' qatlho'!",
+				baseUrl: "https://www.example.com/survey/{placeholder}"
 			}
 		},
 		save: {
@@ -280,7 +284,12 @@ export const tlh: MessageSchema = {
 		scaleLabel: "noHmeH juv yISeH ({min} vo' {max} law'qu'):",
 		min: "mI' mach ({min} vo' {max})",
 		max: "mI' tIn ({min} vo' {max})",
-		previewLabel: "juv leghpa':"
+		previewLabel: "juv leghpa':",
+		minLabel: "Du'wI' Dop (ghItlh)",
+		maxLabel: "Du'wI' Dop law' (ghItlh)",
+		labelsHint: "Web QIn neH. ghoSbe' jIme'.",
+		minLabelPlaceholder: "tlhoy chu'",
+		maxLabelPlaceholder: "Qapla'"
 	},
 
 	choiceOptions: {
@@ -331,7 +340,11 @@ export const tlh: MessageSchema = {
 		surveyNameRequired: "yu'ghItlh pong chImlaHbe'.",
 		surveyMinQuestions: "yu meq 1 yu' rav ghajnIS.",
 		surveyMaxQuestions: "yu'ghItlh {max} yu' law'qu' ghajlaH (tlha' yu'mey tu'lu'). DaH: {count}.",
-		ttsTextTooLong: "„{field}“ tIq law'qu' ({length} / {max} ngutlh law'qu'). TTS ghItlh {max} ngutlh law'qu' ghajlaH. ghItlh yIHabmoH."
+		ttsTextTooLong: "„{field}“ tIq law'qu' ({length} / {max} ngutlh law'qu'). TTS ghItlh {max} ngutlh law'qu' ghajlaH. ghItlh yIHabmoH.",
+		baseUrlInvalid: "URL https vaj. {placeholder}.",
+		baseUrlTokenCount: "{placeholder} wa'logh neH.",
+		languageInvalid: "Hol Dayaj.",
+		scaleLabelTooLong: "„{field}“ tIq law'qu' ({max} ngutlh law')."
 	},
 
 	translator: {

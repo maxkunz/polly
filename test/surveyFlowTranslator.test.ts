@@ -310,6 +310,66 @@ test("nps: hat keine options", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Web-Kanal: Labels, language, base_url
+// ---------------------------------------------------------------------------
+
+const RATING_ID = "8b7fc93c-cf8e-4a64-9a3b-2401f11a84f5";
+const NPS_ID = "be7d1c15-4fa8-48aa-b7bc-1e5f88cb077d";
+
+test("ohne language und Labels bleibt das Flow-JSON unverändert", () => {
+	const flow = translateSurveyObject(buildExampleSurvey());
+	assert.equal("language" in flow, false);
+	const rating = flow.questions.find(q => q.id === RATING_ID) as FlowRatingQuestion;
+	assert.deepEqual(Object.keys(rating.options), ["values", "min_value", "max_value"]);
+});
+
+test("language steht auf oberster Ebene, base_url kommt nicht ins Flow-JSON", () => {
+	const survey = buildExampleSurvey();
+	survey.language = "en";
+	survey.base_url = "https://example.com/{token}";
+	const flow = translateSurveyObject(survey);
+	assert.equal(flow.language, "en");
+	assert.equal(JSON.stringify(flow).includes("base_url"), false);
+	assert.equal(JSON.stringify(flow).includes("example.com"), false);
+});
+
+test("rating: min_label/max_label landen in options, leere Labels entfallen", () => {
+	const survey = buildExampleSurvey();
+	(survey.questions[2].options as any).min_label = "schlecht";
+	(survey.questions[2].options as any).max_label = "  ";
+	const rating = translateSurveyObject(survey).questions.find(q => q.id === RATING_ID) as FlowRatingQuestion;
+	assert.equal(rating.options.min_label, "schlecht");
+	assert.equal("max_label" in rating.options, false);
+	assert.equal(rating.options.min_value, 1);
+	assert.equal(rating.options.values.length, 8);
+});
+
+test("nps: options entstehen nur mit mindestens einem Label", () => {
+	const survey = buildExampleSurvey();
+	survey.questions[3].options = {};
+	let nps = translateSurveyObject(survey).questions.find(q => q.id === NPS_ID) as FlowNpsQuestion;
+	assert.equal(nps.options, undefined);
+
+	survey.questions[3].options = { min_label: "Sehr unwahrscheinlich", max_label: "" };
+	nps = translateSurveyObject(survey).questions.find(q => q.id === NPS_ID) as FlowNpsQuestion;
+	assert.deepEqual(nps.options, { min_label: "Sehr unwahrscheinlich" });
+
+	survey.questions[3].options = { min_label: "a", max_label: "b" };
+	nps = translateSurveyObject(survey).questions.find(q => q.id === NPS_ID) as FlowNpsQuestion;
+	assert.deepEqual(nps.options, { min_label: "a", max_label: "b" });
+});
+
+test("Labels einer rating-Folgefrage werden übernommen", () => {
+	const survey = buildExampleSurvey();
+	const followUp = survey.questions[1].follow_ups![0].question;
+	assert.equal(followUp.type, "rating");
+	(followUp.options as any).max_label = "super";
+	const flow = translateSurveyObject(survey);
+	const rating = flow.questions.find(q => q.id === followUp.id) as FlowRatingQuestion;
+	assert.equal(rating.options.max_label, "super");
+});
+
+// ---------------------------------------------------------------------------
 // comment
 // ---------------------------------------------------------------------------
 

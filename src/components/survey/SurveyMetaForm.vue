@@ -3,9 +3,12 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import InputText from "primevue/inputtext";
+import Select from "primevue/select";
 import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { displayTechnicalName } from "@/domain/survey/surveyTypes";
+import { displayTechnicalName, SURVEY_LANGUAGES, DEFAULT_SURVEY_LANGUAGE } from "@/domain/survey/surveyTypes";
+import type { SurveyLanguage } from "@/domain/survey/surveyTypes";
+import { BASE_URL_TOKEN_PLACEHOLDER } from "@/constants/surveyConstants";
 import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";
 import FieldError from "@/components/ui/FieldError.vue";
@@ -31,11 +34,19 @@ const surveyNameId = surveyFieldIds.name;
 const surveyDescId = surveyFieldIds.description;
 const surveyGreetingId = surveyFieldIds.greeting;
 const surveyClosingId = surveyFieldIds.closing;
+const surveyBaseUrlId = surveyFieldIds.baseUrl;
+const surveyLanguageId = surveyFieldIds.language;
 const { t } = useI18n();
 const { hasError, errorId } = useFieldErrors();
 
 // Nach dem ersten Speichern ist der Name unveränderlich; vorher eine Vorschau aus dem Titel zeigen
 const computedTechnicalName = computed(() => displayTechnicalName(props.survey, props.isSaved, "umfrage"));
+
+// {token} nicht direkt in die Sprachdatei schreiben: vue-i18n würde es als Parameter lesen
+const tokenPlaceholder = BASE_URL_TOKEN_PLACEHOLDER;
+
+// Umfragen ohne Feld (ältere Stände) gelten als Deutsch
+const languageOptions = computed(() => SURVEY_LANGUAGES.map(value => ({ value, label: t(`language.${value}`) })));
 </script>
 
 <template>
@@ -125,6 +136,47 @@ const computedTechnicalName = computed(() => displayTechnicalName(props.survey, 
 							:aria-describedby="errorId(surveyClosingId)"
 						/>
 						<FieldError :fieldId="surveyClosingId" />
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+					<div class="md:col-span-8">
+						<label :for="surveyBaseUrlId" class="block text-sm font-medium mb-1">
+							{{ t("surveyEditor.meta.baseUrl") }}
+						</label>
+						<InputText
+							:id="surveyBaseUrlId"
+							v-model="survey.base_url"
+							type="url"
+							class="w-full"
+							:placeholder="t('surveyEditor.meta.placeholders.baseUrl', { placeholder: tokenPlaceholder })"
+							:disabled="disabled"
+							:invalid="hasError(surveyBaseUrlId)"
+							:aria-describedby="[`${surveyBaseUrlId}_hint`, errorId(surveyBaseUrlId)].filter(Boolean).join(' ')"
+						/>
+						<p :id="`${surveyBaseUrlId}_hint`" class="mt-1 text-xs text-[var(--p-text-muted-color)]">
+							{{ t("surveyEditor.meta.baseUrlHint", { placeholder: tokenPlaceholder }) }}
+						</p>
+						<FieldError :fieldId="surveyBaseUrlId" />
+					</div>
+
+					<div class="md:col-span-4">
+						<!-- Kein <label for>: Select rendert kein Formularelement, Verknüpfung über aria-labelledby -->
+						<div :id="`${surveyLanguageId}_label`" class="block text-sm font-medium mb-1">
+							{{ t("surveyEditor.meta.language") }}
+						</div>
+						<Select
+							:inputId="surveyLanguageId"
+							:ariaLabelledby="`${surveyLanguageId}_label`"
+							:modelValue="survey.language ?? DEFAULT_SURVEY_LANGUAGE"
+							:options="languageOptions"
+							optionLabel="label"
+							optionValue="value"
+							class="w-full"
+							:disabled="disabled"
+							@update:modelValue="(value: SurveyLanguage) => (survey.language = value)"
+						/>
+						<FieldError :fieldId="surveyLanguageId" />
 					</div>
 				</div>
 			</form>

@@ -122,11 +122,15 @@ export const la: MessageSchema = {
 			description: "Descriptio",
 			greeting: "Nuntius salutationis",
 			closing: "Nuntius valedictionis",
+			baseUrl: "URL basis pro nexibus invitationis (interretialis)",
+			baseUrlHint: "Optionale. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Sine ea nexus ad paginam Polly ducit.",
+			language: "Lingua quaestionis interretialis",
 			placeholders: {
 				title: "e. g. Satisfactio clientium",
 				description: "Descriptio interna vel contextus percontationis...",
 				greeting: "Gratias agimus quod breve tempus nobis das...",
-				closing: "Gratias tibi pro tam pretioso consilio!"
+				closing: "Gratias tibi pro tam pretioso consilio!",
+				baseUrl: "https://www.exemplum.de/quaestio/{placeholder}"
 			}
 		},
 		save: {
@@ -280,7 +284,12 @@ export const la: MessageSchema = {
 		scaleLabel: "Scalam aestimationis conforma ({min} usque ad max. {max}):",
 		min: "Valor minimus ({min} usque ad {max})",
 		max: "Valor maximus ({min} usque ad {max})",
-		previewLabel: "Praevisio scalae:"
+		previewLabel: "Praevisio scalae:",
+		minLabel: "Titulus valoris minimi (optionalis)",
+		maxLabel: "Titulus valoris maximi (optionalis)",
+		labelsHint: "Tantum in quaestionibus interretialibus ad fines scalae ostenditur, non recitatur.",
+		minLabelPlaceholder: "e. g. pessimum",
+		maxLabelPlaceholder: "e. g. optimum"
 	},
 
 	choiceOptions: {
@@ -331,7 +340,11 @@ export const la: MessageSchema = {
 		surveyNameRequired: "Nomen percontationis vacuum esse non potest.",
 		surveyMinQuestions: "Percontatio saltem 1 quaestionem continere debet.",
 		surveyMaxQuestions: "Percontatio maxime {max} quaestiones continere potest (cum consecutivis). Nunc: {count}.",
-		ttsTextTooLong: "„{field}“ nimis longum est ({length} ex maximo {max} litteris). Textus voce synthetica recitati maxime {max} litteras longi esse possunt. Quaeso, textum contrahe."
+		ttsTextTooLong: "„{field}“ nimis longum est ({length} ex maximo {max} litteris). Textus voce synthetica recitati maxime {max} litteras longi esse possunt. Quaeso, textum contrahe.",
+		baseUrlInvalid: "URL basis debet esse URL https absoluta et valida, e. g. https://www.exemplum.de/quaestio/{placeholder}.",
+		baseUrlTokenCount: "URL basis signum {placeholder} semel tantum continere potest.",
+		languageInvalid: "Linguam validam elige.",
+		scaleLabelTooLong: "„{field}“ nimis longum est (maximum {max} litterae)."
 	},
 
 	translator: {

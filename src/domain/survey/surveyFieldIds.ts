@@ -9,6 +9,8 @@ export const surveyFieldIds = {
 	description: "survey_desc_input",
 	greeting: "survey_greeting_input",
 	closing: "survey_closing_input",
+	baseUrl: "survey_base_url_input",
+	language: "survey_language_select",
 	/** Fragenbereich: Anker für Fehler zur Anzahl der Fragen */
 	questions: "survey_questions",
 	/** Fehlerübersicht: Sprungziel, wenn kein Fehler einem Feld zugeordnet ist */
@@ -26,6 +28,8 @@ export const questionFieldIds = {
 	options: (questionId: string) => `q_options_${questionId}`,
 	ratingMin: (questionId: string) => `q_rating_min_${questionId}`,
 	ratingMax: (questionId: string) => `q_rating_max_${questionId}`,
+	minLabel: (questionId: string) => `q_min_label_${questionId}`,
+	maxLabel: (questionId: string) => `q_max_label_${questionId}`,
 	choiceOption: (questionId: string, index: number) => `q_option_${questionId}_${index}`,
 	/** Folgefragenbereich einer Frage: Anker für Fehler, die keinem einzelnen Feld zugeordnet sind */
 	followUps: (questionId: string) => `q_followups_${questionId}`,

@@ -11,6 +11,12 @@ export const CHOICE_MAX_OPTIONS = 5;
 export const RATING_SCALE_MIN = 0;
 export const RATING_SCALE_MAX = 8;
 
+/** Max. Länge der Min/Max-Labels bei rating und nps (nur Web, kein TTS). */
+export const SCALE_LABEL_MAX_CHARS = 100;
+
+/** Platzhalter für den Einladungstoken in der Basis-URL einer Umfrage. */
+export const BASE_URL_TOKEN_PLACEHOLDER = "{token}";
+
 /**
  * Architect liest max. 32.000 Zeichen pro String. Das übersetzte Flow-JSON
  * (Stage/Prod) muss daher in diese Grenze passen, sonst scheitert der Flow
