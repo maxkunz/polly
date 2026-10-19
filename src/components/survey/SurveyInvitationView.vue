@@ -117,11 +117,11 @@ const {
 					:disabled="isGenerating"
 					aria-describedby="invitation-expiry-hint"
 				/>
-				<small id="invitation-expiry-hint" class="text-xs text-[var(--p-surface-600)]">
+				<small id="invitation-expiry-hint" class="text-xs text-[var(--p-surface-600)] w-0 min-w-full">
 					{{ t("invitations.expiryHint") }}
 				</small>
 			</div>
-			<div class="flex flex-col gap-1 pt-6">
+			<div class="flex flex-col gap-1 pt-6 w-72 max-w-full">
 				<div class="flex items-center gap-2">
 					<Checkbox
 						v-model="multi"
@@ -132,9 +132,11 @@ const {
 					/>
 					<label for="invitation-multi" class="text-sm text-[var(--p-text-color)]">{{ t("invitations.multi") }}</label>
 				</div>
-				<small id="invitation-multi-hint" class="text-xs text-[var(--p-surface-600)] max-w-xs">
-					{{ multi ? t("invitations.multiHintOn") : t("invitations.multiHintOff") }}
-				</small>
+				<!-- Beide Hinweise übereinander gestapelt: die Höhe entspricht dem längeren, das Formular springt beim Umschalten nicht -->
+				<div id="invitation-multi-hint" class="grid text-xs text-[var(--p-surface-600)]">
+					<small class="col-start-1 row-start-1" :class="{ invisible: multi }">{{ t("invitations.multiHintOff") }}</small>
+					<small class="col-start-1 row-start-1" :class="{ invisible: !multi }">{{ t("invitations.multiHintOn") }}</small>
+				</div>
 			</div>
 		</div>
 
