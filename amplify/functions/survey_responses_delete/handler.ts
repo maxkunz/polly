@@ -39,6 +39,8 @@ const SURVEY_RESPONSES_TABLE_NAME = process.env.SURVEY_RESPONSES_TABLE_NAME ?? "
 const SURVEY_AGGREGATES_TABLE_NAME = process.env.SURVEY_AGGREGATES_TABLE_NAME ?? "";
 const SURVEY_DELETION_JOBS_TABLE_NAME = process.env.SURVEY_DELETION_JOBS_TABLE_NAME ?? "";
 const SURVEY_DELETION_QUEUE_URL = process.env.SURVEY_DELETION_QUEUE_URL ?? "";
+// Benutzte Einmal-Einladungen des Web-Kanals; ohne Tabelle (älteres Deployment) wird der Schritt übersprungen
+const INVITATION_TOKENS_TABLE_NAME = process.env.INVITATION_TOKENS_TABLE_NAME ?? "";
 
 // Wartezeit bis zum ersten Lauf, damit laufende Gespräche ihre Umfrage noch beenden können (SQS-Maximum: 900 s)
 const START_DELAY_SECONDS = 900;
@@ -104,24 +106,26 @@ async function setJobStatus(
 async function addJobCounters(
   tenantId: string,
   surveyId: string,
-  counters: { deletedResponses?: number; deletedAggregates?: number; skipped?: number }
+  counters: { deletedResponses?: number; deletedAggregates?: number; deletedTokens?: number; skipped?: number }
 ): Promise<void> {
   await ddb.send(
     new UpdateCommand({
       TableName: SURVEY_DELETION_JOBS_TABLE_NAME,
       Key: jobKey(tenantId, surveyId),
       UpdateExpression:
-        "SET #updatedAt = :now ADD #deletedResponses :dr, #deletedAggregates :da, #skipped :sk",
+        "SET #updatedAt = :now ADD #deletedResponses :dr, #deletedAggregates :da, #deletedTokens :dt, #skipped :sk",
       ExpressionAttributeNames: {
         "#updatedAt": "updatedAt",
         "#deletedResponses": "deletedResponses",
         "#deletedAggregates": "deletedAggregates",
+        "#deletedTokens": "deletedTokens",
         "#skipped": "skipped",
       },
       ExpressionAttributeValues: {
         ":now": new Date().toISOString(),
         ":dr": counters.deletedResponses ?? 0,
         ":da": counters.deletedAggregates ?? 0,
+        ":dt": counters.deletedTokens ?? 0,
         ":sk": counters.skipped ?? 0,
       },
     })
@@ -205,6 +209,7 @@ async function requestDeletion(event: AnyApiGwEvent, tenantId: string, source: s
           updatedAt: now,
           deletedResponses: 0,
           deletedAggregates: 0,
+          deletedTokens: 0,
           skipped: 0,
           message: "",
         },
@@ -412,6 +417,53 @@ async function deleteResponsesPass(
   return { complete: true, deleted: total, skipped: totalSkipped };
 }
 
+/**
+ * Ein Durchlauf über die benutzten Einmal-Einladungen der Umfrage (GSI byTenantSurvey der Tabelle
+ * InvitationTokens). Bedingt gelöscht, damit nur Einträge dieser Umfrage betroffen sind.
+ */
+async function deleteInvitationTokensPass(
+  tenantId: string,
+  surveyId: string,
+  getRemainingMs: () => number
+): Promise<PassResult> {
+  if (!INVITATION_TOKENS_TABLE_NAME) return { complete: true, deleted: 0, skipped: 0 };
+
+  const tenantSurveyId = `${tenantId}#${surveyId}`;
+  let lastKey: Record<string, any> | undefined;
+  let total = 0;
+  let totalSkipped = 0;
+  do {
+    if (getRemainingMs() < MIN_REMAINING_MS) return { complete: false, deleted: total, skipped: totalSkipped };
+
+    const page = await ddb.send(
+      new QueryCommand({
+        TableName: INVITATION_TOKENS_TABLE_NAME,
+        IndexName: "byTenantSurvey",
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeNames: { "#pk": "tenantSurveyId" },
+        ExpressionAttributeValues: { ":pk": tenantSurveyId },
+        Limit: PAGE_SIZE,
+        ExclusiveStartKey: lastKey,
+      })
+    );
+    const { deleted, skipped } = await deleteInChunks(
+      (page.Items ?? []).map((item) => () =>
+        deleteConditionally(
+          INVITATION_TOKENS_TABLE_NAME,
+          { tenantId: item.tenantId, tokenId: item.tokenId },
+          tenantId,
+          surveyId
+        )
+      )
+    );
+    total += deleted;
+    totalSkipped += skipped;
+    await addJobCounters(tenantId, surveyId, { deletedTokens: deleted, skipped });
+    lastKey = page.LastEvaluatedKey;
+  } while (lastKey);
+  return { complete: true, deleted: total, skipped: totalSkipped };
+}
+
 async function processMessage(message: DeletionMessage, getRemainingMs: () => number): Promise<void> {
   const { tenantId, surveyId } = message;
   if (!tenantId || !isValidSurveyId(surveyId)) {
@@ -463,26 +515,30 @@ async function processMessage(message: DeletionMessage, getRemainingMs: () => nu
   console.log("[survey_responses_delete] verification passed, deleting", { tenantId, surveyId });
 
   // Zähler dieses Laufs (der Gesamtstand über alle Läufe steht im Job)
-  const run = { deletedResponses: 0, deletedAggregates: 0, skipped: 0 };
+  const run = { deletedResponses: 0, deletedAggregates: 0, deletedTokens: 0, skipped: 0 };
 
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     const aggregates = await deleteAggregatesPass(tenantId, surveyId, getRemainingMs);
     const responses: PassResult = aggregates.complete
       ? await deleteResponsesPass(tenantId, surveyId, getRemainingMs)
       : { complete: false, deleted: 0, skipped: 0 };
+    const tokens: PassResult = responses.complete
+      ? await deleteInvitationTokensPass(tenantId, surveyId, getRemainingMs)
+      : { complete: false, deleted: 0, skipped: 0 };
 
     run.deletedAggregates += aggregates.deleted;
     run.deletedResponses += responses.deleted;
-    run.skipped += aggregates.skipped + responses.skipped;
+    run.deletedTokens += tokens.deleted;
+    run.skipped += aggregates.skipped + responses.skipped + tokens.skipped;
 
-    if (!aggregates.complete || !responses.complete) {
+    if (!aggregates.complete || !responses.complete || !tokens.complete) {
       // Zeit knapp: Fortsetzung in einer neuen Nachricht, Fortschritt steht im Job
       await enqueue({ tenantId, surveyId }, 0);
       console.log("[survey_responses_delete] time budget reached, continuing in new run", { tenantId, surveyId, run });
       return;
     }
     // Ein Durchlauf ohne Löschungen bestätigt, dass nichts mehr (eventually consistent) nachkommt
-    if (aggregates.deleted === 0 && responses.deleted === 0) {
+    if (aggregates.deleted === 0 && responses.deleted === 0 && tokens.deleted === 0) {
       const finalJob = await setJobStatus(tenantId, surveyId, "done");
       console.log("[survey_responses_delete] deletion done", {
         tenantId,
@@ -491,6 +547,7 @@ async function processMessage(message: DeletionMessage, getRemainingMs: () => nu
         total: {
           deletedResponses: finalJob.deletedResponses ?? 0,
           deletedAggregates: finalJob.deletedAggregates ?? 0,
+          deletedTokens: finalJob.deletedTokens ?? 0,
           skipped: finalJob.skipped ?? 0,
         },
         requestedAt: finalJob.requestedAt,

@@ -1,13 +1,23 @@
+import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
+import { fetchWithTimeout } from "./http";
+import { isValidSurveyId } from "./survey_id";
+import { isSurveyBeingDeleted } from "./survey_results";
+import { loadTenantCredentials, type TenantCredentials } from "./tenant_auth";
+import { parseProdSurvey } from "./web_survey_format";
+
 /**
+ * Zugriff des Backends auf die Umfrage-Data-Table eines Mandanten (Client Credentials aus dem Onboarding).
+ *
  * Sicherheitsprüfung vor dem Löschen von Umfrage-Ergebnissen:
  * Ergebnisse dürfen nur gelöscht werden, wenn die Umfrage in der Genesys Data Table
  * nachweislich nicht (mehr) existiert. Im Zweifel (Fehler, fehlender Zugriff,
  * unlesbare Antwort) wird NICHT gelöscht.
+ *
+ * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage, `loadProjectTag` den Projekt-Tag
+ * der Installation aus der Zeile `__meta`.
  */
 
-const SURVEY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
-const REQUEST_TIMEOUT_MS = 8000;
 
 export type SurveyAbsenceResult =
   | { status: "absent" }
@@ -16,20 +26,7 @@ export type SurveyAbsenceResult =
 
 const clientTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
-/** Umfrage-IDs sind UUIDs; nur so ist `begins_with "<id>#"` eindeutig. */
-export function isValidSurveyId(value: unknown): value is string {
-  return typeof value === "string" && SURVEY_ID_PATTERN.test(value);
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
+export { isValidSurveyId };
 
 export async function getClientCredentialsToken(
   region: string,
@@ -49,7 +46,9 @@ export async function getClientCredentialsToken(
     },
     body: "grant_type=client_credentials",
   });
-  if (!res.ok) throw new Error(`Genesys client credentials token failed (HTTP ${res.status})`);
+  if (!res.ok) {
+    throw Object.assign(new Error(`Genesys client credentials token failed (HTTP ${res.status})`), { status: res.status });
+  }
 
   const data: any = await res.json();
   if (!data?.access_token) throw new Error("Genesys token response without access_token");
@@ -61,7 +60,7 @@ export async function getClientCredentialsToken(
   return data.access_token;
 }
 
-async function getRow(
+export async function getRow(
   region: string,
   token: string,
   dataTableId: string,
@@ -148,4 +147,85 @@ export async function assertSurveyAbsent(
   }
 
   return { status: "absent" };
+}
+
+// ---------------------------------------------------------------------------
+// Web-Kanal
+// ---------------------------------------------------------------------------
+
+/** Region, Client-Credentials-Token und Umfrage-Data-Table (`surveyDataTableId`) eines Mandanten. */
+export type SurveyTableAccess = {
+  region: string;
+  token: string;
+  dataTableId: string;
+};
+
+export type ProdSurveyResult =
+  | { status: "ok"; survey: FlowSurvey }
+  /** Kein Prod-Stand, Umfrage gelöscht oder Löschung läuft. */
+  | { status: "unavailable"; reason: string }
+  /** Genesys nicht erreichbar oder Zugriff fehlt; `throttled` bei HTTP 429 von Genesys. */
+  | { status: "error"; reason: string; throttled?: boolean };
+
+function errorResult(reason: string, httpStatus?: number): ProdSurveyResult {
+  return { status: "error", reason, ...(httpStatus === 429 ? { throttled: true } : {}) };
+}
+
+/** Wirft, wenn das Token nicht geholt werden kann (Fehler mit `status` bei HTTP-Fehlern). */
+export async function getSurveyTableAccess(credentials: TenantCredentials): Promise<SurveyTableAccess> {
+  const dataTableId = credentials.surveyDataTableId;
+  if (!dataTableId) throw new Error("No survey data table registered for tenant");
+  const token = await getClientCredentialsToken(credentials.region, credentials.clientId, credentials.clientSecret);
+  return { region: credentials.region, token, dataTableId };
+}
+
+/**
+ * Lädt den Prod-Stand der Umfrage aus der Data Table des Mandanten. Liegt ein Lösch-Job vor
+ * (`SurveyDeletionJobsTable`), gilt die Umfrage als nicht verfügbar, auch wenn die Zeile noch existiert.
+ * Ohne `credentials` werden sie über `loadTenantCredentials` geladen.
+ */
+export async function loadProdSurvey(
+  tenantId: string,
+  surveyId: string,
+  credentials?: TenantCredentials
+): Promise<ProdSurveyResult> {
+  if (!isValidSurveyId(surveyId)) return { status: "unavailable", reason: "Invalid surveyId" };
+  if (await isSurveyBeingDeleted(tenantId, surveyId)) return { status: "unavailable", reason: "Survey is being deleted" };
+
+  const tenantCredentials = credentials ?? (await loadTenantCredentials(tenantId));
+  if (!tenantCredentials) return errorResult("No Genesys credentials for tenant");
+
+  try {
+    const access = await getSurveyTableAccess(tenantCredentials);
+    const row = await getRow(access.region, access.token, access.dataTableId, `survey_${surveyId}`);
+    if (row.status === 404) return { status: "unavailable", reason: "Survey row not found" };
+    if (row.status !== 200) return errorResult(`Survey row HTTP ${row.status}`, row.status);
+
+    const survey = parseProdSurvey(row.body?.Prod, surveyId);
+    if (!survey) return { status: "unavailable", reason: "No valid Prod version" };
+    return { status: "ok", survey };
+  } catch (err: any) {
+    return errorResult(err?.message ?? "request failed", err?.status);
+  }
+}
+
+/**
+ * Projekt-Tag der Installation (`meta.setup.projectTag` in der Zeile `__meta`, Feld `Draft`).
+ * `undefined`, wenn die Zeile oder der Tag fehlt (wie im Frontend: dann zählt nur die unpräfixierte Rolle).
+ * Wirft bei anderen HTTP-Fehlern.
+ */
+export async function loadProjectTag(access: SurveyTableAccess): Promise<string | undefined> {
+  const row = await getRow(access.region, access.token, access.dataTableId, "__meta");
+  if (row.status === 404) return undefined;
+  if (row.status !== 200) {
+    throw Object.assign(new Error(`__meta row HTTP ${row.status}`), { status: row.status });
+  }
+  let meta: any;
+  try {
+    meta = typeof row.body?.Draft === "string" ? JSON.parse(row.body.Draft) : row.body?.Draft;
+  } catch {
+    return undefined;
+  }
+  const projectTag = meta?.setup?.projectTag;
+  return typeof projectTag === "string" && projectTag.trim() ? projectTag.trim() : undefined;
 }

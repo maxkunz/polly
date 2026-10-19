@@ -20,6 +20,8 @@ Das System nutzt zwei DynamoDB-Tabellen:
    - **Sort Key (SK):** `questionName` (unveränderlicher Bezeichner der Frage)
    - Ermöglicht O(1)-Abfragen von aggregierten Kennzahlen (Durchschnittswerte, Häufigkeitsverteilung) ohne Scan über alle Einzelsessions.
 
+Der Web-Kanal schreibt in dieselben beiden Tabellen und hat zusätzlich die Tabelle `InvitationTokens` für benutzte Einmal-Einladungen, siehe [polly_web.md](polly_web.md).
+
 ### 1.2 Session-Lifecycle & Status
 Ein Anrufer kann eine Umfrage jederzeit abbrechen (Auflegen). Daher wird jede Antwort inkrementell per Upsert gespeichert:
 
@@ -392,7 +394,7 @@ Der Cursor ist an Mandant und Umfrage gebunden; ein fremder oder manipulierter C
 Die Werte sind Teil-Aggregate und müssen über alle Teilabrufe addiert werden.
 
 ### 4.6 DELETE `/survey-responses` und GET `/survey-responses/delete-status`
-Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable` und `SurveyAggregatesTable` (Lambda `survey_responses_delete`). Das Löschen läuft **asynchron** über eine SQS-Queue; der Aufruf liefert sofort `202 Accepted`. Das Frontend ruft den Endpunkt automatisch auf, nachdem eine Umfrage aus der Data Table entfernt wurde.
+Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable` und `SurveyAggregatesTable` sowie die benutzten Einmal-Einladungen aus `InvitationTokens` (GSI `byTenantSurvey`, Lambda `survey_responses_delete`). Das Löschen läuft **asynchron** über eine SQS-Queue; der Aufruf liefert sofort `202 Accepted`. Das Frontend ruft den Endpunkt automatisch auf, nachdem eine Umfrage aus der Data Table entfernt wurde.
 
 #### DELETE – Query Parameters
 | Parameter | Typ | Pflicht | Beschreibung |
@@ -409,7 +411,7 @@ Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable`
 | `502` | Nicht zweifelsfrei prüfbar (z. B. kein Zugriff auf die Data Table, Genesys-Fehler). Es wird nichts gelöscht. |
 
 #### GET `/survey-responses/delete-status?surveyId=...`
-Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `requestedAt`, `updatedAt`, `deletedResponses`, `deletedAggregates`, `skipped`, `message`. `404`, wenn kein Job existiert.
+Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `requestedAt`, `updatedAt`, `deletedResponses`, `deletedAggregates`, `deletedTokens` (benutzte Einmal-Einladungen des Web-Kanals), `skipped`, `message`. `404`, wenn kein Job existiert.
 
 #### Ablauf und Sicherheitsregeln (Ergebnisse existierender Umfragen werden nie gelöscht)
 1. `surveyId` muss eine UUID sein; der Mandant stammt ausschließlich aus dem Token.
@@ -418,7 +420,7 @@ Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `r
 4. **Erneute Prüfung im Worker** mit den Backend-Credentials des Mandanten unmittelbar vor dem Löschen. Existiert die Umfrage dann doch, wird der Job `aborted`. Ist die Data Table für die Backend-Rolle nicht lesbar, wird nach 3 Versuchen `failed`; gelöscht wird in beiden Fällen nichts.
 5. Gelöscht wird pro Item mit Bedingung (`tenantId` und `surveyId` müssen passen). Items, bei denen `surveyId` inzwischen auf eine andere Umfrage zeigt (gleiche Conversation, zweite Umfrage), werden übersprungen (`skipped`).
 6. Der Worker läuft in Seiten à 100 Items, setzt bei knapper Laufzeit in einer neuen Nachricht fort und beendet den Job erst nach einem Durchlauf ohne Löschungen (`done`). Nach 3 Fehlversuchen landet die Nachricht in der Dead-Letter-Queue.
-7. **Tombstone:** Solange der Job `queued`, `running` oder `done` ist, beantwortet `POST /survey-responses` Antworten zu dieser Umfrage mit `200` und `{ "ignored": true }`, ohne zu speichern. Bei `aborted`/`failed` wird nicht gesperrt.
+7. **Tombstone:** Solange der Job `queued`, `running` oder `done` ist, beantwortet `POST /survey-responses` Antworten zu dieser Umfrage mit `200` und `{ "ignored": true }`, ohne zu speichern. Der Web-Kanal meldet die Umfrage dann als nicht verfügbar (`unavailable`), `POST /invitations` lehnt mit `409` ab. Bei `aborted`/`failed` wird nicht gesperrt.
 8. **Aufbewahrung:** Jobs mit Status `done` erhalten das Attribut `expiresAt` (Unix-Sekunden, 7 Tage nach Abschluss) und werden per DynamoDB-TTL entfernt (TTL löscht verzögert, meist innerhalb von 48 h nach Ablauf). Danach liefert `delete-status` `404` und der Tombstone entfällt. `aborted`/`failed`-Jobs bleiben zur Analyse erhalten.
 
 ---

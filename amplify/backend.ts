@@ -19,6 +19,8 @@ import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
 import { surveyResponsesDelete } from "./functions/survey_responses_delete/resource";
 import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
+import { invitations } from "./functions/invitations/resource";
+import { webSurvey } from "./functions/web_survey/resource";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -42,6 +44,17 @@ const tenantSecretsPrefix = `gc-clients/${envSuffix}`;
 // Optionale Genesys-Region (Amplify-Hosting-Umgebungsvariable), Default liegt in shared/tenant_auth.ts.
 const genesysRegion = (process.env.GENESYS_REGION ?? "").trim();
 
+// Drosselung der öffentlichen Web-Umfrage-Routen. Gilt pro Route für alle Mandanten zusammen (nicht pro IP)
+// und schützt nur das Backend vor Überlast; daher großzügig, damit große Kampagnen nicht ausgebremst werden.
+// Begründung: documentation/polly_web.md, Abschnitt „Drosselung“.
+const WEB_SURVEY_GET_THROTTLE = { rateLimit: 200, burstLimit: 500 };
+const WEB_SURVEY_SUBMIT_THROTTLE = { rateLimit: 100, burstLimit: 300 };
+// Reservierte Parallelität der Lambda web_survey, damit eine Flut auf der öffentlichen Seite nicht das
+// Lambda-Kontingent des Kontos aufbraucht (Data Action des Telefon-Flows). Nur per Amplify-Umgebungsvariable
+// WEB_SURVEY_RESERVED_CONCURRENCY (z. B. "50"); ohne sie keine Reservierung, weil AWS mindestens 100 nicht
+// reservierte Ausführungen verlangt und der Deploy auf Konten mit kleinem Kontingent sonst scheitert.
+const webSurveyReservedConcurrency = Number.parseInt(process.env.WEB_SURVEY_RESERVED_CONCURRENCY ?? "0", 10);
+
 const backend = defineBackend({
   auth,
   onboarding,
@@ -50,6 +63,8 @@ const backend = defineBackend({
   surveyResponsesDelete,
   surveyCleanup,
   pollyArchyUpload,
+  invitations,
+  webSurvey,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -130,6 +145,36 @@ const surveyDeletionJobsTable = new dynamodb.Table(stack, "SurveyDeletionJobsTab
   sortKey: { name: "surveyId", type: dynamodb.AttributeType.STRING },
   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
   timeToLiveAttribute: "expiresAt",
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Benutzte Einmal-Einladungen des Web-Kanals (nur diese, erzeugte Tokens werden nicht gespeichert).
+// Das Ablaufdatum der Einladung heißt exp (JWT), die Löschfrist des Eintrags ttl (Nutzung + 180 Tage).
+const invitationTokensTable = new dynamodb.Table(stack, "InvitationTokensTable", {
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "tokenId", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  timeToLiveAttribute: "ttl",
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Für den Lösch-Worker: alle Tokens einer Umfrage
+invitationTokensTable.addGlobalSecondaryIndex({
+  indexName: "byTenantSurvey",
+  partitionKey: { name: "tenantSurveyId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "usedAt", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.KEYS_ONLY,
+});
+
+// Signaturschlüssel der Einladungen (HS256), ein Schlüssel pro Umgebung. Verlässt AWS nie: Die Lambdas
+// bekommen nur den ARN. RETAIN, weil ein neuer Schlüssel alle verschickten Links ungültig machen würde.
+const webSurveyJwtSecret = new secretsmanager.Secret(stack, "WebSurveyJwtSecret", {
+  secretName: `polly-web-survey-jwt-${envSuffix}`,
+  description: "Signaturschlüssel der Einladungslinks des Web-Kanals (HS256)",
+  generateSecretString: {
+    passwordLength: 64,
+    excludePunctuation: true,
+  },
   removalPolicy: RemovalPolicy.RETAIN,
 });
 
@@ -381,6 +426,11 @@ surveyResponsesDeleteLambda.addEnvironment(
   "SURVEY_DELETION_QUEUE_URL",
   surveyDeletionQueue.queueUrl,
 );
+invitationTokensTable.grantReadWriteData(surveyResponsesDeleteLambda);
+surveyResponsesDeleteLambda.addEnvironment(
+  "INVITATION_TOKENS_TABLE_NAME",
+  invitationTokensTable.tableName,
+);
 attachTenantAuth(surveyResponsesDeleteLambda);
 
 const surveyResponsesDeleteInteg = new integrations.HttpLambdaIntegration(
@@ -399,6 +449,94 @@ httpApi.addRoutes({
   methods: [apigw.HttpMethod.GET],
   integration: surveyResponsesDeleteInteg,
 });
+
+// ---------------------------------------------------------------------------
+// Web-Kanal: Einladungen (Genesys-User mit polly_deploy) und öffentliche Umfrageseite
+// ---------------------------------------------------------------------------
+
+const invitationsLambda = backend.invitations.resources.lambda as lambda.Function;
+
+webSurveyJwtSecret.grantRead(invitationsLambda);
+invitationsLambda.addEnvironment("WEB_SURVEY_JWT_SECRET_ARN", webSurveyJwtSecret.secretArn);
+// Prüfung auf laufende Löschung der Umfrage (loadProdSurvey)
+surveyDeletionJobsTable.grantReadData(invitationsLambda);
+invitationsLambda.addEnvironment(
+  "SURVEY_DELETION_JOBS_TABLE_NAME",
+  surveyDeletionJobsTable.tableName,
+);
+attachTenantAuth(invitationsLambda);
+
+httpApi.addRoutes({
+  path: "/invitations",
+  methods: [apigw.HttpMethod.POST],
+  integration: new integrations.HttpLambdaIntegration("InvitationsInteg", invitationsLambda),
+});
+
+const webSurveyLambda = backend.webSurvey.resources.lambda as lambda.Function;
+
+webSurveyJwtSecret.grantRead(webSurveyLambda);
+webSurveyLambda.addEnvironment("WEB_SURVEY_JWT_SECRET_ARN", webSurveyJwtSecret.secretArn);
+invitationTokensTable.grantReadWriteData(webSurveyLambda);
+webSurveyLambda.addEnvironment(
+  "INVITATION_TOKENS_TABLE_NAME",
+  invitationTokensTable.tableName,
+);
+surveyResponsesTable.grantReadWriteData(webSurveyLambda);
+webSurveyLambda.addEnvironment(
+  "SURVEY_RESPONSES_TABLE_NAME",
+  surveyResponsesTable.tableName,
+);
+surveyAggregatesTable.grantReadWriteData(webSurveyLambda);
+webSurveyLambda.addEnvironment(
+  "SURVEY_AGGREGATES_TABLE_NAME",
+  surveyAggregatesTable.tableName,
+);
+surveyDeletionJobsTable.grantReadData(webSurveyLambda);
+webSurveyLambda.addEnvironment(
+  "SURVEY_DELETION_JOBS_TABLE_NAME",
+  surveyDeletionJobsTable.tableName,
+);
+// Öffentlich ohne Login: attachTenantAuth liefert hier nur Tenants-Tabelle und Tenant-Secret
+// (Genesys-Credentials zum Lesen des Prod-Stands), der Handler ruft resolveTenantContext nicht auf.
+attachTenantAuth(webSurveyLambda);
+
+if (Number.isInteger(webSurveyReservedConcurrency) && webSurveyReservedConcurrency > 0) {
+  (webSurveyLambda.node.defaultChild as lambda.CfnFunction).reservedConcurrentExecutions =
+    webSurveyReservedConcurrency;
+}
+
+const webSurveyInteg = new integrations.HttpLambdaIntegration("WebSurveyInteg", webSurveyLambda);
+
+const webSurveyRoutes = [
+  ...httpApi.addRoutes({
+    path: "/web-survey",
+    methods: [apigw.HttpMethod.GET],
+    integration: webSurveyInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/web-survey/submit",
+    methods: [apigw.HttpMethod.POST],
+    integration: webSurveyInteg,
+  }),
+];
+
+// Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
+const defaultStage = httpApi.defaultStage;
+if (defaultStage) {
+  const defaultStageCfn = defaultStage.node.defaultChild as apigw.CfnStage;
+  defaultStageCfn.routeSettings = {
+    "GET /web-survey": {
+      ThrottlingRateLimit: WEB_SURVEY_GET_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: WEB_SURVEY_GET_THROTTLE.burstLimit,
+    },
+    "POST /web-survey/submit": {
+      ThrottlingRateLimit: WEB_SURVEY_SUBMIT_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: WEB_SURVEY_SUBMIT_THROTTLE.burstLimit,
+    },
+  };
+  // Die Routen müssen existieren, bevor die Stage auf sie verweist
+  defaultStage.node.addDependency(...webSurveyRoutes);
+}
 
 const surveyCleanupLambda = backend.surveyCleanup.resources
   .lambda as lambda.Function;

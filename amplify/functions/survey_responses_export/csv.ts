@@ -13,7 +13,11 @@ export const CSV_HEADER = [
   "answeredAt",
   "value",
   "status",
+  "Channel",
 ].join(CSV_SEPARATOR);
+
+/** Kanal von Sitzungen ohne Feld `channel` (Architect Flow, auch alle Antworten vor dem Web-Kanal). */
+export const DEFAULT_CHANNEL = "flow";
 
 export interface ExportAnswer {
   type?: string;
@@ -26,6 +30,8 @@ export interface ExportSession {
   surveyName?: string;
   surveyVersion?: number;
   status?: string;
+  /** `web` (Web-Umfrage) oder fehlend (Architect Flow). */
+  channel?: string;
   answers?: Record<string, ExportAnswer>;
 }
 
@@ -78,6 +84,7 @@ export function sessionToCsvRows(session: ExportSession): string[] {
       formatText(answer.answeredAt),
       formatValue(answer.value),
       formatText(session.status),
+      formatText(session.channel || DEFAULT_CHANNEL),
     ].join(CSV_SEPARATOR),
   );
 }

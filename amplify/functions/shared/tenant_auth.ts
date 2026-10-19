@@ -3,6 +3,7 @@ import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-d
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { createHash, createPublicKey, verify } from "crypto";
 import { isGenesysRegion, normalizeGenesysRegion } from "./genesys_regions";
+import { fetchWithTimeout } from "./http";
 
 type AnyApiGwEvent = any;
 
@@ -211,7 +212,7 @@ async function validateGenesysToken(
   if (cached && cached.expiresAt > Date.now()) return { clientId: cached.clientId };
 
   const url = `https://api.${region}/api/v2/tokens/me`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     console.warn("[tenant_auth] Genesys token validation failed", { region, status: res.status });
     return { error: `Genesys token invalid (HTTP ${res.status})` };
@@ -373,6 +374,8 @@ export type TenantCredentials = {
   clientId: string;
   clientSecret: string;
   allowedDataTableIds: string[];
+  /** Umfrage-Data-Table; bei Mandanten ohne `surveyDataTableId` im Eintrag `allowedDataTableIds[0]` (Reihenfolge des Setups). */
+  surveyDataTableId: string;
 };
 
 /**
@@ -385,12 +388,16 @@ export async function loadTenantCredentials(tenantId: string): Promise<TenantCre
   const secret = await loadGenesysSecret(item.genesysSecretArn);
   if (!secret.genesysClientId || !secret.genesysClientSecret) return undefined;
 
+  const allowedDataTableIds: string[] = Array.isArray(item.allowedDataTableIds)
+    ? item.allowedDataTableIds.map((id: unknown) => String(id))
+    : [];
+  const surveyDataTableId = typeof item.surveyDataTableId === "string" ? item.surveyDataTableId.trim() : "";
+
   return {
     region: item.genesysRegion ?? DEFAULT_GENESYS_REGION,
     clientId: secret.genesysClientId,
     clientSecret: secret.genesysClientSecret,
-    allowedDataTableIds: Array.isArray(item.allowedDataTableIds)
-      ? item.allowedDataTableIds.map((id: unknown) => String(id))
-      : [],
+    allowedDataTableIds,
+    surveyDataTableId: surveyDataTableId || String(allowedDataTableIds[0] ?? "").trim(),
   };
 }

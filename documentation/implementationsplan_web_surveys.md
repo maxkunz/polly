@@ -1,5 +1,29 @@
 # Implementierungsplan: Web-Kanal für PollyCX
 
+## Fortschritt
+Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz notieren. Neue Funktionen die der Nutzer nun testen kann bitte zusammenfassen.
+
+- [x] M1 Schritt 0 und 1 (2026-10-16)
+- [x] M2 Schritt 2a: reine Logik (Token-Modul, flowNavigation, Tests dazu)  (2026-10-19)
+- [x] M3 Schritt 2b: Backend-Infrastruktur (Tabelle, Secret, Lambdas invitations und web_survey, Routen, Drosselung, Anpassungen an Lösch-Worker und Export).  (2026-10-19)
+  - Abweichungen:
+    - `loadProdSurvey(tenantId, surveyId, credentials?)` nimmt optional schon geladene Credentials. Der Projekt-Tag für die Rollenprüfung kommt aus `meta.setup.projectTag` der Zeile `__meta` (`loadProjectTag`).
+    - `hasRole` liegt jetzt als `hasPollyRole` in `src/domain/permissions/roleCheck.ts` (aliasfrei). `appStore` und die Lambda `invitations` nutzen dieselbe Funktion.
+    - Die Aggregat-Logik und `isSurveyBeingDeleted` liegen in `amplify/functions/shared/survey_results.ts`.
+    - `web_survey` nutzt `attachTenantAuth` nur für die Grants (Tenants-Tabelle, Tenant-Secret), ruft aber `resolveTenantContext` nicht auf.
+    - Zusätzlich: Der Prod-Stand wird bei GET 30 s pro Container gecacht (schont das Genesys-Rate-Limit). `409 survey_changed` liefert die neue Fassung gleich mit, die Seite muss nicht neu laden. Genesys-429 wird als `429 throttled` weitergegeben.
+    - `reservedConcurrentExecutions` ist per Amplify-Umgebungsvariable `WEB_SURVEY_RESERVED_CONCURRENCY` änderbar (Default aus, z. B. `50` schaltet sie ein), weil Konten mit kleinem Kontingent sonst nicht deployen können.
+    - Statuscodes von `/invitations` und `/web-survey/submit` sind in `polly_web.md` als Tabellen festgelegt. Die Typen für die Seite stehen in `src/domain/survey/webSurveyTypes.ts`.
+    - Neuer Test `test/webSurveyBackend.test.ts`; die curl-Suite liegt unter `tools/survey_responses.sh` (nicht `test/`).
+  - Testbar nach dem Deploy (noch ohne Oberfläche):
+    - `POST /api/invitations` mit dem Genesys-Bearer aus der App (Header `x-genesys-region`), z. B. `{"surveyId":"<uuid>","count":3,"multi":false}`. Ohne `polly_deploy` → 403, mit M2M-Token → 403, ohne Prod-Stand → 409.
+    - `GET /api/web-survey?token=<jwt>` liefert das bereinigte Flow-JSON. `POST /api/web-survey/submit` speichert eine Antwort. Sie erscheint im Report-CSV mit `Channel` = `web`; ein zweites Absenden mit demselben Einmal-Token → 409 `used`.
+    - Der Report-Export hat die neue letzte Spalte `Channel` (bestehende Antworten: `flow`).
+    - `tools/survey_responses.sh` prüft die öffentlichen Fälle ohne Token, mit `WEB_TOKEN=<jwt>` auch Laden und `survey_changed`.
+- [ ] M4 Schritt 3 – Unterseite „Einladungslinks“ (Genesys-App)
+- [ ] M5 Schritt 4 – Öffentliche Web-Umfrageseite
+
+
 ## Context
 
 Bisher spielt Polly Umfragen nur über Genesys Architect ab (Telefon/Chat). `documentation/polly_web.md` legt einen dritten Kanal fest: öffentliche Web-Umfragen mit personalisierten JWT-Einladungslinks, Min/Max-Labels für rating/nps, einer Basis-URL pro Umfrage und einer barrierefreien Umfrageseite. Antworten landen erst beim Absenden in DynamoDB.
@@ -104,7 +128,7 @@ Außerdem wird `survey_definition.md` angepasst (`base_url`, `language`, `min_la
   - unterscheidet die Fehler `invalid` und `expired`
 - `genesys_survey_check.ts`:
   - `getRow` exportieren
-  - neue Funktion `loadProdSurvey(tenantId, surveyId)`: mit `loadTenantCredentials` und dem Client-Credentials-Token die Zeile `survey_<id>` aus `allowedDataTableIds[0]` lesen und `Prod` parsen; zusätzlich gegen die Löschmarkierung in `SurveyDeletionJobsTable` prüfen
+  - neue Funktion `loadProdSurvey(tenantId, surveyId)`: mit `loadTenantCredentials` und dem Client-Credentials-Token die Zeile `survey_<id>` aus der Umfrage-Data-Table lesen (`surveyDataTableId` des Mandanten, seit dem Review explizit beim Onboarding gespeichert; ältere Mandanten: `allowedDataTableIds[0]`) und `Prod` parsen; zusätzlich gegen die Löschmarkierung in `SurveyDeletionJobsTable` prüfen
 
 **Navigation im Flow-JSON:** neues Modul `src/domain/survey/flowNavigation.ts`, rein und ohne Vue.
 - Ermittelt aus Prod-JSON und Antworten die erreichbaren Fragen.

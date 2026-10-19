@@ -295,6 +295,7 @@ export async function runFullProvisioning(
         genesysClientId: backendClient.id,
         genesysClientSecret: backendClient.secret,
         allowedDataTableIds: [datatableId, mappingDataTableId],
+        surveyDataTableId: datatableId,
       }),
     });
 

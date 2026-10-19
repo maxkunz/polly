@@ -51,7 +51,7 @@ Header: `{ "alg": "HS256", "typ": "JWT", "kid": "<8 Zeichen>" }`.
 
 `exp` ergibt sich aus dem gewählten Ablaufdatum als **Tagesende 23:59:59 in der lokalen Zeit des Erstellers**. `exp` ist damit die letzte gültige Sekunde: Abgelaufen ist die Einladung erst, wenn die aktuelle Zeit `exp` überschreitet. Ein `exp` in der Vergangenheit wird beim Erzeugen abgelehnt (`400`), ein `iat` in der Zukunft (mehr als 5 min Uhrabweichung) macht den Token ungültig.
 
-**Schlüssel:** Ein Schlüssel pro Umgebung (Branch), beim Deploy automatisch in AWS Secrets Manager erzeugt (`polly-web-survey-jwt-<envSuffix>`, 64 Zeichen, `RemovalPolicy.RETAIN`). Er verlässt AWS nie: Er steht weder im Repo noch im Frontend oder in Umgebungsvariablen; die Lambdas bekommen nur den ARN und lesen den Wert zur Laufzeit (mit Cache im Container). `kid` = die ersten 8 Zeichen des SHA-256-Hashs des Schlüssels. Die Prüfung akzeptiert `AWSCURRENT` und `AWSPREVIOUS`, eine manuelle Rotation macht bestehende Links also nicht sofort ungültig. Automatische Rotation ist nicht vorgesehen.
+**Schlüssel:** Ein Schlüssel pro Umgebung (Branch), beim Deploy automatisch in AWS Secrets Manager erzeugt (`polly-web-survey-jwt-<envSuffix>`, 64 Zeichen, `RemovalPolicy.RETAIN`; nur in der lokalen Sandbox setzt Amplify alle Ressourcen auf Löschen). Wird der Stack einer Umgebung gelöscht und neu aufgebaut, bleibt der alte Schlüssel stehen und der Name ist belegt: Der Deploy schlägt dann fehl, bis der alte Schlüssel gelöscht wird (bisherige Links werden damit ungültig). Er verlässt AWS nie: Er steht weder im Repo noch im Frontend oder in Umgebungsvariablen; die Lambdas bekommen nur den ARN und lesen den Wert zur Laufzeit (mit Cache im Container). `kid` = die ersten 8 Zeichen des SHA-256-Hashs des Schlüssels. Die Prüfung akzeptiert `AWSCURRENT` und `AWSPREVIOUS`, eine manuelle Rotation macht bestehende Links also nicht sofort ungültig. Automatische Rotation ist nicht vorgesehen.
 
 ### Link-Aufbau
 
@@ -101,23 +101,50 @@ Expiration;Multi use;Complete URL
 **`POST /api/invitations`** (Genesys-Bearer, Lambda `invitations`)
 
 * Request: `{ "surveyId": "<uuid>", "count": 1..5000, "exp": <epoch-sekunden, optional>, "multi": true|false }`
-* Response `200`: `{ "tokens": [{ "jwt": "...", "exp": 1793487599, "multi": true }] }`. Den Link baut das Frontend.
-* Fehler: `400` ungültige Eingabe, `401` Token ungültig, `403` `forbidden_m2m` (Cognito-M2M-Token; die Data Action des Flows hat keine Benutzerrollen, Links erzeugt nur die App-Oberfläche), `403` fehlende Rolle `polly_deploy` (serverseitig über `/api/v2/users/me?expand=authorization` geprüft, inkl. `projectTag`-Präfix), `409` Umfrage hat keinen Prod-Stand.
+* Response `200`: `{ "tokens": [{ "jwt": "...", "exp": 1793487599, "multi": true }] }`. Ohne `exp` im Request fehlt `exp` auch in den Tokens. Den Link baut das Frontend.
+* Ablauf: Token prüfen (Mandant `APPROVED`) → nur Genesys-User → Body prüfen → Projekt-Tag aus der Zeile `__meta` lesen → Rollen des Aufrufers laden und `polly_deploy` prüfen → Prod-Stand laden → signieren.
+* Fehler (Body `{ "code", "message" }`):
+
+| Status | `code` | Bedeutung |
+| :--- | :--- | :--- |
+| `400` | `invalid_request` | `surveyId` keine UUID, `count` nicht 1..5000, `multi` kein Boolean, `exp` keine Epoch-Sekunden oder nicht in der Zukunft |
+| `401` | `unauthorized` | Token ungültig oder Mandant nicht freigegeben |
+| `403` | `forbidden_m2m` | Cognito-M2M-Token; die Data Action des Flows hat keine Benutzerrollen, Links erzeugt nur die App-Oberfläche |
+| `403` | `missing_role` | Rolle `polly_deploy` fehlt (serverseitig über `/api/v2/users/me?expand=authorization` geprüft, inkl. `projectTag`-Präfix; fehlt dem Token der Scope `authorization:readonly`, gilt der User wie im Frontend als ohne Rolle) |
+| `409` | `no_prod` | Umfrage hat keinen Prod-Stand, ist gelöscht oder wird gerade gelöscht |
+| `429` | `genesys_error` | Genesys hat gedrosselt |
+| `502` | `no_credentials`, `genesys_error` | Keine Backend-Credentials des Mandanten oder Genesys-Fehler |
 
 **`GET /api/web-survey?token=<jwt>`** (öffentlich, Lambda `web_survey`)
 
-* Prüft Signatur, `kid`, `exp`, bei Einmal-Token den Eintrag in `InvitationTokens`, den Mandantenstatus (`APPROVED`) und lädt den Prod-Stand mit den Client Credentials des Mandanten.
+* Prüft Signatur, `kid`, `exp`, den Mandanten (`APPROVED` mit Backend-Credentials), bei Einmal-Token den Eintrag in `InvitationTokens` und lädt den Prod-Stand mit den Client Credentials des Mandanten (Zeile `survey_<id>` der Umfrage-Data-Table `surveyDataTableId` aus dem Mandanteneintrag; Mandanten, die vor diesem Feld eingerichtet wurden, nutzen `allowedDataTableIds[0]`, die Reihenfolge des Setups). Liegt ein Lösch-Job für die Umfrage vor, gilt sie als nicht verfügbar.
 * Response `200`:
-  * `{ "status": "ok", "survey": { … } }` – bereinigtes Flow-JSON ohne `synonyms`, `reprompt` und `name`, `language` mit Default `de`, inkl. `version`.
+  * `{ "status": "ok", "survey": { … } }` – bereinigtes Flow-JSON (Whitelist, Typ `WebSurvey` in `src/domain/survey/webSurveyTypes.ts`): ohne `name`, `reprompt`, `synonyms` und Zeitstempel; `language` immer gesetzt (Default `de`), `version` immer eine Zahl (ältere Stände ohne Version: `0`).
   * `{ "status": "invalid" | "expired" | "used" | "unavailable" }`
+* Weitere Antworten: `429 { "status": "throttled" }` (Drosselung der API oder von Genesys), `502 { "status": "error" }` (Genesys nicht erreichbar).
+* Der Prod-Stand wird pro Lambda-Container **30 Sekunden** zwischengespeichert, damit große Kampagnen das Genesys-Rate-Limit des Mandanten nicht ausschöpfen. Ein neuer Prod-Deploy ist deshalb beim Laden der Seite spätestens nach 30 s sichtbar; beim Absenden wird immer frisch gelesen.
 
 **`POST /api/web-survey/submit`** (öffentlich)
 
 * Request: `{ "token": "<jwt>", "surveyVersion": <int>, "answers": { "<questionId>": <wert> } }`
-* Prüft den Token erneut und lädt Prod. Weicht `surveyVersion` von `Prod.version` ab, antwortet es mit `409 survey_changed`; nichts wird gespeichert, der Token bleibt unverbraucht.
+* Prüft den Token erneut und lädt Prod (ohne Cache). Weicht `surveyVersion` von `Prod.version` ab, antwortet es mit `409 { "status": "survey_changed", "survey": { … } }` und liefert die neue Fassung gleich mit; nichts wird gespeichert, der Token bleibt unverbraucht.
 * Die Antworten werden gegen das Flow-JSON geprüft (`flowNavigation`): erreichbare Fragen, Pflichtangaben, Wertebereiche (rating min..max, nps 0..10, choice = Label, yes_no = bool, comment höchstens 2000 Zeichen). Bei Verstoß `400`, nichts wird gespeichert.
-* Speichern in einer DynamoDB-Transaktion: bei Einmal-Token ein Put in `InvitationTokens` mit `attribute_not_exists`, dazu der Put der Antwort mit `status: "completed"`, `channel: "web"`, `tokenId`. Schlägt die Bedingung fehl, antwortet es mit `409 used` – auch bei gleichzeitigem Absenden kann dieselbe Einladung nicht doppelt genutzt werden. Danach werden die Aggregate aktualisiert.
-* Weitere Fehler: `429` Drosselung, `413` Body über 64 KB.
+* Gespeichert werden nur beantwortete, gültige Antworten auf erreichbare Fragen (`pruneFlowAnswers`), im Format der Architect-Sitzungen: Schlüssel ist der technische Fragename, Wert `{ type, value, answeredAt }`.
+* Speichern in einer DynamoDB-Transaktion: bei Einmal-Token ein Put in `InvitationTokens` mit `attribute_not_exists`, dazu der Put der Antwort mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId` = zufällige UUID. Schlägt die Bedingung fehl, antwortet es mit `409 used` – auch bei gleichzeitigem Absenden kann dieselbe Einladung nicht doppelt genutzt werden. Danach werden die Aggregate aktualisiert (ein Fehler dort macht die gespeicherte Antwort nicht ungültig).
+* Antworten (immer mit Feld `status`):
+
+| Status | `status` | Bedeutung |
+| :--- | :--- | :--- |
+| `200` | `ok` | gespeichert |
+| `400` | `invalid_request` | Body kein JSON, `token` fehlt, `surveyVersion` keine Ganzzahl, `answers` kein Objekt |
+| `400` | `invalid_answers` | Prüfung fehlgeschlagen; `errors: [{ questionId, code }]` mit `code` aus `required`, `invalid_value`, `not_reachable`, `unknown_question` |
+| `403` | `invalid`, `expired` | Einladung ungültig bzw. abgelaufen |
+| `404` | `unavailable` | kein Prod-Stand, Umfrage gelöscht oder Löschung läuft |
+| `409` | `used` | Einmal-Einladung bereits benutzt |
+| `409` | `survey_changed` | Prod hat sich geändert, neue Fassung in `survey` |
+| `413` | `payload_too_large` | Body über 64 KB |
+| `429` | `throttled` | Drosselung durch Genesys; drosselt API Gateway selbst, kommt `429` mit `{ "message": "Too Many Requests" }` ohne `status` |
+| `502` | `error` | Genesys nicht erreichbar |
 
 ### Tabelle `InvitationTokens`
 
@@ -141,7 +168,7 @@ Das Ablaufdatum der Einladung heißt überall `exp` (JWT-Claim und API), die Lö
 
 Die Drosselung der HTTP API gilt pro Route für **alle Mandanten zusammen**, nicht pro IP. Sie schützt das Backend vor Überlast, nicht gezielt vor einzelnen Angreifern. Die Grenzwerte sind deshalb großzügig, damit große Kampagnen nicht ausgebremst werden: `GET /web-survey` Rate 200/s, Burst 500; `POST /web-survey/submit` Rate 100/s, Burst 300 (Konstanten in `backend.ts`).
 
-Zusätzlich hat `web_survey` eine `reservedConcurrentExecutions`, damit eine Flut auf der öffentlichen Seite nicht das Lambda-Kontingent des Kontos aufbraucht und die Data Action des Telefon-Flows (`survey_responses`) ausbremst. Die Lambda begrenzt selbst die Body-Größe (64 KB) und die Länge von Kommentaren.
+Optional bekommt `web_survey` eine `reservedConcurrentExecutions`, damit eine Flut auf der öffentlichen Seite nicht das Lambda-Kontingent des Kontos aufbraucht und die Data Action des Telefon-Flows (`survey_responses`) ausbremst. Sie wird über die Amplify-Umgebungsvariable `WEB_SURVEY_RESERVED_CONCURRENCY` eingeschaltet (z. B. `50`, wirkt beim nächsten Deploy); ohne Variable oder mit `0` gibt es keine Reservierung. Der Default ist aus, weil AWS verlangt, dass mindestens 100 Ausführungen des Kontos unreserviert bleiben: Auf Konten mit kleinem Kontingent (z. B. neue Konten mit 10) schlüge der Deploy sonst fehl. Für produktive Konten mit Web-Kampagnen sollte sie gesetzt werden. Die Lambda begrenzt selbst die Body-Größe (64 KB) und die Länge von Kommentaren.
 
 Eine Begrenzung pro IP wäre nur mit CloudFront + WAF vor der API möglich (HTTP APIs unterstützen WAF nicht direkt). Das ist eine spätere Option.
 

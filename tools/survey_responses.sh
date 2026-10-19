@@ -7,6 +7,50 @@
 API_URL="${API_URL:-https://main.d1a6p4nkkob4i7.amplifyapp.com/api}"
 GENESYS_TOKEN="${GENESYS_TOKEN:-}"
 GENESYS_REGION="${GENESYS_REGION:-mypurecloud.de}"
+# Optional: echte Einladung (JWT) für den Web-Kanal, z. B. aus der Einladungs-CSV
+WEB_TOKEN="${WEB_TOKEN:-}"
+
+# -------------------------------------------------------------------
+# Web-Kanal: öffentliche Endpunkte, laufen ohne Genesys-Token
+# -------------------------------------------------------------------
+echo "==== Web-Kanal: ${API_URL}/web-survey ===="
+
+echo ">>> [W1] GET /web-survey ohne Token (erwartet 200, status invalid)"
+curl -s -w "\nHTTP %{http_code}\n" "${API_URL}/web-survey"
+echo ""
+
+echo ">>> [W2] GET /web-survey mit manipuliertem Token (erwartet 200, status invalid)"
+curl -s -w "\nHTTP %{http_code}\n" "${API_URL}/web-survey?token=eyJhbGciOiJIUzI1NiIsImtpZCI6IjAwMDAwMDAwIn0.e30.AAAA"
+echo ""
+
+echo ">>> [W3] POST /web-survey/submit mit kaputtem JSON (erwartet 400 invalid_request)"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/web-survey/submit" \
+  -H "Content-Type: application/json" -d '{kein json'
+echo ""
+
+echo ">>> [W4] POST /web-survey/submit mit ungültigem Token (erwartet 403 invalid)"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/web-survey/submit" \
+  -H "Content-Type: application/json" -d '{"token":"a.b.c","surveyVersion":1,"answers":{}}'
+echo ""
+
+echo ">>> [W5] POST /web-survey/submit über 64 KB (erwartet 413 payload_too_large)"
+head -c 70000 /dev/zero | tr '\0' 'a' | curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/web-survey/submit" \
+  -H "Content-Type: application/json" --data-binary @-
+echo ""
+
+if [ -n "$WEB_TOKEN" ]; then
+  echo ">>> [W6] GET /web-survey mit WEB_TOKEN (erwartet status ok und bereinigtes Flow-JSON)"
+  curl -s "${API_URL}/web-survey?token=${WEB_TOKEN}" | jq .
+  echo ""
+
+  echo ">>> [W7] POST /web-survey/submit mit falscher surveyVersion (erwartet 409 survey_changed, nichts gespeichert)"
+  curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/web-survey/submit" \
+    -H "Content-Type: application/json" -d "{\"token\":\"${WEB_TOKEN}\",\"surveyVersion\":-1,\"answers\":{}}"
+  echo ""
+else
+  echo "WEB_TOKEN nicht gesetzt – Web-Tests mit echter Einladung übersprungen."
+fi
+echo ""
 
 # Abbrechen wenn kein Token übergeben wird
 if [ -z "$GENESYS_TOKEN" ]; then

@@ -6,6 +6,7 @@ import { readSurveyList, type SurveyListItem } from "@/services/surveyService";
 import { getGenesysRegion } from "@/services/genesys/region";
 import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
+import { hasPollyRole } from "@/domain/permissions/roleCheck";
 
 import { Domain } from "@/domain/Domain";
 
@@ -13,9 +14,7 @@ import { Domain } from "@/domain/Domain";
 export type CurrentUser = { id: string; name: string; email?: string; roles: string[] };
 
 function hasRole(user: CurrentUser | null, role: string, projectTag?: string): boolean {
-	const legacy = role.toLowerCase();
-	const wanted = (projectTag ? `${projectTag}_${role}` : role).toLowerCase();
-	return (user?.roles ?? []).some(r => r.toLowerCase() === wanted || r.toLowerCase() === legacy);
+	return hasPollyRole(user?.roles ?? [], role, projectTag);
 }
 
 // Laufender Rollen-Refresh, damit parallele Aufrufe nur einen API-Call auslösen

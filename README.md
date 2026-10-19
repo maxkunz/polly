@@ -93,7 +93,7 @@ Flow:
 3. Setup creates a Genesys backend OAuth client
 4. Setup creates a Data Action integration and a Data Action
 5. Setup completes backend onboarding through `/api/onboarding/complete`
-6. Genesys credentials and allowed Data Table IDs are stored per tenant
+6. Genesys credentials, allowed Data Table IDs and the survey Data Table ID (`surveyDataTableId`) are stored per tenant
 
 This allows the backend to authenticate and process requests in a tenant-specific way.
 
