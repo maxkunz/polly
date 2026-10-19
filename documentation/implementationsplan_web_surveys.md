@@ -97,9 +97,10 @@ Außerdem wird `survey_definition.md` angepasst (`base_url`, `language`, `min_la
 
 **Gemeinsame Bausteine** in `amplify/functions/shared/`:
 - `invitation_token.ts`:
-  - `signInvitation(claims, secret, kid)` und `verifyInvitation(jwt, secrets)`
+  - `createInvitationKey(secret)` berechnet den `kid` einmal pro geladenem Schlüssel (mit dem Secret im Container cachen)
+  - `signInvitation(claims, key)` signiert nur die bekannten Claims und lehnt `exp` in der Vergangenheit bzw. `exp <= iat` ab; `verifyInvitation(jwt, keys)`
   - HS256 über Node-`crypto` (`createHmac`, `timingSafeEqual`), keine neue Abhängigkeit
-  - prüft `alg`, `kid`, `exp` und die Pflicht-Claims
+  - prüft `alg`, `kid`, `exp`, `iat` (nicht in der Zukunft, 5 min Toleranz) und die Pflicht-Claims
   - unterscheidet die Fehler `invalid` und `expired`
 - `genesys_survey_check.ts`:
   - `getRow` exportieren
@@ -111,7 +112,7 @@ Außerdem wird `survey_definition.md` angepasst (`base_url`, `language`, `min_la
 - Prüft die Pflichtangaben.
 - Regeln: Verweis `null` ⇒ weiter mit `default_next_question_id`. Bei rating/nps gewinnt die erste passende Bedingung in der Reihenfolge `equals`, `less_than`, `greater_than`, die Vergleiche sind strikt.
 - Wird vom Frontend (Anzeige) und vom Backend (Prüfung beim Absenden) genutzt.
-- Dass der Lambda-Bundler den Import aus `src/` auflösen kann, ist früh zu prüfen. Klappt das nicht, kommt das Modul nach `amplify/functions/shared/` und das Frontend importiert von dort.
+- Geprüft: Der Lambda-Bundler (esbuild über `NodejsFunction`, `projectRoot` = Repo-Root) löst relative Imports aus `src/` auf. Bedingung: Das Modul und alles, was es importiert (auch `import type`), kommt ohne `@/`-Alias aus. Der Typecheck von `ampx` vor dem Deploy nutzt `amplify/tsconfig.json` ohne Alias, und `@/i18n` zöge vue-i18n ins Bundle. Die Flow-Typen liegen deshalb in `src/domain/survey/flowTypes.ts`; `surveyTypes.ts` und `surveyFlowTranslator.ts` reichen sie weiter.
 
 **Neue Lambda `invitations`** (`amplify/functions/invitations/`):
 - Route `POST /invitations` mit `attachTenantAuth`.

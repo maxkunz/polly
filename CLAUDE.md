@@ -6,7 +6,7 @@ Genesys-Cloud-App ("Polly"): Umfragen im Vue-Frontend pflegen, als Data-Table-Ze
 
 - `npm run dev` – Vite-Dev-Server. `/api` wird auf eine **fest verdrahtete** API-Gateway-URL in `vite.config.ts` proxied (nicht aus `amplify_outputs.json`); bei eigenem Backend dort anpassen.
 - `npm run build` – nur Frontend (`dist/`, gitignored). Kein Typecheck im Build.
-- `npm test` – führt `test/surveyFlowTranslator.test.ts`, `surveyResponsesExport.test.ts`, `surveyDeletion.test.ts`, `genesysRegion.test.ts`, `flowPayloadBudget.test.ts`, `ttsTextLimit.test.ts`, `technicalName.test.ts`, `surveyValidation.test.ts` und `surveyRow.test.ts` nacheinander per `tsx` aus (eigene Mini-Test-Funktion, kein Vitest/Jest). Weitere Testdateien müssen explizit ins `test`-Script aufgenommen werden.
+- `npm test` – führt `test/surveyFlowTranslator.test.ts`, `surveyResponsesExport.test.ts`, `surveyDeletion.test.ts`, `genesysRegion.test.ts`, `flowPayloadBudget.test.ts`, `ttsTextLimit.test.ts`, `technicalName.test.ts`, `surveyValidation.test.ts`, `surveyRow.test.ts`, `invitationToken.test.ts` und `flowNavigation.test.ts` nacheinander per `tsx` aus (eigene Mini-Test-Funktion, kein Vitest/Jest). Weitere Testdateien müssen explizit ins `test`-Script aufgenommen werden.
   - Einzeltest: keinen Filter vorhanden – Datei direkt ausführen: `npx tsx test/<datei>.ts`.
   - Im Claude-Sandbox scheitert `tsx` mit `listen EPERM …tsx-*.pipe`; dann `node --import tsx test/surveyFlowTranslator.test.ts` verwenden.
 - Typecheck (kein Script, kein Linter/Formatter im Projekt): `npx vue-tsc --noEmit`. Muss fehlerfrei durchlaufen (prüft auch `amplify/`). Fehlerhafte Typen in `node_modules` (z. B. PrimeVue-Eventbus) werden per `skipLibCheck` ignoriert.
@@ -52,4 +52,5 @@ Nicht offensichtliche Regeln daraus (Auszug):
 - Data-Table-Zellen enthalten JSON als String. Spaltennamen sind case-sensitiv und kommen aus dem Schema im Setup (`Draft`/`Stage`/`Prod`/`Backup`/`lock`); auch `__meta` liegt im Feld `Draft`.
 - DynamoDB-Tabellen haben `RemovalPolicy.RETAIN`: Umbenennen/Schlüsseländerung in `backend.ts` erzeugt neue Tabellen, alte bleiben liegen.
 - Nicht committen/nicht bearbeiten: `dist/`, `amplify_outputs*.json`, `.amplify/` (generiert). `.env*` ist für Agents gesperrt.
+- **Lambdas dürfen Module aus `src/` importieren** (esbuild bündelt ab Repo-Root, z. B. `domain/survey/flowNavigation.ts`), aber nur relativ und nur Module, die selbst keinen `@/`-Alias nutzen: `ampx` prüft vor dem Deploy mit `amplify/tsconfig.json` (kennt `@/` nicht, auch nicht bei `import type`), und `@/i18n` zöge vue-i18n ins Bundle (~1 MB). Gemeinsame Typen deshalb in `domain/survey/flowTypes.ts`.
 - Dark Mode von PrimeVue ist bewusst aus (`darkModeSelector: false` in `main.ts`).

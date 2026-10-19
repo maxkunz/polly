@@ -1,11 +1,6 @@
 import { computed, unref, type MaybeRef } from "vue";
-import type {
-	SurveyQuestion,
-	QuestionType,
-	RatingOptions,
-	ChoiceOptions,
-	ScaleLabels
-} from "@/domain/survey/surveyTypes";
+import type { SurveyQuestion, RatingOptions, ChoiceOptions } from "@/domain/survey/surveyTypes";
+import type { QuestionType, ScaleLabels } from "@/domain/survey/flowTypes";
 import {
 	isRatingOptions,
 	isChoiceOptions,

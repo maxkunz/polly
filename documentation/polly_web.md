@@ -49,7 +49,7 @@ Header: `{ "alg": "HS256", "typ": "JWT", "kid": "<8 Zeichen>" }`.
 | `iat` | Ausstellungszeitpunkt (Epoch-Sekunden). |
 | `exp` | Optionales Ablaufdatum der Einladung (Epoch-Sekunden). Fehlt es, läuft die Einladung nie ab. |
 
-`exp` ergibt sich aus dem gewählten Ablaufdatum als **Tagesende 23:59:59 in der lokalen Zeit des Erstellers**.
+`exp` ergibt sich aus dem gewählten Ablaufdatum als **Tagesende 23:59:59 in der lokalen Zeit des Erstellers**. `exp` ist damit die letzte gültige Sekunde: Abgelaufen ist die Einladung erst, wenn die aktuelle Zeit `exp` überschreitet. Ein `exp` in der Vergangenheit wird beim Erzeugen abgelehnt (`400`), ein `iat` in der Zukunft (mehr als 5 min Uhrabweichung) macht den Token ungültig.
 
 **Schlüssel:** Ein Schlüssel pro Umgebung (Branch), beim Deploy automatisch in AWS Secrets Manager erzeugt (`polly-web-survey-jwt-<envSuffix>`, 64 Zeichen, `RemovalPolicy.RETAIN`). Er verlässt AWS nie: Er steht weder im Repo noch im Frontend oder in Umgebungsvariablen; die Lambdas bekommen nur den ARN und lesen den Wert zur Laufzeit (mit Cache im Container). `kid` = die ersten 8 Zeichen des SHA-256-Hashs des Schlüssels. Die Prüfung akzeptiert `AWSCURRENT` und `AWSPREVIOUS`, eine manuelle Rotation macht bestehende Links also nicht sofort ungültig. Automatische Rotation ist nicht vorgesehen.
 

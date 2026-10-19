@@ -3,12 +3,8 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Select from "primevue/select";
 import InputNumber from "primevue/inputnumber";
-import type {
-	FollowUpRule,
-	SurveyQuestion,
-	ChoiceOptions,
-	ConditionOperator
-} from "@/domain/survey/surveyTypes";
+import type { FollowUpRule, SurveyQuestion, ChoiceOptions } from "@/domain/survey/surveyTypes";
+import type { ConditionOperator } from "@/domain/survey/flowTypes";
 import { isChoiceOptions } from "@/domain/survey/surveyTypes";
 import { getOperatorOptions, getBooleanOptions } from "@/domain/survey/questionTypeCatalog";
 import { questionFieldIds } from "@/domain/survey/surveyFieldIds";

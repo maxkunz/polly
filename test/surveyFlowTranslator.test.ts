@@ -3,12 +3,14 @@ import type { Survey } from "../src/domain/survey/surveyTypes";
 import {
 	SurveyFlowTranslationError,
 	translateSurveyForFlow,
-	translateSurveyObject,
-	type FlowChoiceQuestion,
-	type FlowNpsQuestion,
-	type FlowRatingQuestion,
-	type FlowYesNoQuestion
+	translateSurveyObject
 } from "../src/services/surveyFlowTranslator";
+import type {
+	FlowChoiceQuestion,
+	FlowNpsQuestion,
+	FlowRatingQuestion,
+	FlowYesNoQuestion
+} from "../src/domain/survey/flowTypes";
 
 let passed = 0;
 

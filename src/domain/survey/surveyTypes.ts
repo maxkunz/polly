@@ -1,8 +1,8 @@
 import { i18n } from "@/i18n";
+import { DEFAULT_SURVEY_LANGUAGE } from "./flowTypes";
+import type { ConditionOperator, QuestionType, ScaleLabels, SurveyLanguage } from "./flowTypes";
 
-export type QuestionType = "yes_no" | "choice" | "rating" | "nps" | "comment";
-
-export type ConditionOperator = "equals" | "less_than" | "greater_than";
+// Grundtypen (QuestionType, ConditionOperator, ScaleLabels, SurveyLanguage) liegen im aliasfreien flowTypes.ts
 
 export interface ChoiceOptionLabel {
 	id: string;
@@ -14,12 +14,6 @@ export interface ChoiceOptions {
 	labels: ChoiceOptionLabel[];
 }
 
-/** Labels für den minimalen und maximalen Wert einer Skala (nur im Web-Kanal sichtbar). */
-export interface ScaleLabels {
-	min_label?: string;
-	max_label?: string;
-}
-
 export interface RatingOptions extends ScaleLabels {
 	min_value: number;
 	max_value: number;
@@ -28,11 +22,6 @@ export interface RatingOptions extends ScaleLabels {
 export type NpsOptions = ScaleLabels;
 
 export type QuestionOptions = ChoiceOptions | RatingOptions | NpsOptions | Record<string, unknown>;
-
-/** Sprachen der Web-Umfrageseite (feste UI-Texte, `<html lang>`). */
-export const SURVEY_LANGUAGES = ["de", "en", "fr"] as const;
-export type SurveyLanguage = (typeof SURVEY_LANGUAGES)[number];
-export const DEFAULT_SURVEY_LANGUAGE: SurveyLanguage = "de";
 
 export interface FollowUpCondition {
 	operator: ConditionOperator;

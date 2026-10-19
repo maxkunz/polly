@@ -1,5 +1,6 @@
 import { ref, computed, nextTick } from "vue";
-import type { Survey, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
+import type { Survey, SurveyQuestion } from "@/domain/survey/surveyTypes";
+import type { QuestionType } from "@/domain/survey/flowTypes";
 import {
 	createEmptyQuestion,
 	createEmptyFollowUp,

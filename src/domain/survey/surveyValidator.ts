@@ -1,11 +1,7 @@
-import type {
-	Survey,
-	SurveyQuestion,
-	RatingOptions,
-	ChoiceOptions,
-	ConditionOperator
-} from "./surveyTypes";
-import { countAllQuestions, isRatingOptions, isChoiceOptions, SURVEY_LANGUAGES } from "./surveyTypes";
+import type { Survey, SurveyQuestion, RatingOptions, ChoiceOptions } from "./surveyTypes";
+import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
+import { SURVEY_LANGUAGES } from "./flowTypes";
+import type { ConditionOperator } from "./flowTypes";
 import { surveyFieldIds, questionFieldIds } from "./surveyFieldIds";
 import { i18n, currentLocaleTag } from "@/i18n";
 import {
