@@ -86,18 +86,21 @@ function jsonResponse(statusCode: number, body: { status: WebSurveySubmitStatus 
 
 type InvitationCheck =
   | { status: "ok"; claims: InvitationClaims; credentials: TenantCredentials }
-  | { status: "invalid" | "expired" | "used" };
+  | { status: "invalid" | "expired" }
+  | { status: "used"; claims: InvitationClaims; usedResponseId?: string };
 
-async function isTokenUsed(tenantId: string, tokenId: string): Promise<boolean> {
+/** Eintrag eines verbrauchten Einmal-Tokens (mit der zugehörigen Antwort) oder `null`. */
+async function loadUsedToken(tenantId: string, tokenId: string): Promise<{ responseId?: string } | null> {
   const result = await ddb.send(
     new GetCommand({
       TableName: INVITATION_TOKENS_TABLE_NAME,
       Key: { tenantId, tokenId },
-      ProjectionExpression: "tokenId",
+      ProjectionExpression: "tokenId, responseId",
       ConsistentRead: true,
     })
   );
-  return Boolean(result.Item);
+  if (!result.Item) return null;
+  return { responseId: typeof result.Item.responseId === "string" ? result.Item.responseId : undefined };
 }
 
 /** Signatur, `kid`, `exp`, Mandant (`APPROVED` mit Credentials) und bei Einmal-Token die Nutzung. */
@@ -113,7 +116,10 @@ async function checkInvitation(token: string): Promise<InvitationCheck> {
     console.warn("[web_survey] unknown or unapproved tenant", { tenantId: claims.tenant_id });
     return { status: "invalid" };
   }
-  if (!claims.multi && (await isTokenUsed(claims.tenant_id, claims.token_id))) return { status: "used" };
+  if (!claims.multi) {
+    const used = await loadUsedToken(claims.tenant_id, claims.token_id);
+    if (used) return { status: "used", claims, usedResponseId: used.responseId };
+  }
 
   return { status: "ok", claims, credentials };
 }
@@ -182,34 +188,67 @@ const TRANSACTION_CONFLICT_ATTEMPTS = 3;
 const TRANSACTION_CONFLICT_DELAY_MS = 100;
 
 /**
- * Schreibt die Transaktion. `used`, wenn das Einmal-Token schon verbraucht ist. Kollidiert sie mit einer
- * gleichzeitigen Transaktion auf dasselbe Token, wird sie kurz wiederholt: Hat die andere gespeichert,
- * scheitert die Wiederholung an der Bedingung (→ `used`), sonst wird jetzt gespeichert.
+ * Schreibt die Transaktion. `condition_failed`, wenn das Einmal-Token schon verbraucht ist oder die
+ * `responseId` schon existiert. Kollidiert sie mit einer gleichzeitigen Transaktion auf dasselbe Token,
+ * wird sie kurz wiederholt: Hat die andere gespeichert, scheitert die Wiederholung an der Bedingung,
+ * sonst wird jetzt gespeichert.
  */
-async function writeSubmitTransaction(transactItems: any[]): Promise<"ok" | "used"> {
+async function writeSubmitTransaction(transactItems: any[]): Promise<"ok" | "condition_failed"> {
   for (let attempt = 1; ; attempt++) {
     try {
       await ddb.send(new TransactWriteCommand({ TransactItems: transactItems }));
       return "ok";
     } catch (err: any) {
       const codes = cancellationCodes(err);
-      if (codes.includes("ConditionalCheckFailed")) return "used";
+      if (codes.includes("ConditionalCheckFailed")) return "condition_failed";
       if (!codes.includes("TransactionConflict") || attempt >= TRANSACTION_CONFLICT_ATTEMPTS) throw err;
       await new Promise((resolve) => setTimeout(resolve, TRANSACTION_CONFLICT_DELAY_MS * attempt));
     }
   }
 }
 
-/** POST /web-survey/submit */
+/** Liegt unter `responseId` schon eine Antwort mit dieser Einladung (frühere Absendung derselben Seite)? */
+async function isStoredWithToken(claims: InvitationClaims, responseId: string): Promise<boolean> {
+  const result = await ddb.send(
+    new GetCommand({
+      TableName: SURVEY_RESPONSES_TABLE_NAME,
+      Key: { tenantId: claims.tenant_id, responseId },
+      ProjectionExpression: "tokenId, surveyId, channel",
+      ConsistentRead: true,
+    })
+  );
+  const item = result.Item;
+  return Boolean(item && item.channel === "web" && item.tokenId === claims.token_id && item.surveyId === claims.survey_id);
+}
+
+function duplicateSubmitResponse(claims: InvitationClaims, responseId: string): AnyResult {
+  console.log("[web_survey] duplicate submit, already saved", {
+    tenantId: claims.tenant_id,
+    surveyId: claims.survey_id,
+    responseId,
+  });
+  return jsonResponse(200, { status: "ok" });
+}
+
+/**
+ * POST /web-survey/submit
+ *
+ * Idempotent über `submissionId`: Die Seite schickt bei jeder Wiederholung dieselbe ID (sie wird `responseId`).
+ * War eine frühere Absendung schon gespeichert (Antwort ging z. B. durch eine Zeitüberschreitung verloren),
+ * antwortet die Lambda mit `200 ok`, ohne erneut zu speichern.
+ */
 async function submitWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
   const body = readRequestBody(event);
   if (!body.ok) return jsonResponse(413, { status: "payload_too_large" });
 
   const parsed = parseSubmitRequest(body.text);
   if (!parsed.ok) return jsonResponse(400, { status: "invalid_request", message: parsed.message });
-  const { token, surveyVersion, answers } = parsed.request;
+  const { token, surveyVersion, answers, submissionId } = parsed.request;
 
   const check = await checkInvitation(token);
+  if (check.status === "used" && submissionId && check.usedResponseId === submissionId) {
+    return duplicateSubmitResponse(check.claims, submissionId);
+  }
   if (check.status !== "ok") return invitationErrorResponse(check, true);
   const { claims } = check;
 
@@ -228,7 +267,7 @@ async function submitWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
   if (errors.length > 0) return jsonResponse(400, { status: "invalid_answers", errors });
 
   const now = new Date().toISOString();
-  const responseId = randomUUID();
+  const responseId = submissionId ?? randomUUID();
   const storedAnswers = buildStoredAnswers(survey, pruneFlowAnswers(survey, answers), now);
 
   const responseItem = {
@@ -274,7 +313,13 @@ async function submitWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
     },
   });
 
-  if ((await writeSubmitTransaction(transactItems)) === "used") return jsonResponse(409, { status: "used" });
+  if ((await writeSubmitTransaction(transactItems)) === "condition_failed") {
+    if (await isStoredWithToken(claims, responseId)) return duplicateSubmitResponse(claims, responseId);
+    // Einmal-Token von einer anderen Absendung verbraucht; bei mehrfach nutzbaren Links ist die ID fremd belegt
+    return claims.multi
+      ? jsonResponse(400, { status: "invalid_request", message: "submissionId already in use" })
+      : jsonResponse(409, { status: "used" });
+  }
 
   // Aggregate erst nach dem Speichern; ein Fehler hier macht die gespeicherte Antwort nicht ungültig
   const aggregateResults = await Promise.allSettled(

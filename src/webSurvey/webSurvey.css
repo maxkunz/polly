@@ -1,0 +1,277 @@
+/*
+ * Styles der öffentlichen Umfrageseite. Tailwind scannt nur src/webSurvey/, damit das Stylesheet
+ * nicht die Klassen der Genesys-App mitschleppt. Farben mit Kontrast >= 4.5:1 (Text) bzw. >= 3:1
+ * (Rahmen, Fokus) auf Weiß; Primärfarbe wie appTheme (primary.500). Keine Inline-Styles (CSP).
+ */
+@import "tailwindcss" source(none);
+@source "./";
+
+:root {
+	--ws-primary: #14387f;
+	--ws-primary-dark: #0f2c63;
+	--ws-primary-light: #e8eef8;
+	--ws-primary-accent: #9bb2e0;
+	--ws-text: #0f172a;
+	--ws-text-muted: #334155;
+	--ws-border: #64748b;
+	--ws-border-light: #cbd5e1;
+	--ws-error: #b91c1c;
+	--ws-background: #f8fafc;
+	--ws-surface: #ffffff;
+}
+
+@layer base {
+	body {
+		margin: 0;
+		background: var(--ws-background);
+		color: var(--ws-text);
+		font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+		font-size: 1rem;
+		line-height: 1.5;
+		overflow-wrap: anywhere;
+	}
+
+	/* Ränder der Kinder bleiben in der gemessenen Höhe (postMessage an das iframe) */
+	#app {
+		display: flow-root;
+	}
+
+	:focus-visible {
+		outline: 3px solid var(--ws-primary);
+		outline-offset: 2px;
+	}
+}
+
+.web-page {
+	max-width: 42rem;
+	margin: 0 auto;
+	padding: 1.5rem 1rem 2.5rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+}
+
+.web-heading {
+	font-size: 1.75rem;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+/* Programmatischer Fokus (nach dem Absenden, Fehlerseite) braucht an der Überschrift keinen Rahmen */
+.web-heading:focus {
+	outline: none;
+}
+
+.web-card,
+.web-question {
+	background: var(--ws-surface);
+	border: 1px solid var(--ws-border-light);
+	border-radius: 0.75rem;
+	padding: 1rem;
+}
+
+@media (min-width: 640px) {
+	.web-card,
+	.web-question {
+		padding: 1.5rem;
+	}
+}
+
+.web-question:has([aria-invalid="true"]) {
+	border: 2px solid var(--ws-error);
+}
+
+/* Folgefragen eingerückt unter ihrer Elternfrage */
+.web-question--follow-up {
+	border-left: 4px solid var(--ws-primary-accent);
+}
+
+.web-question[data-depth="1"] { margin-left: 0.75rem; }
+.web-question[data-depth="2"] { margin-left: 1.5rem; }
+.web-question[data-depth="3"] { margin-left: 2.25rem; }
+
+@media (prefers-reduced-motion: no-preference) {
+	.web-question--follow-up {
+		animation: web-appear 200ms ease-out;
+	}
+}
+
+@keyframes web-appear {
+	from {
+		opacity: 0;
+		transform: translateY(-0.25rem);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.web-question__title {
+	display: block;
+	font-size: 1.0625rem;
+	font-weight: 600;
+}
+
+legend.web-question__title {
+	width: 100%;
+	margin-bottom: 0.75rem;
+}
+
+.web-question__description {
+	color: var(--ws-text-muted);
+	white-space: pre-line;
+}
+
+.web-question__error {
+	color: var(--ws-error);
+	font-weight: 600;
+}
+
+.web-required {
+	color: var(--ws-error);
+}
+
+/* Auswahl: natives Radio in einer Fläche von mindestens 44 px Höhe */
+.web-option {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	min-height: 2.75rem;
+	padding: 0.5rem 0.75rem;
+	border: 2px solid var(--ws-border);
+	border-radius: 0.5rem;
+	background: var(--ws-surface);
+	cursor: pointer;
+}
+
+.web-option:hover {
+	border-color: var(--ws-primary);
+}
+
+.web-option:has(input:checked) {
+	border-color: var(--ws-primary);
+	background: var(--ws-primary-light);
+	font-weight: 600;
+}
+
+.web-option input {
+	width: 1.25rem;
+	height: 1.25rem;
+	margin: 0;
+	flex-shrink: 0;
+	accent-color: var(--ws-primary);
+	cursor: pointer;
+}
+
+/* Fokus an der ganzen Fläche statt am kleinen Radio (nur wo :has() verfügbar ist) */
+@supports selector(:has(*)) {
+	.web-option:has(input:focus-visible) {
+		outline: 3px solid var(--ws-primary);
+		outline-offset: 2px;
+	}
+
+	.web-option input:focus-visible {
+		outline: none;
+	}
+}
+
+/* Skala: bricht bei schmalen Ansichten (320 px, 400 % Zoom) in mehrere Zeilen um */
+.web-scale {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.web-option--scale {
+	flex: 1 0 3rem;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0.25rem;
+	padding: 0.5rem 0.25rem;
+}
+
+.web-scale__labels {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	font-size: 0.875rem;
+	color: var(--ws-text-muted);
+}
+
+.web-textarea {
+	width: 100%;
+	min-height: 6rem;
+	padding: 0.5rem 0.75rem;
+	border: 2px solid var(--ws-border);
+	border-radius: 0.5rem;
+	background: var(--ws-surface);
+	font: inherit;
+	resize: vertical;
+}
+
+.web-textarea[aria-invalid="true"] {
+	border-color: var(--ws-error);
+}
+
+.web-button {
+	min-height: 2.75rem;
+	padding: 0.625rem 1.25rem;
+	border: 2px solid var(--ws-primary);
+	border-radius: 0.5rem;
+	background: var(--ws-primary);
+	color: #ffffff;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.web-button:hover {
+	background: var(--ws-primary-dark);
+	border-color: var(--ws-primary-dark);
+}
+
+.web-button--secondary {
+	background: var(--ws-surface);
+	color: var(--ws-primary);
+}
+
+.web-button--secondary:hover {
+	background: var(--ws-primary-light);
+	color: var(--ws-primary-dark);
+}
+
+.web-button[aria-disabled="true"] {
+	cursor: progress;
+}
+
+.web-link {
+	color: var(--ws-primary);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.web-link:hover {
+	color: var(--ws-primary-dark);
+	text-decoration-thickness: 2px;
+}
+
+.web-error-summary,
+.web-notice {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	padding: 1rem;
+	border-radius: 0.5rem;
+	background: var(--ws-surface);
+}
+
+.web-error-summary {
+	border: 2px solid var(--ws-error);
+	border-left-width: 6px;
+}
+
+.web-notice {
+	border: 2px solid var(--ws-primary);
+	border-left-width: 6px;
+	background: var(--ws-primary-light);
+}

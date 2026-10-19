@@ -190,6 +190,21 @@ test("parseSubmitRequest: Pflichtfelder token, surveyVersion (Ganzzahl) und answ
 	}
 });
 
+test("parseSubmitRequest: submissionId optional, nur als UUID, klein geschrieben", () => {
+	const base = { token: "a.b.c", surveyVersion: 4, answers: {} };
+	const withId = parseSubmitRequest(JSON.stringify({ ...base, submissionId: "0F8FAD5B-D9CB-469F-A165-70867728950E" }));
+	assert.deepEqual(withId, {
+		ok: true,
+		request: { ...base, submissionId: "0f8fad5b-d9cb-469f-a165-70867728950e" }
+	});
+	const withoutId = parseSubmitRequest(JSON.stringify(base));
+	assert.equal(withoutId.ok && withoutId.request.submissionId, undefined);
+
+	for (const submissionId of ["", "abc", 42, null, "0f8fad5b-d9cb-469f-a165-70867728950e-x", "survey_0f8fad5b"]) {
+		assert.equal(parseSubmitRequest(JSON.stringify({ ...base, submissionId })).ok, false, String(submissionId));
+	}
+});
+
 // --- Prod-Stand und bereinigtes Flow-JSON -------------------------------------------------------
 
 test("parseProdSurvey: liest JSON-String und Objekt, prüft die ID", () => {

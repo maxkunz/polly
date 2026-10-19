@@ -67,11 +67,17 @@ Der erste Eintrag einer Variable gilt immer für „All branches“, das Feld Br
     "source": "/api_websurveys/<*>",
     "status": "200",
     "target": "https://<API-ID feature-websurveys>.execute-api.eu-central-1.amazonaws.com/<*>"
+  },
+  {
+    "source": "/s/<*>",
+    "status": "200",
+    "target": "/survey.html"
   }
 ]
 ```
 
 - Amplify nimmt die erste passende Regel. Die `/api…`-Regeln müssen vor einer SPA-Regel stehen, die alle Pfade auf `/index.html` umleitet, und vor der Regel `/s/<*>` → `/survey.html` (Web-Kanal).
+- Die Regel `/s/<*>` (öffentliche Umfrageseite, siehe [polly_web.md](polly_web.md#hosting)) ist relativ und gilt damit für jeden Branch. Sie muss ebenfalls vor der SPA-Regel stehen, weil Einladungs-Tokens Punkte enthalten.
 - Die Präfixe dürfen sich nicht überlappen. `/api/<*>` passt nicht auf `/api_websurveys/…`, das ist in Ordnung.
 
 Danach den Branch **neu bauen**, denn Vite setzt die Variable beim Build ein.
@@ -133,6 +139,7 @@ curl -X POST "https://<branch>.<appId>.amplifyapp.com/api_websurveys/onboarding/
 | Login in Genesys schlägt fehl (`redirect_uri` ungültig) | Redirect-URL des Frontend-OAuth-Clients enthält die Branch-Domain nicht |
 | App startet direkt im Editor statt im Setup | URL der Integration enthält noch `datatable_id` / `mapping_datatable_id` |
 | Backend-Aufrufe liefern HTML statt JSON oder 404 | Rewrite-Regel für das Präfix fehlt oder steht hinter der SPA-Regel |
+| Einladungslink `/s/<jwt>` öffnet die Genesys-App (Login) statt der Umfrage | Rewrite-Regel `/s/<*>` → `/survey.html` fehlt oder steht hinter der SPA-Regel |
 | Aufrufe gehen auf `/api` statt auf das Branch-Präfix | Override für `VITE_API_PREFIX` fehlt oder Branch nach dem Setzen nicht neu gebaut |
 | `Tenant not approved` bzw. 401/403 nach dem Setup | Mandant steht noch auf `PENDING` (Schritt 6) |
 | Antworten landen im Backend von `main` | Data Action wurde vor dem Präfix angelegt und zeigt noch auf `/api/survey-responses`. In Genesys anpassen oder Setup neu ausführen |

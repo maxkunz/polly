@@ -134,17 +134,18 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 
 **`POST /api/web-survey/submit`** (öffentlich)
 
-* Request: `{ "token": "<jwt>", "surveyVersion": <int>, "answers": { "<questionId>": <wert> } }`
+* Request: `{ "token": "<jwt>", "surveyVersion": <int>, "answers": { "<questionId>": <wert> }, "submissionId": "<uuid>" }`
+* `submissionId` (optional, UUID): erzeugt die Seite einmal pro Seitenaufruf und schickt sie bei jeder Wiederholung mit. Sie wird zur `responseId`. Fehlt sie, vergibt die Lambda eine zufällige UUID. **Idempotenz:** Ist unter dieser ID schon eine Antwort mit derselben Einladung gespeichert (bei Einmal-Token: Der verbrauchte Eintrag in `InvitationTokens` verweist auf sie), antwortet die Lambda mit `200 ok`, ohne erneut zu speichern. Eine Absendung, deren Antwort verloren ging (Zeitüberschreitung, Netzabbruch), erzeugt beim erneuten Versuch also weder `409 used` noch eine doppelte Antwort. Geänderte Antworten einer solchen Wiederholung werden nicht übernommen: Gespeichert bleibt die erste Absendung.
 * Prüft den Token erneut und lädt Prod (ohne Cache). Weicht `surveyVersion` von `Prod.version` ab, antwortet es mit `409 { "status": "survey_changed", "survey": { … } }` und liefert die neue Fassung gleich mit; nichts wird gespeichert, der Token bleibt unverbraucht.
 * Die Antworten werden gegen das Flow-JSON geprüft (`flowNavigation`): erreichbare Fragen, Pflichtangaben, Wertebereiche (rating min..max, nps 0..10, choice = Label, yes_no = bool, comment höchstens 2000 Zeichen). Bei Verstoß `400`, nichts wird gespeichert.
 * Gespeichert werden nur beantwortete, gültige Antworten auf erreichbare Fragen (`pruneFlowAnswers`), im Format der Architect-Sitzungen: Schlüssel ist der technische Fragename, Wert `{ type, value, answeredAt }`.
-* Speichern in einer DynamoDB-Transaktion: bei Einmal-Token ein Put in `InvitationTokens` mit `attribute_not_exists`, dazu der Put der Antwort mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId` = zufällige UUID. Schlägt die Bedingung fehl, antwortet es mit `409 used` – auch bei gleichzeitigem Absenden kann dieselbe Einladung nicht doppelt genutzt werden. Danach werden die Aggregate aktualisiert (ein Fehler dort macht die gespeicherte Antwort nicht ungültig).
+* Speichern in einer DynamoDB-Transaktion: bei Einmal-Token ein Put in `InvitationTokens` mit `attribute_not_exists`, dazu der Put der Antwort mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId` = `submissionId` bzw. zufällige UUID. Schlägt eine Bedingung fehl und ist es nicht die eigene, schon gespeicherte Absendung, antwortet es mit `409 used` – auch bei gleichzeitigem Absenden kann dieselbe Einladung nicht doppelt genutzt werden. Bei mehrfach nutzbaren Links bedeutet das eine schon fremd belegte `submissionId` (`400 invalid_request`). Danach werden die Aggregate aktualisiert (ein Fehler dort macht die gespeicherte Antwort nicht ungültig).
 * Antworten (immer mit Feld `status`):
 
 | Status | `status` | Bedeutung |
 | :--- | :--- | :--- |
-| `200` | `ok` | gespeichert |
-| `400` | `invalid_request` | Body kein JSON, `token` fehlt, `surveyVersion` keine Ganzzahl, `answers` kein Objekt |
+| `200` | `ok` | gespeichert (oder mit dieser `submissionId` schon gespeichert) |
+| `400` | `invalid_request` | Body kein JSON, `token` fehlt, `surveyVersion` keine Ganzzahl, `answers` kein Objekt, `submissionId` keine UUID oder fremd belegt |
 | `400` | `invalid_answers` | Prüfung fehlgeschlagen; `errors: [{ questionId, code }]` mit `code` aus `required`, `invalid_value`, `not_reachable`, `unknown_question` |
 | `403` | `invalid`, `expired` | Einladung ungültig bzw. abgelaufen |
 | `404` | `unavailable` | kein Prod-Stand, Umfrage gelöscht oder Löschung läuft |
@@ -197,10 +198,14 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 
 * **Prod ändert sich:** Die Seite lädt die neue Fassung und übernimmt Antworten auf weiterhin vorhandene Fragen (gleiche Frage-ID, Wert noch gültig). Der Token bleibt nutzbar. Ist kein Prod-Stand mehr vorhanden (Rollback ohne Backup, Löschung), erscheint „Umfrage nicht verfügbar“.
 * **429:** Die Seite versucht es einmal nach ca. 2 s automatisch erneut, danach erscheint die Meldung mit einem Button „Erneut versuchen“. Alle Antworten bleiben erhalten.
+* **Zeitüberschreitung:** Die Seite wartet 35 s auf eine Antwort, also länger als API Gateway (30 s) und Lambda (20 s). Sie bricht also nicht ab, solange das Backend noch antworten kann. Danach erscheint „Erneut versuchen“; dank `submissionId` speichert die Wiederholung nicht doppelt.
 * Meldungen werden per `role="alert"` angesagt.
 * Folgefragen erscheinen direkt unter ihrer Elternfrage (`aria-live="polite"`). Fällt eine Folgefrage wieder weg, wird ihre Antwort verworfen.
-* Nach dem Absenden zeigt die Seite die Verabschiedung, der Fokus wechselt auf diese Meldung.
-* Optional für iframes: `postMessage({ type: "polly:height", height })`.
+* Nach dem Absenden zeigt die Seite die Verabschiedung (leer: „Ihre Antworten wurden gespeichert.“), der Fokus wechselt auf diese Meldung.
+* Im iframe meldet die Seite ihre Höhe per `postMessage({ type: "polly:height", height })` an die einbettende Seite (Ziel-Origin `*`, die Nachricht enthält nur die Höhe; siehe Snippet oben). Sie selbst verarbeitet keine eingehenden Nachrichten.
+* Angezeigt werden Titel, Begrüßung, Fragetitel, Beschreibung, Optionen und Min/Max-Labels. Die Umfrage-`description` (interne Beschreibung im Editor) wird nicht angezeigt.
+* Fehler beim Absenden (Drosselung nach dem automatischen Versuch, Netzwerk, `5xx`) erscheinen als Hinweis über dem Formular mit „Erneut versuchen“; beim Laden als eigene Seite mit demselben Button. Fehler beim Absenden, die die Einladung betreffen (`invalid`, `expired`, `used`, `unavailable`), ersetzen das Formular durch die jeweilige Meldung.
+* `400 invalid_answers` (sollte nach der Prüfung auf der Seite nicht vorkommen) wird wie ein Eingabefehler in der Fehlerübersicht angezeigt.
 
 ### Eingabeelemente
 
@@ -221,6 +226,51 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 * Umbruch bei 320 px Breite und 400 % Zoom
 * `prefers-reduced-motion` wird berücksichtigt
 
+### Umsetzung
+
+| Datei | Inhalt |
+| :--- | :--- |
+| `survey.html` | Zweiter Vite-Einstiegspunkt |
+| `src/webSurvey/main.ts` | Start ohne Genesys-SDK, Pinia, Router, PrimeVue und `appStore`; Browsersprache bis zum Laden der Umfrage |
+| `src/webSurvey/WebSurveyApp.vue` | Zustände, Fehlerübersicht, Hinweise, Fokusführung, Live-Region |
+| `src/webSurvey/components/WebQuestion.vue` | Darstellung pro Fragetyp (native Formularelemente) |
+| `src/webSurvey/services/webSurveyApi.ts` | `GET /web-survey`, `POST /web-survey/submit` über `API_PREFIX` |
+| `src/webSurvey/i18n/` | Eigene feste Texte in `de`/`en`/`fr` (Schema `de.ts`) und ein minimaler Übersetzer; bewusst nicht `src/i18n/` der App, damit das öffentliche Bundle klein bleibt |
+| `src/webSurvey/frameHeight.ts` | Höhenmeldung im iframe |
+| `src/webSurvey/webSurvey.css` | Styles (Tailwind nur für `src/webSurvey/`, Farben aus `appTheme`) |
+| `src/domain/survey/webSurveyPage.ts` | Reine Logik: Token aus der URL, Browsersprache, Prüfung der API-Antworten, einmaliger 429-Wiederholungsversuch, Einrückung der Folgefragen, Skalenwerte (Test `test/webSurveyPage.test.ts`) |
+
+Die Navigation (`flowNavigation`) arbeitet direkt auf dem bereinigten Flow-JSON (`WebSurvey`): Sie braucht weder `name` noch `reprompt` oder `synonyms`.
+
+### Sicherheit
+
+Die Seite ist öffentlich; Zugang hat, wer einen gültigen Link besitzt. Maßnahmen auf der Seite:
+
+* **Keine HTML-Ausgabe von Umfragetexten:** Alle Texte aus der Data Table werden nur als Text gerendert (kein `v-html`), Zeilenumbrüche per CSS.
+* **Content-Security-Policy** (vom Build als `<meta>` in `survey.html` eingefügt, siehe `vite.config.ts`): `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'`. Keine Inline-Skripte oder -Styles, keine fremden Quellen, Aufrufe nur an den eigenen Origin. Der Dev-Server setzt die CSP nicht (HMR braucht Inline-Styles).
+* **Token:** Die Seite akzeptiert nur Text in JWT-Form (drei Base64url-Teile, höchstens 2048 Zeichen, dieselbe Grenze wie die Lambda); alles andere ergibt „Einladung ist ungültig“ ohne Backend-Aufruf. Signatur und Ablauf prüft ausschließlich das Backend. Der Token wird nicht gespeichert (kein `localStorage`/Cookie).
+* **Kein Abfluss des Tokens über den Referrer:** `<meta name="referrer" content="no-referrer">`, Requests mit `referrerPolicy: "no-referrer"` und ohne Cookies (`credentials: "omit"`).
+* **Nicht indexieren:** `<meta name="robots" content="noindex, nofollow">`.
+* **Antworten der API werden geprüft**, bevor die Seite sie darstellt (`isWebSurvey`); eine unerwartete Antwort ergibt eine Fehlermeldung statt eines Absturzes. Skalen mit mehr als 101 Werten werden abgelehnt.
+* **Kleines Bundle:** Die Seite lädt nur Vue und ihre eigenen Module (kein Genesys-SDK, keine App-Texte, kein `eval`).
+* **Einbettung:** Die Seite darf in fremde Seiten eingebettet werden (gewollt, siehe iframe). Ein Angreifer, der sie einbettet, kann nur das tun, was der Linkinhaber ohnehin kann.
+
 ## Hosting
 
-`vite.config.ts` baut zwei Einstiegspunkte (`index.html`, `survey.html`). In den Amplify-Rewrites (Konsole) muss `/s/<*>` auf `/survey.html` (Status 200) zeigen. Die Umfrageseite ruft das Backend wie die App über `API_PREFIX` (`constants/apiConstants.ts`, Default `/api`) auf.
+`vite.config.ts` baut zwei Einstiegspunkte (`index.html`, `survey.html`). Die Umfrageseite ruft das Backend wie die App über `API_PREFIX` (`constants/apiConstants.ts`, Default `/api`) auf.
+
+**Rewrite-Regel** (Amplify-Konsole → Hosting → Rewrites and redirects; gilt app-weit, für alle Branches):
+
+```json
+{
+  "source": "/s/<*>",
+  "status": "200",
+  "target": "/survey.html"
+}
+```
+
+* Sie muss **vor** der SPA-Regel stehen, die alle Pfade auf `/index.html` umleitet: Ein JWT enthält Punkte, die übliche SPA-Regel (Regex auf Dateiendungen) würde `/s/<jwt>` sonst auf die Genesys-App umleiten. Die `/api…`-Regeln stehen weiterhin davor.
+* `/survey.html?token=<jwt>` funktioniert auch ohne Regel.
+* Amplify setzt standardmäßig weder `X-Frame-Options` noch `frame-ancestors`; die Einbettung in iframes funktioniert also ohne weitere Einstellung. Werden in Amplify eigene Header gesetzt (Custom headers), dürfen sie für `/survey.html` und `/s/**` kein `X-Frame-Options` bzw. kein einschränkendes `frame-ancestors` enthalten. Empfohlen sind dort `X-Content-Type-Options: nosniff` und `Referrer-Policy: no-referrer`.
+
+**Lokal:** `npm run dev` bzw. `npm run preview` schreiben `/s/<jwt>` wie die Rewrite-Regel auf `survey.html` um (Plugin in `vite.config.ts`). Die Seite ruft das Backend dabei über den Dev-Proxy auf (`API_PREFIX`, also `/api` bzw. das Präfix aus `VITE_API_PREFIX`).

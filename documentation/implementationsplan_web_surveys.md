@@ -31,7 +31,23 @@ Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz no
     - Im Editor einer gespeicherten Umfrage Button „Einladungslinks“ (nur mit `polly_deploy`, nicht bei ungespeicherten Änderungen) → Unterseite `/surveys?id=<id>&invite=1`.
     - Ohne Prod-Stand: Hinweis, Button gesperrt. Mit Prod: Anzahl 1–5000, optional Ablaufdatum (frühestens heute), „Mehrfach nutzbar“; die Seite zeigt die Basis-URL bzw. die Polly-Seite `/s/<token>` als Beispiel.
     - „Links erzeugen und CSV herunterladen“ lädt `<name>_invitations_<datum>.csv` (`Expiration;Multi use;Complete URL`). Die Links lassen sich mit `GET /api/web-survey?token=<jwt>` prüfen; die Umfrageseite selbst folgt in M5.
-- [ ] M5 Schritt 4 – Öffentliche Web-Umfrageseite
+- [x] M5 Schritt 4 – Öffentliche Web-Umfrageseite  (2026-10-19)
+  - Abweichungen:
+    - Ohne PrimeVue und ohne vue-i18n: native Formularelemente mit eigenem CSS (`src/webSurvey/webSurvey.css`, Tailwind nur für `src/webSurvey/`, Farben aus `appTheme`) und ein minimaler Übersetzer mit eigenen Texten in `src/webSurvey/i18n/` (`de`/`en`/`fr`, Schema `de.ts`). Die App-Locales (`src/i18n/locales/`) bekommen deshalb keine `webSurvey.*`-Keys. Grund: kleines öffentliches Bundle (rund 8 KB gzip plus geteilte Vue-Runtime), keine Texte, die zur Laufzeit kompiliert werden, strikte CSP.
+    - Reine Logik der Seite in `src/domain/survey/webSurveyPage.ts` (Token aus der URL, Browsersprache, Prüfung der API-Antworten, 429-Wiederholung, Einrückung, Skalenwerte), Test `test/webSurveyPage.test.ts`. Die Lambda `web_survey` übernimmt von dort die Token-Grenze (`WEB_SURVEY_MAX_TOKEN_CHARS`).
+    - `flowNavigation` ist generisch (`NavigableSurvey`/`NavigableQuestion`) und arbeitet direkt auf dem bereinigten `WebSurvey`; Backend unverändert.
+    - `submitting` ist kein eigener Zustand, sondern ein Flag im Formular (das Formular bleibt sichtbar, Button mit `aria-disabled`). Fehler beim Absenden erscheinen als Hinweis über dem Formular mit „Erneut versuchen“; beim Laden gibt es zusätzlich die Zustände `throttled`/`error` mit eigenem Button.
+    - Sicherheit (zusätzlich zum Plan): CSP als `<meta>` in `survey.html` (vom Build eingefügt, Plugin in `vite.config.ts`), `referrer`-Policy `no-referrer`, `noindex`, Requests ohne Cookies/Referrer, Token-Formprüfung vor dem Backend-Aufruf, Prüfung der API-Antworten vor der Darstellung, keine Ausgabe als HTML. Details in `polly_web.md` → „Sicherheit“.
+    - Dev- und Preview-Server schreiben `/s/<jwt>` wie die Amplify-Regel auf `survey.html` um.
+    - Die Umfrage-`description` wird nicht angezeigt (wie in Entscheidung 7, die nur die Beschreibung der Fragen nennt).
+  - Testbar nach dem Deploy (Rewrite-Regel `/s/<*>` → `/survey.html` vor der SPA-Regel eintragen, siehe `polly_web.md` → „Hosting“):
+    - Einladungslink aus der CSV (M4) öffnen: Titel, Begrüßung, Hauptfragen; Folgefragen erscheinen eingerückt unter der Elternfrage, sobald die Bedingung zutrifft, und verschwinden samt Antwort wieder.
+    - Absenden ohne Pflichtangaben → Fehlerübersicht oben mit Links zu den Feldern; mit allen Angaben → Verabschiedung. Im Report-CSV erscheint die Antwort mit `Channel` = `web`.
+    - Einmal-Link erneut öffnen → „Diese Einladung wurde bereits verwendet“; manipulierter Token → „Einladung ist ungültig“; abgelaufener → „abgelaufen“; Umfrage ohne Prod → „nicht verfügbar“.
+    - Seite offen lassen, im Editor neu nach Prod deployen, dann absenden → Hinweis „zwischenzeitlich aktualisiert“, Antworten bleiben erhalten.
+    - Sprache der Umfrage (`en`/`fr`) steuert Texte und `<html lang>`; Fehlerseiten vor dem Laden nutzen die Browsersprache.
+    - Einbettung per iframe mit dem Snippet aus `polly_web.md` (inkl. Höhenanpassung).
+    - Lokal: `npm run dev`, dann `http://localhost:5173/s/<jwt>` (Backend über den Dev-Proxy).
 
 
 ## Context
@@ -164,13 +180,13 @@ Außerdem wird `survey_definition.md` angepasst (`base_url`, `language`, `min_la
   - `loadProdSurvey` aufrufen und ein bereinigtes Flow-JSON zurückgeben (ohne `synonyms`, `reprompt`, `name`).
   - `language` wird mit Default `de` gefüllt, falls es im Prod-Stand fehlt.
   - Antwort: `{ status: "ok", survey }` (inkl. `version`) oder `{ status: "invalid" | "expired" | "used" | "unavailable" }`.
-- **`POST /web-survey/submit`** mit `{ token, surveyVersion, answers: { [questionId]: value } }`
+- **`POST /web-survey/submit`** mit `{ token, surveyVersion, answers: { [questionId]: value }, submissionId? }` (`submissionId` macht Wiederholungen idempotent, siehe `polly_web.md`)
   - Erneut alles prüfen, dann Prod laden.
   - Weicht `surveyVersion` von `Prod.version` ab → 409 `survey_changed`, nichts wird geschrieben, der Token bleibt unverbraucht.
   - Danach mit `flowNavigation` prüfen. Ist etwas ungültig, antwortet die Lambda mit 400 und speichert nichts.
   - Mit `TransactWriteItems` schreiben:
     - bei Einmal-Token einen Put in `InvitationTokens` mit `attribute_not_exists`
-    - den Put des Antwort-Items direkt mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId = randomUUID()`, `surveyStartedAt = ${surveyId}#${now}`, `surveyName`/`surveyVersion` aus Prod und `answers[questionName]` im bestehenden Format
+    - den Put des Antwort-Items direkt mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId = submissionId ?? randomUUID()`, `surveyStartedAt = ${surveyId}#${now}`, `surveyName`/`surveyVersion` aus Prod und `answers[questionName]` im bestehenden Format
   - Danach die Aggregate aktualisieren. `updateSurveyAggregate` wird dazu aus `survey_responses/handler.ts` in ein gemeinsames Modul verschoben.
   - Schlägt die Transaktion an der Bedingung fehl, antwortet die Lambda mit 409 `used`.
 
@@ -219,6 +235,9 @@ Außerdem wird `survey_definition.md` angepasst (`base_url`, `language`, `min_la
   - Download über das bestehende `src/utils/download.ts` → `downloadBlob`.
 
 ## Schritt 4 – Öffentliche Web-Umfrageseite
+
+**Wichtig:**
+Diese Seite wird öffentlich erreichbar sein, es muss also sorgfältig auf Sicherheit geachtet werden um möglichst keine Angriffsvektoren zu öffnen.
 
 **Build:**
 - `vite.config.ts`: `build.rollupOptions.input = { main: "index.html", survey: "survey.html" }`.

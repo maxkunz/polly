@@ -15,6 +15,21 @@ import type { FlowCondition, FlowQuestion, FlowSurvey } from "./flowTypes";
  * - Unbeantwortete oder ungültige Antworten ⇒ weiter mit `default_next_question_id`.
  */
 
+/** Lässt Felder aus jedem Glied einer Union weg (`Omit` auf die Union würde die Unterscheidung über `type` verlieren). */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+/**
+ * Frage mit den Feldern, die die Navigation braucht. Passt auf das volle Flow-JSON (`FlowQuestion`,
+ * Backend) und auf das bereinigte Flow-JSON der Umfrageseite (`WebQuestion` ohne `name`, `reprompt`, `synonyms`).
+ */
+export type NavigableQuestion = DistributiveOmit<FlowQuestion, "name" | "reprompt" | "synonyms">;
+
+/** Umfrage mit den Feldern, die die Navigation braucht (`FlowSurvey` oder `WebSurvey`). */
+export interface NavigableSurvey<Q extends NavigableQuestion = NavigableQuestion> {
+	start_question_id: FlowSurvey["start_question_id"];
+	questions: Q[];
+}
+
 /**
  * Antworten der Umfrageseite: Frage-ID → Wert. Die Werte kommen vom Client und sind ungeprüft;
  * die exportierten Funktionen nehmen deshalb `unknown` und prüfen auch den Container selbst.
@@ -61,7 +76,7 @@ function isIntegerInRange(value: unknown, min: number, max: number): value is nu
 }
 
 /** Prüft einen (beantworteten) Wert gegen den Fragetyp. */
-export function isAnswerValueValid(question: FlowQuestion, value: unknown): boolean {
+export function isAnswerValueValid(question: NavigableQuestion, value: unknown): boolean {
 	switch (question.type) {
 		case "rating":
 			return isIntegerInRange(value, question.options.min_value, question.options.max_value);
@@ -102,7 +117,7 @@ function findMatchingCondition(conditions: FlowCondition[], value: number): Flow
 }
 
 /** ID der Frage, die nach `question` mit der Antwort `value` folgt; `null` = Ende der Umfrage. */
-export function getNextQuestionId(question: FlowQuestion, value: unknown): string | null {
+export function getNextQuestionId(question: NavigableQuestion, value: unknown): string | null {
 	const fallback = question.default_next_question_id;
 	if (!isAnswered(value) || !isAnswerValueValid(question, value)) {
 		return fallback;
@@ -126,10 +141,10 @@ export function getNextQuestionId(question: FlowQuestion, value: unknown): strin
  * Elternfrage). Bei einem defekten Flow-JSON (unbekannte ID, Zyklus) endet die Liste dort.
  * Sind `answers` kein Objekt, zählen alle Fragen als unbeantwortet.
  */
-export function getReachableQuestions(survey: FlowSurvey, answers: unknown): FlowQuestion[] {
+export function getReachableQuestions<Q extends NavigableQuestion>(survey: NavigableSurvey<Q>, answers: unknown): Q[] {
 	const given: FlowAnswers = isFlowAnswers(answers) ? answers : {};
 	const byId = new Map(survey.questions.map(question => [question.id, question]));
-	const reachable: FlowQuestion[] = [];
+	const reachable: Q[] = [];
 	const visited = new Set<string>();
 	let currentId = survey.start_question_id;
 
@@ -152,7 +167,7 @@ export function getReachableQuestions(survey: FlowSurvey, answers: unknown): Flo
  * Leere Antworten (`null`, `""`) auf nicht erreichbare Fragen werden toleriert.
  * Ist `answers` kein einfaches Objekt, gibt es nur den Fehler `invalid_answers`.
  */
-export function validateFlowAnswers(survey: FlowSurvey, answers: unknown): FlowAnswerError[] {
+export function validateFlowAnswers(survey: NavigableSurvey, answers: unknown): FlowAnswerError[] {
 	if (!isFlowAnswers(answers)) {
 		return [{ questionId: null, code: "invalid_answers" }];
 	}
@@ -190,7 +205,7 @@ export function validateFlowAnswers(survey: FlowSurvey, answers: unknown): FlowA
  * zwischenzeitlich geänderten Umfrage (`409 survey_changed`) zu übernehmen und die zu
  * speichernden Antworten im Backend zu bestimmen. Sind `answers` kein Objekt, ist das Ergebnis leer.
  */
-export function pruneFlowAnswers(survey: FlowSurvey, answers: unknown): FlowAnswers {
+export function pruneFlowAnswers(survey: NavigableSurvey, answers: unknown): FlowAnswers {
 	const pruned: FlowAnswers = {};
 	if (!isFlowAnswers(answers)) {
 		return pruned;
