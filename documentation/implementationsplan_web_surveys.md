@@ -228,7 +228,7 @@ Außerdem wird `survey_definition.md` angepasst (`base_url`, `language`, `min_la
   - yes_no als Radio-Gruppe Ja/Nein
   - comment als `textarea` mit Zeichenzähler
 - Folgefragen werden mit `flowNavigation` direkt unter der Elternfrage eingeblendet und per `aria-live="polite"` angekündigt. Fällt eine Folgefrage wieder weg, wird ihre Antwort verworfen.
-- `services/webSurveyApi.ts`: `fetch` auf `/api/web-survey` bzw. `/submit`.
+- `services/webSurveyApi.ts`: `fetch` auf `${API_PREFIX}/web-survey` bzw. `/submit` (`constants/apiConstants.ts`, Default `/api`).
 
 **Barrierefreiheit (WCAG 2.2 AA):**
 - semantische Landmarks und eine Überschriften-Hierarchie

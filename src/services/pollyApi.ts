@@ -1,5 +1,6 @@
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
+import { API_PREFIX } from "@/constants/apiConstants";
 
 export class PollyApiError extends Error {
 	constructor(
@@ -19,14 +20,14 @@ export class MissingTokenError extends Error {
 }
 
 /**
- * fetch gegen das eigene Backend (/api) mit Genesys-Bearer und Region.
+ * fetch gegen das eigene Backend (API_PREFIX, Default /api) mit Genesys-Bearer und Region.
  * Wirft PollyApiError bei Status >= 400.
  */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
 	const { accessToken, region } = useAppStore().genesys;
 	if (!accessToken) throw new MissingTokenError();
 
-	const response = await fetch(`/api${path}`, {
+	const response = await fetch(`${API_PREFIX}${path}`, {
 		...init,
 		headers: {
 			...(init.headers ?? {}),

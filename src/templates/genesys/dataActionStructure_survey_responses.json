@@ -4,7 +4,7 @@
     "request": {
       "requestType": "POST",
       "requestTemplate": "{\n  \"conversationId\": \"${input.conversationId}\",\n  \"surveyId\": \"${input.surveyId}\",\n  \"surveyName\": \"${input.surveyName}\",\n  \"surveyVersion\": ${input.surveyVersion},\n  \"questionName\": \"${input.questionName}\",\n  \"questionType\": \"${input.questionType}\",\n  \"value\": \"${input.value}\",\n  \"isCompleted\": ${input.isCompleted}\n}",
-      "requestUrlTemplate": "{{DOMAIN_NAME}}/api/survey-responses",
+      "requestUrlTemplate": "{{DOMAIN_NAME}}{{API_PREFIX}}/survey-responses",
       "headers": {
         "Content-Type": "application/json",
         "Authorization": "${authResponse.token_type} ${authResponse.access_token}"

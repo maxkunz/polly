@@ -2,6 +2,7 @@ import platformClient from "purecloud-platform-client-v2";
 import { i18n } from "@/i18n";
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
+import { API_PREFIX } from "@/constants/apiConstants";
 import { deleteDivision } from "@/services/genesys/division";
 import { deleteDataTable } from "@/services/genesys/dataTable";
 import { deleteIntegration } from "@/services/genesys/integration";
@@ -124,7 +125,7 @@ export async function runFullDelete(
       const accessToken = app.genesys.accessToken;
       const region = app.genesys.region;
       if (!accessToken || !region) throw new Error("Backend cleanup requires an authenticated Genesys session and region.");
-      const response = await fetch(`${domainName}/api/onboarding/uninstall`, {
+      const response = await fetch(`${domainName}${API_PREFIX}/onboarding/uninstall`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

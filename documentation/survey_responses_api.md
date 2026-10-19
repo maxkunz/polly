@@ -65,6 +65,8 @@ Jeder Request muss authentifiziert sein. Die Tenant-Zuordnung (`tenantId`) erfol
 https://<amplify-api-domain>/api
 ```
 
+`/api` ist das Default-Präfix. Amplify Hosting leitet es per Rewrite-Regel (Konsole, gilt app-weit) auf das API Gateway der Umgebung weiter. Laufen mehrere Branches in einer Amplify-App, bekommt jeder Branch ein eigenes Präfix über die Branch-Umgebungsvariable `VITE_API_PREFIX` (z. B. `/api_websurveys`) und eine eigene Rewrite-Regel `/api_websurveys/<*>` → API Gateway des Branches. Das Präfix wirkt beim Build: Frontend-Aufrufe, Onboarding und die URL der Data Action, die das Setup anlegt (`<domain><präfix>/survey-responses`).
+
 ---
 
 ## 3. Fragetypen & Wertebereiche

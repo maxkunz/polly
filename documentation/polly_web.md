@@ -215,4 +215,4 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 
 ## Hosting
 
-`vite.config.ts` baut zwei Einstiegspunkte (`index.html`, `survey.html`). In den Amplify-Rewrites (Konsole) muss `/s/<*>` auf `/survey.html` (Status 200) zeigen.
+`vite.config.ts` baut zwei Einstiegspunkte (`index.html`, `survey.html`). In den Amplify-Rewrites (Konsole) muss `/s/<*>` auf `/survey.html` (Status 200) zeigen. Die Umfrageseite ruft das Backend wie die App über `API_PREFIX` (`constants/apiConstants.ts`, Default `/api`) auf.
