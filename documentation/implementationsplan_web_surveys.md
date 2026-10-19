@@ -20,7 +20,17 @@ Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz no
     - `GET /api/web-survey?token=<jwt>` liefert das bereinigte Flow-JSON. `POST /api/web-survey/submit` speichert eine Antwort. Sie erscheint im Report-CSV mit `Channel` = `web`; ein zweites Absenden mit demselben Einmal-Token → 409 `used`.
     - Der Report-Export hat die neue letzte Spalte `Channel` (bestehende Antworten: `flow`).
     - `tools/survey_responses.sh` prüft die öffentlichen Fälle ohne Token, mit `WEB_TOKEN=<jwt>` auch Laden und `survey_changed`.
-- [ ] M4 Schritt 3 – Unterseite „Einladungslinks“ (Genesys-App)
+- [x] M4 Schritt 3 – Unterseite „Einladungslinks“ (Genesys-App)  (2026-10-19)
+  - Abweichungen:
+    - CSV-Escape und Formelschutz liegen jetzt in `src/utils/csv.ts` (aliasfrei); `survey_responses_export/csv.ts` importiert und reexportiert sie. Der Report-Download nutzt dort auch `CSV_BOM`.
+    - `INVITATION_COUNT_MIN`/`MAX` liegen in `src/domain/survey/invitationLinks.ts`, die Lambda `invitations` übernimmt sie von dort.
+    - `invitationLinks.ts` enthält zusätzlich `expirationFromDate` (Tagesende 23:59:59 lokal → `exp`) und `formatInvitationExpiration` (CSV-Spalte `Expiration` als ISO 8601 mit lokalem Offset).
+    - Basis-URL ohne `{token}` mit `#fragment`: `token=` wird vor dem Fragment eingefügt.
+    - Fehler der Lambda werden nach Status gemeldet (403 Rolle fehlt, 409 kein Prod, 429 gedrosselt).
+  - Testbar nach dem Deploy:
+    - Im Editor einer gespeicherten Umfrage Button „Einladungslinks“ (nur mit `polly_deploy`, nicht bei ungespeicherten Änderungen) → Unterseite `/surveys?id=<id>&invite=1`.
+    - Ohne Prod-Stand: Hinweis, Button gesperrt. Mit Prod: Anzahl 1–5000, optional Ablaufdatum (frühestens heute), „Mehrfach nutzbar“; die Seite zeigt die Basis-URL bzw. die Polly-Seite `/s/<token>` als Beispiel.
+    - „Links erzeugen und CSV herunterladen“ lädt `<name>_invitations_<datum>.csv` (`Expiration;Multi use;Complete URL`). Die Links lassen sich mit `GET /api/web-survey?token=<jwt>` prüfen; die Umfrageseite selbst folgt in M5.
 - [ ] M5 Schritt 4 – Öffentliche Web-Umfrageseite
 
 

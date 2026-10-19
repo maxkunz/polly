@@ -17,6 +17,7 @@ import { createEmptySurvey } from "@/domain/survey/surveyTypes";
 import SurveyEditor from "@/components/survey/SurveyEditor.vue";
 import SurveyDeploymentView from "@/components/survey/SurveyDeploymentView.vue";
 import SurveyReportView from "@/components/survey/SurveyReportView.vue";
+import SurveyInvitationView from "@/components/survey/SurveyInvitationView.vue";
 
 const app = useAppStore();
 const route = useRoute();
@@ -88,7 +89,8 @@ onBeforeRouteUpdate(async (to, from) => {
 		to.query.new === from.query.new &&
 		to.query.clone === from.query.clone &&
 		to.query.deploy === from.query.deploy &&
-		to.query.report === from.query.report
+		to.query.report === from.query.report &&
+		to.query.invite === from.query.invite
 	) {
 		return true;
 	}
@@ -190,6 +192,10 @@ const isReportView = computed(
 	() => route.query.report === "1" && !!selectedSurveyId.value
 );
 
+const isInviteView = computed(
+	() => route.query.invite === "1" && !!selectedSurveyId.value
+);
+
 const selectedSurvey = computed(
 	() => surveysList.value.find(s => s.id === selectedSurveyId.value) ?? null
 );
@@ -217,7 +223,11 @@ function handleReport(): void {
 	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, report: "1" } });
 }
 
-/** Aus Deploy- bzw. Report-Ansicht zurück in den Editor */
+function handleInvite(): void {
+	router.push({ name: "surveys", query: { id: selectedSurveyId.value!, invite: "1" } });
+}
+
+/** Aus Deploy-, Report- bzw. Einladungs-Ansicht zurück in den Editor */
 function handleBackToEditor(): void {
 	if (selectedSurveyId.value) {
 		router.push({ name: "surveys", query: { id: selectedSurveyId.value } });
@@ -408,7 +418,7 @@ onBeforeUnmount(() => {
 
 			<!-- Editor Component -->
 			<SurveyEditor
-				v-else-if="selectedSurveyDetail && !isDeployView && !isReportView"
+				v-else-if="selectedSurveyDetail && !isDeployView && !isReportView && !isInviteView"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId"
 				v-model:existingRow="rawRowData"
@@ -419,6 +429,7 @@ onBeforeUnmount(() => {
 				@back="handleBackToList"
 				@deploy="handleDeploy"
 				@report="handleReport"
+				@invite="handleInvite"
 				@deleted="handleSurveyDeleted"
 				@clone="handleClone"
 			/>
@@ -438,6 +449,15 @@ onBeforeUnmount(() => {
 				v-else-if="isReportView && selectedSurveyDetail"
 				:survey="selectedSurveyDetail"
 				:surveyId="selectedSurveyId!"
+				@back="handleBackToEditor"
+			/>
+
+			<!-- Einladungslinks (Web-Kanal) -->
+			<SurveyInvitationView
+				v-else-if="isInviteView && selectedSurveyDetail"
+				:survey="selectedSurveyDetail"
+				:surveyId="selectedSurveyId!"
+				:existingRow="rawRowData"
 				@back="handleBackToEditor"
 			/>
 

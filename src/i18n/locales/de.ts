@@ -104,6 +104,8 @@ export const de = {
 			deployAriaLabel: "Zur Deployment-Ansicht",
 			report: "Report",
 			reportAriaLabel: "Zur Report-Ansicht",
+			invite: "Einladungslinks",
+			inviteAriaLabel: "Zur Ansicht Einladungslinks (Web)",
 			save: "Speichern"
 		},
 		stickyBar: {
@@ -424,6 +426,37 @@ export const de = {
 			invalidRange: "Bitte einen gültigen Zeitraum wählen (Von darf nicht nach Bis liegen).",
 			missingToken: "Kein Genesys-Zugriffstoken vorhanden. Bitte neu anmelden.",
 			generic: "Fehler beim Laden des Reports"
+		}
+	},
+
+	invitations: {
+		back: "Zurück zum Editor",
+		backAriaLabel: "Zurück zum Editor",
+		title: "Einladungslinks",
+		prodVersion: "Prod v{version}",
+		intro: "Erzeugt personalisierte Links für die Web-Umfrage. Die Links zeigen auf den aktuellen Prod-Stand; ein späteres Deploy oder Rollback wirkt automatisch auch auf bereits verschickte Links.",
+		noProd: "Die Umfrage hat noch keinen Prod-Stand. Bitte zuerst nach Prod deployen, dann können Einladungslinks erzeugt werden.",
+		count: "Anzahl Links",
+		countHint: "{min} bis {max} Links pro Erzeugung",
+		expiry: "Ablaufdatum (optional)",
+		expiryHint: "Gültig bis einschließlich 23:59:59 dieses Tages (Ihre Ortszeit). Ohne Datum laufen die Links nicht ab.",
+		multi: "Mehrfach nutzbar",
+		multiHintOn: "Jeder Link kann beliebig oft zur Teilnahme verwendet werden.",
+		multiHintOff: "Jeder Link erlaubt genau eine Teilnahme.",
+		linkTarget: "Ziel der Links",
+		linkTargetBaseUrl: "Basis-URL aus den gespeicherten Umfrageeinstellungen:",
+		linkTargetFallback: "Keine Basis-URL hinterlegt – die Links zeigen auf die Polly-Umfrageseite:",
+		generate: "Links erzeugen und CSV herunterladen",
+		generateAriaLabel: "Einladungslinks erzeugen und als CSV herunterladen",
+		notStoredHint: "Die Links werden nicht gespeichert. Bewahren Sie die CSV-Datei auf; verlorene Links können nur neu erzeugt werden.",
+		success: "{count} Links erzeugt, die CSV-Datei wurde heruntergeladen.",
+		errors: {
+			missingToken: "Kein Genesys-Zugriffstoken vorhanden. Bitte neu anmelden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			noProd: "Die Umfrage hat keinen Prod-Stand (mehr). Bitte Ansicht neu laden.",
+			throttled: "Genesys ist gerade ausgelastet. Bitte in einem Moment erneut versuchen.",
+			expiryInPast: "Das Ablaufdatum liegt in der Vergangenheit.",
+			generic: "Fehler beim Erzeugen der Einladungslinks"
 		}
 	},
 

@@ -1,4 +1,5 @@
 import { apiFetch } from "@/services/pollyApi";
+import { CSV_BOM } from "@/utils/csv";
 
 export interface ReportRange {
 	surveyId: string;
@@ -72,7 +73,7 @@ export async function exportReportCsv(
 	range: ReportRange,
 	options: ReportCallOptions & { version?: number | null; onProgress?: (progress: ExportProgress) => void } = {}
 ): Promise<Blob> {
-	const parts: BlobPart[] = ["﻿"];
+	const parts: BlobPart[] = [CSV_BOM];
 	const progress: ExportProgress = { sessions: 0, rows: 0 };
 	let cursor: string | undefined;
 

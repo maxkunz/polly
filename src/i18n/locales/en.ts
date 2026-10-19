@@ -106,6 +106,8 @@ export const en: MessageSchema = {
 			deployAriaLabel: "Go to deployment view",
 			report: "Report",
 			reportAriaLabel: "Go to report view",
+			invite: "Invitation links",
+			inviteAriaLabel: "Go to invitation links (web)",
 			save: "Save"
 		},
 		stickyBar: {
@@ -426,6 +428,37 @@ export const en: MessageSchema = {
 			invalidRange: "Please choose a valid date range (From must not be after To).",
 			missingToken: "No Genesys access token available. Please sign in again.",
 			generic: "Error while loading the report"
+		}
+	},
+
+	invitations: {
+		back: "Back to editor",
+		backAriaLabel: "Back to editor",
+		title: "Invitation links",
+		prodVersion: "Prod v{version}",
+		intro: "Creates personalised links for the web survey. The links point to the current Prod version; a later deploy or rollback automatically applies to links already sent.",
+		noProd: "The survey has no Prod version yet. Deploy to Prod first, then invitation links can be created.",
+		count: "Number of links",
+		countHint: "{min} to {max} links per run",
+		expiry: "Expiry date (optional)",
+		expiryHint: "Valid up to and including 23:59:59 on that day (your local time). Without a date the links never expire.",
+		multi: "Multi use",
+		multiHintOn: "Each link can be used to take part any number of times.",
+		multiHintOff: "Each link allows exactly one participation.",
+		linkTarget: "Link target",
+		linkTargetBaseUrl: "Base URL from the saved survey settings:",
+		linkTargetFallback: "No base URL set – the links point to the Polly survey page:",
+		generate: "Create links and download CSV",
+		generateAriaLabel: "Create invitation links and download them as CSV",
+		notStoredHint: "The links are not stored. Keep the CSV file; lost links can only be created again.",
+		success: "{count} links created, the CSV file has been downloaded.",
+		errors: {
+			missingToken: "No Genesys access token available. Please sign in again.",
+			missingRole: "No permission – deploy rights are missing.",
+			noProd: "The survey has no Prod version (any more). Please reload the view.",
+			throttled: "Genesys is busy right now. Please try again in a moment.",
+			expiryInPast: "The expiry date is in the past.",
+			generic: "Error while creating the invitation links"
 		}
 	},
 

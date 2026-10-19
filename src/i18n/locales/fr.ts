@@ -106,6 +106,8 @@ export const fr: MessageSchema = {
 			deployAriaLabel: "Vers la vue de déploiement",
 			report: "Rapport",
 			reportAriaLabel: "Vers la vue du rapport",
+			invite: "Liens d'invitation",
+			inviteAriaLabel: "Vers les liens d'invitation (web)",
 			save: "Enregistrer"
 		},
 		stickyBar: {
@@ -426,6 +428,37 @@ export const fr: MessageSchema = {
 			invalidRange: "Veuillez choisir une période valide (la date de début ne doit pas être postérieure à la date de fin).",
 			missingToken: "Aucun jeton d'accès Genesys disponible. Veuillez vous reconnecter.",
 			generic: "Erreur lors du chargement du rapport"
+		}
+	},
+
+	invitations: {
+		back: "Retour à l'éditeur",
+		backAriaLabel: "Retour à l'éditeur",
+		title: "Liens d'invitation",
+		prodVersion: "Prod v{version}",
+		intro: "Crée des liens personnalisés pour l'enquête web. Les liens pointent vers la version Prod actuelle ; un déploiement ou un rollback ultérieur s'applique automatiquement aux liens déjà envoyés.",
+		noProd: "L'enquête n'a pas encore de version Prod. Déployez d'abord en Prod, puis créez les liens d'invitation.",
+		count: "Nombre de liens",
+		countHint: "{min} à {max} liens par génération",
+		expiry: "Date d'expiration (facultative)",
+		expiryHint: "Valable jusqu'à 23:59:59 ce jour-là inclus (votre heure locale). Sans date, les liens n'expirent pas.",
+		multi: "Utilisable plusieurs fois",
+		multiHintOn: "Chaque lien peut être utilisé pour participer un nombre illimité de fois.",
+		multiHintOff: "Chaque lien permet exactement une participation.",
+		linkTarget: "Cible des liens",
+		linkTargetBaseUrl: "URL de base issue des paramètres enregistrés de l'enquête :",
+		linkTargetFallback: "Aucune URL de base définie – les liens pointent vers la page d'enquête Polly :",
+		generate: "Créer les liens et télécharger le CSV",
+		generateAriaLabel: "Créer les liens d'invitation et les télécharger en CSV",
+		notStoredHint: "Les liens ne sont pas enregistrés. Conservez le fichier CSV ; des liens perdus ne peuvent qu'être recréés.",
+		success: "{count} liens créés, le fichier CSV a été téléchargé.",
+		errors: {
+			missingToken: "Aucun jeton d'accès Genesys disponible. Veuillez vous reconnecter.",
+			missingRole: "Aucune autorisation – droits de déploiement manquants.",
+			noProd: "L'enquête n'a pas (plus) de version Prod. Veuillez recharger la vue.",
+			throttled: "Genesys est actuellement surchargé. Veuillez réessayer dans un instant.",
+			expiryInPast: "La date d'expiration est dans le passé.",
+			generic: "Erreur lors de la création des liens d'invitation"
 		}
 	},
 

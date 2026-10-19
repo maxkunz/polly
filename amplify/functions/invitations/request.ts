@@ -1,3 +1,4 @@
+import { INVITATION_COUNT_MAX, INVITATION_COUNT_MIN } from "../../../src/domain/survey/invitationLinks";
 import { isValidSurveyId } from "../shared/survey_id";
 
 /**
@@ -5,8 +6,8 @@ import { isValidSurveyId } from "../shared/survey_id";
  * Format: `documentation/polly_web.md`.
  */
 
-export const INVITATION_COUNT_MIN = 1;
-export const INVITATION_COUNT_MAX = 5000;
+// Grenzen gemeinsam mit der Einladungs-Unterseite der App
+export { INVITATION_COUNT_MAX, INVITATION_COUNT_MIN };
 
 export interface InvitationRequest {
   surveyId: string;

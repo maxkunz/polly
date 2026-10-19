@@ -107,6 +107,8 @@ export const la: MessageSchema = {
 			deployAriaLabel: "Ad aspectum publicationis",
 			report: "Relatio",
 			reportAriaLabel: "Ad aspectum relationis",
+			invite: "Nexus invitationis",
+			inviteAriaLabel: "Ad nexus invitationis (interretiales)",
 			save: "Serva"
 		},
 		stickyBar: {
@@ -427,6 +429,37 @@ export const la: MessageSchema = {
 			invalidRange: "Quaeso, tempus validum elige (Ab non post Usque ad esse potest).",
 			missingToken: "Nullum signum accessus Genesys adest. Quaeso, iterum ingredere.",
 			generic: "Error in relatione legenda"
+		}
+	},
+
+	invitations: {
+		back: "Ad editorem redi",
+		backAriaLabel: "Ad editorem redi",
+		title: "Nexus invitationis",
+		prodVersion: "Prod v{version}",
+		intro: "Nexus proprios pro quaestionario interretiali creat. Nexus ad statum Prod praesentem spectant.",
+		noProd: "Quaestionarium nondum statum Prod habet. Primum in Prod emitte.",
+		count: "Numerus nexuum",
+		countHint: "{min} ad {max} nexus singulis vicibus",
+		expiry: "Dies exitus (optio)",
+		expiryHint: "Valet usque ad 23:59:59 illius diei (tempore tuo). Sine die nexus numquam exeunt.",
+		multi: "Saepius utendus",
+		multiHintOn: "Quisque nexus quotiens libet adhiberi potest.",
+		multiHintOff: "Quisque nexus semel tantum adhiberi potest.",
+		linkTarget: "Meta nexuum",
+		linkTargetBaseUrl: "URL fundamentalis ex optionibus servatis:",
+		linkTargetFallback: "Nulla URL fundamentalis – nexus ad paginam Polly spectant:",
+		generate: "Nexus crea et CSV depone",
+		generateAriaLabel: "Nexus invitationis crea et ut CSV depone",
+		notStoredHint: "Nexus non servantur. Plicam CSV custodi.",
+		success: "{count} nexus creati, plica CSV deposita est.",
+		errors: {
+			missingToken: "Nulla tessera accessus Genesys. Iterum inscribe.",
+			missingRole: "Nulla potestas – iura emittendi desunt.",
+			noProd: "Quaestionarium statum Prod (iam) non habet. Aspectum renova.",
+			throttled: "Genesys nunc occupatus est. Mox iterum tempta.",
+			expiryInPast: "Dies exitus praeteriit.",
+			generic: "Error in nexibus invitationis creandis"
 		}
 	},
 

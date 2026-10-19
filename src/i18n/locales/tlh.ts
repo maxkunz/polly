@@ -107,6 +107,8 @@ export const tlh: MessageSchema = {
 			deployAriaLabel: "ngeHmeH leghmeH yIjaH",
 			report: "ja'",
 			reportAriaLabel: "ja' leghmeH yIjaH",
+			invite: "rItlh mu'mey",
+			inviteAriaLabel: "rItlh mu'mey leghmeH yIjaH",
 			save: "yIpol"
 		},
 		stickyBar: {
@@ -427,6 +429,37 @@ export const tlh: MessageSchema = {
 			invalidRange: "poH lugh yIwIv (vo' paw' tlha'laHbe').",
 			missingToken: "Genesys 'elmeH ngoq tu'lu'be'. yI'elqa'.",
 			generic: "ja' lI'lu'DI' Qagh"
+		}
+	},
+
+	invitations: {
+		back: "choHwI' yIchegh",
+		backAriaLabel: "choHwI' yIchegh",
+		title: "rItlh mu'mey",
+		prodVersion: "Prod v{version}",
+		intro: "Daq Sep rItlh mu'mey chenmoH. Prod Sep DaH lo'.",
+		noProd: "Prod Sep tu'be'lu'. wa'DIch Prod yIngeH.",
+		count: "rItlh mu'mey mI'",
+		countHint: "{min} - {max} rItlh mu'mey",
+		expiry: "Qaw'meH jaj (DuH)",
+		expiryHint: "jaj pIq 23:59:59 ruch. jaj tu'be'lu'chugh, not Qaw'.",
+		multi: "law' lo'laH",
+		multiHintOn: "rItlh mu' law' lo'laH.",
+		multiHintOff: "rItlh mu' wa'logh lo'laH.",
+		linkTarget: "rItlh mu'mey ngoQ",
+		linkTargetBaseUrl: "Daq lurDech:",
+		linkTargetFallback: "Daq lurDech tu'be'lu' – Polly Daq lo':",
+		generate: "rItlh mu'mey yIchenmoH 'ej CSV yIlI'",
+		generateAriaLabel: "rItlh mu'mey yIchenmoH 'ej CSV yIlI'",
+		notStoredHint: "rItlh mu'mey pollu'be'. CSV yIpol.",
+		success: "{count} rItlh mu'mey chenmoHlu'. CSV lI'lu'.",
+		errors: {
+			missingToken: "Genesys ngoq tu'be'lu'. yI'el.",
+			missingRole: "chaw' tu'be'lu' – ngeHmeH chaw' tu'be'lu'.",
+			noProd: "Prod Sep tu'be'lu'. yIchu'qa'.",
+			throttled: "Genesys Qu' law'. tugh yInIDqa'.",
+			expiryInPast: "Qaw'meH jaj ret.",
+			generic: "rItlh mu'mey chenmoHmeH Qagh"
 		}
 	},
 

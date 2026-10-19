@@ -88,11 +88,19 @@ Die Umfrageseite darf in iframes eingebettet werden (kein `X-Frame-Options`, `fr
 
 Eingabefelder: **Anzahl** (1 bis 5000 pro Erzeugung), **Ablaufdatum** (optional, nicht in der Vergangenheit), **mehrfach nutzbar**. Ohne Prod-Stand der Umfrage ist die Erzeugung gesperrt.
 
-Die erzeugten Tokens werden nicht gespeichert; in der Tabelle `InvitationTokens` landen nur bereits benutzte Einmal-Tokens. Das Ergebnis wird als CSV heruntergeladen (UTF-8 mit BOM, Trennzeichen `;`, Escape und Formelschutz wie im Report-Export):
+Die erzeugten Tokens werden nicht gespeichert; in der Tabelle `InvitationTokens` landen nur bereits benutzte Einmal-Tokens. Das Ergebnis wird als CSV heruntergeladen (UTF-8 mit BOM, Trennzeichen `;`, Zeilenende CRLF, Escape und Formelschutz wie im Report-Export, Dateiname `<name>_invitations_<JJJJ-MM-TT>.csv`):
 
 ```
 Expiration;Multi use;Complete URL
+2026-12-31T23:59:59+01:00;false;https://baseurl.com/survey?token=eyJhbGciOi…
+;true;https://<polly-origin>/s/eyJhbGciOi…
 ```
+
+* `Expiration`: ISO 8601 in der lokalen Zeit des Erstellers mit Offset; leer, wenn kein Ablaufdatum gewählt wurde.
+* `Multi use`: `true` / `false`.
+* `Complete URL`: fertiger Link nach den Regeln aus „Link-Aufbau“. Die Basis-URL stammt aus dem **gespeicherten** Draft (nicht aus Prod, `base_url` steht nicht im Flow-JSON); die Unterseite zeigt sie samt Beispiel-Link an. Fallback-Origin ist der Origin der Polly-App.
+
+Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/useSurveyInvitations.ts` und `services/invitationService.ts`, Link-Aufbau und CSV rein in `domain/survey/invitationLinks.ts` (Test `test/invitationLinks.test.ts`). Die Grenzen 1–5000 kommen von dort auch in die Lambda `invitations`.
 
 ## Backend
 
