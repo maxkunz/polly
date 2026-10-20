@@ -55,7 +55,8 @@ const languageOptions = computed(() => SURVEY_LANGUAGES.map(value => ({ value, l
 const { themes: webThemes, loaded: webThemesLoaded, loadError: webThemesError, defaultTheme, load: loadWebThemes } = useWebThemes();
 onMounted(() => void loadWebThemes());
 
-const TENANT_DEFAULT = "";
+// Nicht leer: PrimeVue Select zeigt bei "" den Platzhalter statt der passenden Option
+const TENANT_DEFAULT = "__default__";
 const webThemeOptions = computed(() => [
 	{
 		value: TENANT_DEFAULT,
@@ -83,7 +84,7 @@ const webThemeMissing = computed(
 );
 
 function setWebTheme(value: string | null): void {
-	if (value) props.survey.web_theme_id = value;
+	if (value && value !== TENANT_DEFAULT) props.survey.web_theme_id = value;
 	else delete props.survey.web_theme_id;
 }
 </script>
