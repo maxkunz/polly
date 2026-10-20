@@ -565,7 +565,7 @@ export const de = {
 		},
 		roles: {
 			heading: "Überschrift",
-			subheading: "Zwischenüberschrift",
+			subheading: "Überschrift 2",
 			body: "Fließtext",
 			questionTitle: "Fragetitel",
 			description: "Beschreibung",

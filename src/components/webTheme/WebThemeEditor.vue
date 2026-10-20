@@ -247,10 +247,10 @@ function save(): void {
 					<table class="w-full text-sm">
 						<thead>
 							<tr class="text-left text-xs text-[var(--p-text-muted-color)]">
-								<th scope="col" class="py-1 pr-2 font-medium">{{ t("webThemes.editor.role") }}</th>
-								<th scope="col" class="py-1 pr-2 font-medium">{{ t("webThemes.editor.size") }}</th>
-								<th scope="col" class="py-1 pr-2 font-medium">{{ t("webThemes.editor.weight") }}</th>
-								<th scope="col" class="py-1 pr-2 font-medium">{{ t("webThemes.editor.lineHeight") }}</th>
+								<th scope="col" class="py-1 pr-2 font-medium max-w-24 break-words">{{ t("webThemes.editor.role") }}</th>
+								<th scope="col" class="py-1 pr-2 font-medium max-w-24 break-words">{{ t("webThemes.editor.size") }}</th>
+								<th scope="col" class="py-1 pr-2 font-medium max-w-24 break-words">{{ t("webThemes.editor.weight") }}</th>
+								<th scope="col" class="py-1 pr-2 font-medium max-w-24 break-words">{{ t("webThemes.editor.lineHeight") }}</th>
 								<th scope="col" class="py-1"><span class="sr-only">{{ t("webThemes.editor.reset") }}</span></th>
 							</tr>
 						</thead>
@@ -264,7 +264,7 @@ function save(): void {
 								@focusin="highlight(role)"
 								@focusout="highlight(null)"
 							>
-								<th scope="row" class="py-2 pr-2 text-left font-normal whitespace-nowrap">
+								<th scope="row" class="py-2 pr-2 text-left font-normal max-w-32 break-words">
 									{{ t(`webThemes.roles.${role}`) }}
 								</th>
 								<td class="py-2 pr-2">
@@ -275,7 +275,7 @@ function save(): void {
 										:allowEmpty="false"
 										showButtons
 										suffix=" px"
-										inputClass="w-28"
+										inputClass="w-24"
 										:aria-label="t('webThemes.editor.sizeOf', { role: t(`webThemes.roles.${role}`), min: WEB_TEXT_SIZE_LIMITS[role].min, max: WEB_TEXT_SIZE_LIMITS[role].max })"
 										:disabled="readonly"
 									/>
@@ -286,7 +286,7 @@ function save(): void {
 										:options="weightOptions"
 										optionLabel="label"
 										optionValue="value"
-										class="w-36"
+										class="w-32"
 										:ariaLabel="t('webThemes.editor.weightOf', { role: t(`webThemes.roles.${role}`) })"
 										:disabled="readonly"
 									/>
@@ -301,7 +301,7 @@ function save(): void {
 										:maxFractionDigits="2"
 										:allowEmpty="false"
 										showButtons
-										inputClass="w-24"
+										inputClass="w-22"
 										:aria-label="t('webThemes.editor.lineHeightOf', { role: t(`webThemes.roles.${role}`) })"
 										:disabled="readonly"
 									/>
@@ -337,6 +337,7 @@ function save(): void {
 							<ColorPicker
 								:modelValue="draft.tokens.colors[key].slice(1)"
 								format="hex"
+								:pt="{ preview: { style: 'border: 1px solid var(--p-text-muted-color)' } }"
 								:disabled="readonly"
 								:aria-label="t(`webThemes.colors.${key}`)"
 								@update:modelValue="(value: string) => setColor(key, value)"
