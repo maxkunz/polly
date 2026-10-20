@@ -139,7 +139,7 @@ function onCommentInput(event: Event): void {
 			<p v-if="error" :id="ids.error" class="web-question__error">{{ error }}</p>
 
 			<div v-if="isScale" class="flex flex-col gap-2">
-				<div class="web-scale">
+				<div class="web-scale" :class="{ 'web-scale--single-row': question.type === 'nps' }">
 					<label v-for="option in options" :key="option.key" class="web-option web-option--scale">
 						<input
 							type="radio"
@@ -159,7 +159,7 @@ function onCommentInput(event: Event): void {
 				</div>
 			</div>
 
-			<div v-else class="flex flex-col gap-2">
+			<div v-else class="web-choices">
 				<label v-for="option in options" :key="option.key" class="web-option">
 					<input
 						type="radio"

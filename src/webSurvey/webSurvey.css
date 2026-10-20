@@ -176,6 +176,15 @@ legend.web-question__title {
 	}
 }
 
+/* choice/yes_no: Optionen so breit wie die längste Option der Frage (nicht über die ganze Breite) */
+.web-choices {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	width: fit-content;
+	max-width: 100%;
+}
+
 /* Skala: bricht bei schmalen Ansichten (320 px, 400 % Zoom) in mehrere Zeilen um */
 .web-scale {
 	display: flex;
@@ -189,6 +198,24 @@ legend.web-question__title {
 	justify-content: center;
 	gap: 0.25rem;
 	padding: 0.5rem 0.25rem;
+}
+
+/* NPS (11 Werte) bleibt in einer Zeile, auch bei 320 px: kompaktere Felder, gleich breite Spalten */
+.web-scale--single-row {
+	flex-wrap: nowrap;
+	gap: 0.125rem;
+}
+
+.web-scale--single-row .web-option--scale {
+	flex: 1 1 0;
+	min-width: 0;
+	padding-inline: 0;
+	border-width: 1px;
+}
+
+.web-scale--single-row .web-option--scale input {
+	width: 1rem;
+	height: 1rem;
 }
 
 .web-scale__labels {
