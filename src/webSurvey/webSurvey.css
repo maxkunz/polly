@@ -2,32 +2,92 @@
  * Styles der öffentlichen Umfrageseite. Tailwind scannt nur src/webSurvey/, damit das Stylesheet
  * nicht die Klassen der Genesys-App mitschleppt. Farben mit Kontrast >= 4.5:1 (Text) bzw. >= 3:1
  * (Rahmen, Fokus) auf Weiß; Primärfarbe wie appTheme (primary.500). Keine Inline-Styles (CSP).
+ *
+ * Web-Designs (src/domain/webTheme/webTheme.ts): Alle Farben und Schriftwerte laufen über --ws-*.
+ * Die Defaults hier entsprechen DEFAULT_WEB_THEME_TOKENS; ein Design überschreibt sie per
+ * style.setProperty am Root (applyTheme.ts, CSSOM ist unter der CSP erlaubt). Schriftgrößen stehen
+ * nur in den Rollenklassen (body, .web-heading, .web-subheading, .web-question__title,
+ * .web-question__description, .web-option/.web-textarea, .web-scale__labels, .web-hint,
+ * .web-question__error, .web-button), nirgends sonst.
  */
 @import "tailwindcss" source(none);
 @source "./";
 
 :root {
+	--ws-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+	--ws-heading-size: 1.75rem;
+	--ws-heading-weight: 700;
+	--ws-heading-line-height: 1.25;
+	--ws-subheading-size: 1.125rem;
+	--ws-subheading-weight: 600;
+	--ws-subheading-line-height: 1.56;
+	--ws-body-size: 1rem;
+	--ws-body-weight: 400;
+	--ws-body-line-height: 1.5;
+	--ws-question-title-size: 1.0625rem;
+	--ws-question-title-weight: 600;
+	--ws-question-title-line-height: 1.5;
+	--ws-description-size: 1rem;
+	--ws-description-weight: 400;
+	--ws-description-line-height: 1.5;
+	--ws-option-size: 1rem;
+	--ws-option-weight: 400;
+	--ws-option-line-height: 1.5;
+	--ws-scale-label-size: 0.875rem;
+	--ws-scale-label-weight: 400;
+	--ws-scale-label-line-height: 1.5;
+	--ws-hint-size: 0.875rem;
+	--ws-hint-weight: 400;
+	--ws-hint-line-height: 1.43;
+	--ws-error-size: 1rem;
+	--ws-error-weight: 600;
+	--ws-error-line-height: 1.5;
+	--ws-button-size: 1rem;
+	--ws-button-weight: 600;
+	--ws-button-line-height: 1.5;
+
 	--ws-primary: #14387f;
-	--ws-primary-dark: #0f2c63;
-	--ws-primary-light: #e8eef8;
-	--ws-primary-accent: #9bb2e0;
+	--ws-on-primary: #ffffff;
 	--ws-text: #0f172a;
+	--ws-heading-color: #0f172a;
 	--ws-text-muted: #334155;
 	--ws-border: #64748b;
-	--ws-border-light: #cbd5e1;
 	--ws-error: #b91c1c;
 	--ws-background: #f8fafc;
 	--ws-surface: #ffffff;
+	--ws-page-background: #f8fafc;
+
+	/* Abgeleitete Töne: feste Werte des Polly-Designs, mit color-mix() aus dem Design berechnet (unten) */
+	--ws-primary-dark: #0f2c63;
+	--ws-primary-light: #e8eef8;
+	--ws-primary-accent: #9bb2e0;
+	--ws-border-light: #cbd5e1;
+}
+
+/*
+ * Custom Properties werden erst bei der Verwendung geprüft; ein nicht unterstütztes color-mix() ergäbe
+ * dort einen ungültigen Wert. Deshalb nur innerhalb von @supports, sonst bleiben die festen Werte.
+ */
+@supports (color: color-mix(in srgb, red, blue)) {
+	:root {
+		--ws-primary-dark: color-mix(in srgb, var(--ws-primary) 78%, #000000);
+		--ws-primary-light: color-mix(in srgb, var(--ws-primary) 10%, var(--ws-surface));
+		--ws-primary-accent: color-mix(in srgb, var(--ws-primary) 45%, var(--ws-surface));
+		--ws-border-light: color-mix(in srgb, var(--ws-border) 35%, var(--ws-surface));
+	}
 }
 
 @layer base {
+	/* Rolle body: Grundschrift, Begrüßung, Verabschiedung, Meldungstexte */
 	body {
 		margin: 0;
-		background: var(--ws-background);
+		background: var(--ws-page-background);
 		color: var(--ws-text);
-		font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-		font-size: 1rem;
-		line-height: 1.5;
+		font-family: var(--ws-font-family);
+		font-size: var(--ws-body-size);
+		font-weight: var(--ws-body-weight);
+		line-height: var(--ws-body-line-height);
 		overflow-wrap: anywhere;
 	}
 
@@ -52,9 +112,36 @@
 }
 
 .web-heading {
-	font-size: 1.75rem;
-	font-weight: 700;
-	line-height: 1.25;
+	color: var(--ws-heading-color);
+	font-size: var(--ws-heading-size);
+	font-weight: var(--ws-heading-weight);
+	line-height: var(--ws-heading-line-height);
+}
+
+.web-subheading {
+	color: var(--ws-heading-color);
+	font-size: var(--ws-subheading-size);
+	font-weight: var(--ws-subheading-weight);
+	line-height: var(--ws-subheading-line-height);
+}
+
+/* Texte der Rolle body mit eigener Klasse (Hervorhebung in der Vorschau) */
+.web-intro {
+	font-size: var(--ws-body-size);
+	font-weight: var(--ws-body-weight);
+	line-height: var(--ws-body-line-height);
+}
+
+/* Ladezustand neutral (nur Text): Das Design ist dann noch nicht bekannt */
+.web-loading {
+	color: var(--ws-text-muted);
+}
+
+.web-hint {
+	color: var(--ws-text-muted);
+	font-size: var(--ws-hint-size);
+	font-weight: var(--ws-hint-weight);
+	line-height: var(--ws-hint-line-height);
 }
 
 /* Programmatischer Fokus (nach dem Absenden, Fehlerseite) braucht an der Überschrift keinen Rahmen */
@@ -109,8 +196,9 @@
 
 .web-question__title {
 	display: block;
-	font-size: 1.0625rem;
-	font-weight: 600;
+	font-size: var(--ws-question-title-size);
+	font-weight: var(--ws-question-title-weight);
+	line-height: var(--ws-question-title-line-height);
 }
 
 legend.web-question__title {
@@ -120,12 +208,17 @@ legend.web-question__title {
 
 .web-question__description {
 	color: var(--ws-text-muted);
+	font-size: var(--ws-description-size);
+	font-weight: var(--ws-description-weight);
+	line-height: var(--ws-description-line-height);
 	white-space: pre-line;
 }
 
 .web-question__error {
 	color: var(--ws-error);
-	font-weight: 600;
+	font-size: var(--ws-error-size);
+	font-weight: var(--ws-error-weight);
+	line-height: var(--ws-error-line-height);
 }
 
 .web-required {
@@ -142,6 +235,9 @@ legend.web-question__title {
 	border: 2px solid var(--ws-border);
 	border-radius: 0.5rem;
 	background: var(--ws-surface);
+	font-size: var(--ws-option-size);
+	font-weight: var(--ws-option-weight);
+	line-height: var(--ws-option-line-height);
 	cursor: pointer;
 }
 
@@ -204,6 +300,16 @@ legend.web-question__title {
 .web-scale--single-row {
 	flex-wrap: nowrap;
 	gap: 0.125rem;
+	container-type: inline-size;
+}
+
+/*
+ * Große Optionsschriften dürfen die NPS-Zeile nicht sprengen: Die Schrift der Werte ist durch die Breite
+ * der Zeile begrenzt (cqi). Bei 320 px Seitenbreite ist die Zeile rund 234 px breit, 8cqi - 2px ≈ 16.7 px;
+ * die Default-Größe 16 px bleibt also unverändert, „10“ passt noch in eine der 11 Spalten.
+ */
+.web-scale--single-row .web-option--scale {
+	font-size: min(var(--ws-option-size), calc(8cqi - 2px));
 }
 
 .web-scale--single-row .web-option--scale {
@@ -222,8 +328,10 @@ legend.web-question__title {
 	display: flex;
 	justify-content: space-between;
 	gap: 1rem;
-	font-size: 0.875rem;
 	color: var(--ws-text-muted);
+	font-size: var(--ws-scale-label-size);
+	font-weight: var(--ws-scale-label-weight);
+	line-height: var(--ws-scale-label-line-height);
 }
 
 .web-textarea {
@@ -233,7 +341,11 @@ legend.web-question__title {
 	border: 2px solid var(--ws-border);
 	border-radius: 0.5rem;
 	background: var(--ws-surface);
-	font: inherit;
+	color: var(--ws-text);
+	font-family: inherit;
+	font-size: var(--ws-option-size);
+	font-weight: var(--ws-option-weight);
+	line-height: var(--ws-option-line-height);
 	resize: vertical;
 }
 
@@ -247,8 +359,11 @@ legend.web-question__title {
 	border: 2px solid var(--ws-primary);
 	border-radius: 0.5rem;
 	background: var(--ws-primary);
-	color: #ffffff;
-	font-weight: 600;
+	color: var(--ws-on-primary);
+	font-family: inherit;
+	font-size: var(--ws-button-size);
+	font-weight: var(--ws-button-weight);
+	line-height: var(--ws-button-line-height);
 	cursor: pointer;
 }
 
@@ -301,4 +416,23 @@ legend.web-question__title {
 	border: 2px solid var(--ws-primary);
 	border-left-width: 6px;
 	background: var(--ws-primary-light);
+}
+
+/*
+ * Vorschau in der App (survey.html?preview=1): Die App hebt die Elemente einer Textrolle hervor,
+ * während die zugehörige Zeile im Editor aktiv ist (Attribut am Root, gesetzt von previewMode.ts).
+ */
+[data-ws-highlight="heading"] .web-heading,
+[data-ws-highlight="subheading"] .web-subheading,
+[data-ws-highlight="body"] .web-intro,
+[data-ws-highlight="questionTitle"] .web-question__title,
+[data-ws-highlight="description"] .web-question__description,
+[data-ws-highlight="option"] .web-option,
+[data-ws-highlight="option"] .web-textarea,
+[data-ws-highlight="scaleLabel"] .web-scale__labels,
+[data-ws-highlight="hint"] .web-hint,
+[data-ws-highlight="error"] .web-question__error,
+[data-ws-highlight="button"] .web-button {
+	outline: 3px dashed #d97706;
+	outline-offset: 2px;
 }

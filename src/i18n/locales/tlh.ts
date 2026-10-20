@@ -127,6 +127,14 @@ export const tlh: MessageSchema = {
 			baseUrl: "Web QIn ra'ghom URL (Web)",
 			baseUrlHint: "ghItlh. https URL, {placeholder} 'ej ?token=…. URL vItlhutlh: Polly QIn ra'ghom.",
 			language: "Web QIn Hol",
+			webTheme: "Web QIn HablI'",
+			webThemeHint: "ngutlh, tIn, rItlh. SeHmey → Web HablI'mey. Prod vIngeHDI' Qap.",
+			webThemeDefault: "motlh HablI' (Polly)",
+			webThemeDefaultNamed: "motlh HablI' ({name})",
+			webThemeMissing: "HablI' Qaw'lu'. motlh HablI' lo'.",
+			webThemeMissingOption: "HablI' Qaw'lu'bogh",
+			webThemeLoadingOption: "HablI' wIvlu'bogh (lI'lu' …)",
+			webThemeUnavailableOption: "HablI' wIvlu'bogh (tetlh tu'lu'be')",
 			placeholders: {
 				title: "mu'mey: ghotpu' belmoH",
 				description: "yu'ghItlh Del qoD...",
@@ -346,6 +354,7 @@ export const tlh: MessageSchema = {
 		baseUrlInvalid: "URL https vaj. {placeholder}.",
 		baseUrlTokenCount: "{placeholder} wa'logh neH.",
 		languageInvalid: "Hol Dayaj.",
+		webThemeInvalid: "HablI' lI' yIwIv.",
 		scaleLabelTooLong: "„{field}“ tIq law'qu' ({max} ngutlh law')."
 	},
 
@@ -510,6 +519,116 @@ export const tlh: MessageSchema = {
 		initErrorFallback: "taghmoHlu'DI' luj.",
 		sidebarCollapse: "retlh nav yISo'",
 		sidebarExpand: "retlh nav yI'ang"
+	},
+
+	webThemes: {
+		title: "Web HablI'mey",
+		intro: "QIn ra'ghom HablI'mey (ngutlh, tIn, rItlh). Hoch QIn HablI' wIv. wIvbe'chugh motlh HablI' lo'. 30 lup Qap.",
+		list: {
+			loading: "HablI'mey lI'lu' …",
+			empty: "HablI' tu'lu'be'. Polly HablI' lo'.",
+			default: "motlh",
+			edit: "choH",
+			view: "legh",
+			duplicate: "cha'logh",
+			delete: "Qaw'",
+			create: "HablI' chu'",
+			newName: "HablI' chu'",
+			copyName: "{name} (cha'logh)",
+			updated: "choHlu' {date}",
+			updatedBy: "{user} choH {date}",
+			limit: "{max} HablI'mey neH."
+		},
+		editor: {
+			name: "pong",
+			isDefault: "motlh HablI'",
+			font: "ngutlh",
+			fontHint: "pat ngutlh neH.",
+			textStyles: "ngutlh mIw",
+			textStylesHint: "pixel tIn.",
+			role: "ngutlh Segh",
+			size: "tIn",
+			weight: "ngI'",
+			lineHeight: "tlhegh 'aD",
+			reset: "motlh",
+			resetAll: "Hoch motlh",
+			resetRole: "{role} motlh",
+			resetColor: "{color} motlh",
+			sizeOf: "{role} tIn, {min} {max}",
+			weightOf: "{role} ngI'",
+			lineHeightOf: "{role} tlhegh 'aD",
+			colors: "rItlh",
+			transparentBackground: "Hegh botlh leghlaHbe'",
+			transparentHint: "iframe: botlh leghlaHbe'.",
+			preview: "legh",
+			previewHint: "QIn ghantoH. ngutlh Segh DawoHlu'.",
+			previewTitle: "QIn ra'ghom legh",
+			save: "choq",
+			cancel: "mev"
+		},
+		roles: {
+			heading: "nIqHom",
+			subheading: "nIqHom mach",
+			body: "ghItlh",
+			questionTitle: "ghel per",
+			description: "Delmey",
+			option: "jang",
+			scaleLabel: "juv per",
+			hint: "ghuH",
+			error: "Qagh",
+			button: "leQ"
+		},
+		weights: {
+			w400: "motlh (400)",
+			w500: "ngI' (500)",
+			w600: "ngI'qu' (600)",
+			w700: "ngI'qu'qu' (700)"
+		},
+		fonts: {
+			system: "pat ngutlh",
+			sans: "DuH Hutlh",
+			serif: "DuH ghaj",
+			humanist: "ghot ngutlh",
+			rounded: "ngoS"
+		},
+		colors: {
+			background: "botlh",
+			surface: "Hal",
+			text: "ghItlh",
+			heading: "nIqHom",
+			textMuted: "ghItlh QIb",
+			primary: "rItlh Daq",
+			onPrimary: "rItlh Daq ghItlh",
+			border: "veH",
+			error: "Qagh"
+		},
+		contrast: {
+			warning: "{background} rItlh: {ratio}:1, {minimum}:1 (WCAG AA).",
+			summary: "rItlh ghuH: {count}. choqlaH, WCAG 2.2 AA lI'be'."
+		},
+		delete: {
+			header: "HablI' Qaw'",
+			message: "HablI' „{name}“ Qaw'?",
+			usedBy: "QIn lo': {surveys}.",
+			unused: "QIn lo'be'.",
+			usageUnknown: "lo' Sovbe'.",
+			accept: "Qaw'",
+			reject: "mev"
+		},
+		toast: {
+			saved: "HablI' „{name}“ choqlu'",
+			saveFailed: "HablI' choqlaHbe'",
+			deleted: "HablI' „{name}“ Qaw'lu'",
+			deleteFailed: "HablI' Qaw'laHbe'"
+		},
+		errors: {
+			missingToken: "'el'be'. ghun yIlI'.",
+			missingRole: "Hu'tegh – deploy DIch Hutlh.",
+			limitReached: "HablI'mey law' tlhoy.",
+			conflict: "latlh ghot HablI' choH pagh Qaw'. tetlh lI'qa'lu'. choqqa'chugh, chu' Dach.",
+			throttled: "Qu' law'. yInIDqa'.",
+			generic: "HablI' Qagh"
+		}
 	},
 
 	settings: {

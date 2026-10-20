@@ -105,6 +105,11 @@ export interface FlowSurvey {
 	closing_prompt: string;
 	/** Sprache der Web-Umfrageseite; nur gesetzt, wenn der Draft sie enthält. */
 	language?: SurveyLanguage;
+	/**
+	 * Web-Design der Umfrageseite (ID aus `WebSurveyThemesTable`); nur gesetzt, wenn der Draft eines wählt.
+	 * Architect ignoriert das Feld, die Lambda `web_survey` wählt damit das Design und gibt es nicht weiter.
+	 */
+	web_theme_id?: string;
 	created_at?: string;
 	updated_at?: string;
 	start_question_id: string | null;

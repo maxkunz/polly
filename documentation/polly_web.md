@@ -14,12 +14,14 @@ Zielniveau der Umfrageseite: **WCAG 2.2 AA**.
 6. **Angezeigte Texte:** Titel, Begrüßung, Fragetitel, Beschreibung (Hilfetext), Optionen, Min/Max-Labels und nach dem Absenden die Verabschiedung. Reprompt und Synonyme werden im Web nicht angezeigt.
 7. **Sprache:** Das Draft-Feld `language` (`de`/`en`/`fr`, Default `de`) steuert die festen UI-Texte und `<html lang>`. Fehlerseiten, die vor dem Laden der Umfrage erscheinen, nutzen die Browsersprache. **Fehlt `language` im Flow-JSON** (ältere Prod-Stände), gilt auf der Seite und im Backend ausdrücklich `de`.
 8. **Reporting:** Web-Antworten bekommen `channel: "web"` und `tokenId`. Die CSV hat eine neue letzte Spalte `Channel` (Antworten ohne Feld: `flow`).
+9. **Designs:** Schrift, Textstile pro Textart und Farben der Umfrageseite sind pro Mandant als benannte Designs in DynamoDB gespeichert und werden in der App gepflegt (Einstellungen → Web-Designs, mit Live-Vorschau), ohne Deploy. Ein Design ist Standard; jede Umfrage kann im Editor ein Design wählen (`web_theme_id`). Details: Abschnitt „Designs“.
 
 ## Änderungen im Editor
 
 * **Labels bei rating und nps:** Pro Frage gibt es ein optionales Label für den minimalen und den maximalen Wert (`min_label`, `max_label` in `options`, höchstens 100 Zeichen). Sie werden nicht vorgelesen und sind nur im Web (und in der Skalenvorschau des Editors) sichtbar.
 * **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}`.
 * **Sprache der Umfrage** (`language`): siehe oben. Neue Umfragen starten mit `de`.
+* **Design der Umfrage** (`web_theme_id`, optional): Auswahl „Standard des Mandanten“ (Feld fehlt) oder eines der Designs aus `GET /web-themes`. Ein inzwischen gelöschtes Design bleibt mit Hinweis sichtbar; die Seite zeigt dann das Standard-Design.
 
 Format der Felder: [survey_definition.md](survey_definition.md). Übernahme ins Flow-JSON: [survey_translator_for_flow.md](survey_translator_for_flow.md).
 
@@ -129,6 +131,7 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 * Response `200`:
   * `{ "status": "ok", "survey": { … } }` – bereinigtes Flow-JSON (Whitelist, Typ `WebSurvey` in `src/domain/survey/webSurveyTypes.ts`): ohne `name`, `reprompt`, `synonyms` und Zeitstempel; `language` immer gesetzt (Default `de`), `version` immer eine Zahl (ältere Stände ohne Version: `0`).
   * `{ "status": "invalid" | "expired" | "used" | "unavailable" }`
+  * Zusätzlich optional `"theme": { … }` (bereinigte Tokens, siehe „Designs“): bei `ok` und `used` das Design der Umfrage (bei `used` aus dem gecachten Prod-Stand; ist er nicht ladbar, das Standard-Design), bei `unavailable` das Standard-Design des Mandanten. So erscheinen auch diese Meldungen im iframe im CI. `invalid`/`expired` haben kein Design. Fehlt ein passendes Design, fehlt das Feld.
 * Weitere Antworten: `429 { "status": "throttled" }` (Drosselung der API oder von Genesys), `502 { "status": "error" }` (Genesys nicht erreichbar).
 * Der Prod-Stand wird pro Lambda-Container **30 Sekunden** zwischengespeichert, damit große Kampagnen das Genesys-Rate-Limit des Mandanten nicht ausschöpfen. Ein neuer Prod-Deploy ist deshalb beim Laden der Seite spätestens nach 30 s sichtbar; beim Absenden wird immer frisch gelesen.
 
@@ -136,7 +139,7 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 
 * Request: `{ "token": "<jwt>", "surveyVersion": <int>, "answers": { "<questionId>": <wert> }, "submissionId": "<uuid>" }`
 * `submissionId` (optional, UUID): erzeugt die Seite einmal pro Seitenaufruf und schickt sie bei jeder Wiederholung mit. Sie wird zur `responseId`. Fehlt sie, vergibt die Lambda eine zufällige UUID. **Idempotenz:** Ist unter dieser ID schon eine Antwort mit derselben Einladung gespeichert (bei Einmal-Token: Der verbrauchte Eintrag in `InvitationTokens` verweist auf sie), antwortet die Lambda mit `200 ok`, ohne erneut zu speichern. Eine Absendung, deren Antwort verloren ging (Zeitüberschreitung, Netzabbruch), erzeugt beim erneuten Versuch also weder `409 used` noch eine doppelte Antwort. Geänderte Antworten einer solchen Wiederholung werden nicht übernommen: Gespeichert bleibt die erste Absendung.
-* Prüft den Token erneut und lädt Prod (ohne Cache). Weicht `surveyVersion` von `Prod.version` ab, antwortet es mit `409 { "status": "survey_changed", "survey": { … } }` und liefert die neue Fassung gleich mit; nichts wird gespeichert, der Token bleibt unverbraucht.
+* Prüft den Token erneut und lädt Prod (ohne Cache). Weicht `surveyVersion` von `Prod.version` ab, antwortet es mit `409 { "status": "survey_changed", "survey": { … }, "theme": { … } }` und liefert die neue Fassung samt Design (optional) gleich mit; nichts wird gespeichert, der Token bleibt unverbraucht.
 * Die Antworten werden gegen das Flow-JSON geprüft (`flowNavigation`): erreichbare Fragen, Pflichtangaben, Wertebereiche (rating min..max, nps 0..10, choice = Label, yes_no = bool, comment höchstens 2000 Zeichen). Bei Verstoß `400`, nichts wird gespeichert.
 * Gespeichert werden nur beantwortete, gültige Antworten auf erreichbare Fragen (`pruneFlowAnswers`), im Format der Architect-Sitzungen: Schlüssel ist der technische Fragename, Wert `{ type, value, answeredAt }`.
 * Speichern in einer DynamoDB-Transaktion: bei Einmal-Token ein Put in `InvitationTokens` mit `attribute_not_exists`, dazu der Put der Antwort mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId` = `submissionId` bzw. zufällige UUID. Schlägt eine Bedingung fehl und ist es nicht die eigene, schon gespeicherte Absendung, antwortet es mit `409 used` – auch bei gleichzeitigem Absenden kann dieselbe Einladung nicht doppelt genutzt werden. Bei mehrfach nutzbaren Links bedeutet das eine schon fremd belegte `submissionId` (`400 invalid_request`). Danach werden die Aggregate aktualisiert (ein Fehler dort macht die gespeicherte Antwort nicht ungültig).
@@ -154,6 +157,27 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 | `413` | `payload_too_large` | Body über 64 KB |
 | `429` | `throttled` | Drosselung durch Genesys; drosselt API Gateway selbst, kommt `429` mit `{ "message": "Too Many Requests" }` ohne `status` |
 | `502` | `error` | Genesys nicht erreichbar |
+
+**`GET /api/web-themes`**, **`PUT /api/web-themes/{id}`**, **`DELETE /api/web-themes/{id}`** (Genesys-Bearer, Lambda `web_themes`)
+
+* `GET`: `{ "themes": [{ "id", "name", "isDefault", "tokens", "updatedAt", "updatedBy"? }] }`, nach Name sortiert. Für jeden angemeldeten App-Nutzer (Auswahl im Umfrage-Editor).
+* `PUT`: Body `{ "name": "1–60 Zeichen", "isDefault": true|false, "tokens": { … }, "expectedUpdatedAt": "<ISO>"|null }` (höchstens 8 KB), legt an oder ändert. **Optimistisches Sperren:** `expectedUpdatedAt` ist das `updatedAt` des Stands, den der Editor geladen hat; `null` bzw. fehlend bedeutet „neues Design“. Weicht der gespeicherte Stand ab (zwischenzeitlich geändert oder gelöscht, bzw. ID schon vergeben), kommt `409 conflict` und nichts wird gespeichert. Die App lädt dann die Liste neu, behält die Eingaben, und erst ein erneutes Speichern überschreibt den neuen Stand (bzw. legt ein gelöschtes Design neu an). `{id}` ist eine UUID (von der App erzeugt). Die Tokens laufen durch `sanitizeWebThemeTokens`. Mit `isDefault: true` verliert das bisherige Standard-Design die Markierung in derselben Transaktion. Antwort `200 { "theme": { … } }`.
+* `DELETE`: `200 { "ok": true }`. Umfragen mit diesem Design fallen auf das Standard-Design zurück.
+* Schreiben erfordert serverseitig `polly_deploy` (gleiche Prüfung wie `POST /invitations`, `shared/caller_roles.ts`). `updatedBy` ist der Name des Genesys-Users.
+* Fehler (Body `{ "code", "message" }`): `400 invalid_request` (ID keine UUID, Name, Tokens ungültig), `401 unauthorized`, `403 forbidden_m2m` (Schreiben mit Cognito-M2M-Token), `403 missing_role`, `404 not_found` (Löschen eines unbekannten Designs), `409 limit_reached` (mehr als 50 Designs), `409 conflict` (Design zwischenzeitlich geändert oder gelöscht, oder bisheriges Standard-Design gleichzeitig gelöscht), `413 payload_too_large`, `429`/`502 genesys_error`, `502 no_credentials`.
+
+### Tabelle `WebSurveyThemesTable`
+
+| Attribut | Bedeutung |
+| :--- | :--- |
+| `tenantId` (PK) | Mandant |
+| `themeId` (SK) | UUID des Designs |
+| `name` | Anzeigename (1–60 Zeichen) |
+| `isDefault` | Standard-Design des Mandanten (höchstens eines) |
+| `tokens` | Map mit den Tokens (siehe „Designs“) |
+| `updatedAt`, `updatedBy` | Letzte Änderung (ISO) und Name des Bearbeiters |
+
+`PAY_PER_REQUEST`, `RETAIN`. Höchstens 50 Designs pro Mandant (prüft die Lambda). `web_survey` liest, `web_themes` liest und schreibt.
 
 ### Tabelle `InvitationTokens`
 
@@ -202,7 +226,7 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 * Meldungen werden per `role="alert"` angesagt.
 * Folgefragen erscheinen direkt unter ihrer Elternfrage (`aria-live="polite"`). Fällt eine Folgefrage wieder weg, wird ihre Antwort verworfen.
 * Nach dem Absenden zeigt die Seite die Verabschiedung (leer: „Ihre Antworten wurden gespeichert.“), der Fokus wechselt auf diese Meldung.
-* Im iframe meldet die Seite ihre Höhe per `postMessage({ type: "polly:height", height })` an die einbettende Seite (Ziel-Origin `*`, die Nachricht enthält nur die Höhe; siehe Snippet oben). Sie selbst verarbeitet keine eingehenden Nachrichten.
+* Im iframe meldet die Seite ihre Höhe per `postMessage({ type: "polly:height", height })` an die einbettende Seite (Ziel-Origin `*`, die Nachricht enthält nur die Höhe; siehe Snippet oben). Eingehende Nachrichten verarbeitet sie nur im Vorschaumodus (`?preview=1`, siehe „Designs“).
 * Angezeigt werden Titel, Begrüßung, Fragetitel, Beschreibung, Optionen und Min/Max-Labels. Die Umfrage-`description` (interne Beschreibung im Editor) wird nicht angezeigt.
 * Fehler beim Absenden (Drosselung nach dem automatischen Versuch, Netzwerk, `5xx`) erscheinen als Hinweis über dem Formular mit „Erneut versuchen“; beim Laden als eigene Seite mit demselben Button. Fehler beim Absenden, die die Einladung betreffen (`invalid`, `expired`, `used`, `unavailable`), ersetzen das Formular durch die jeweilige Meldung.
 * `400 invalid_answers` (sollte nach der Prüfung auf der Seite nicht vorkommen) wird wie ein Eingabefehler in der Fehlerübersicht angezeigt.
@@ -225,6 +249,7 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 * volle Tastaturbedienung, kein Zeitlimit
 * Umbruch bei 320 px Breite und 400 % Zoom
 * `prefers-reduced-motion` wird berücksichtigt
+* **Designs:** Die Zusicherung gilt für das eingebaute Polly-Design und für Designs **ohne Kontrastwarnung** im Editor. Kontraste unter 4.5:1 (Text) bzw. 3:1 (Rahmen, Fokus) lassen sich speichern; die Verantwortung liegt dann beim Mandanten. Schriftgrößen werden in `rem` gesetzt, Zoom und eine größere Grundschrift der Besucher wirken also weiter.
 
 ### Umsetzung
 
@@ -237,7 +262,10 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 | `src/webSurvey/services/webSurveyApi.ts` | `GET /web-survey`, `POST /web-survey/submit` über `API_PREFIX` |
 | `src/webSurvey/i18n/` | Eigene feste Texte in `de`/`en`/`fr` (Schema `de.ts`) und ein minimaler Übersetzer; bewusst nicht `src/i18n/` der App, damit das öffentliche Bundle klein bleibt |
 | `src/webSurvey/frameHeight.ts` | Höhenmeldung im iframe |
-| `src/webSurvey/webSurvey.css` | Styles (Tailwind nur für `src/webSurvey/`, Farben aus `appTheme`) |
+| `src/webSurvey/webSurvey.css` | Styles (Tailwind nur für `src/webSurvey/` und nur für Layout); alle Farben und Schriftwerte über `--ws-*`, eine Klasse pro Textrolle |
+| `src/webSurvey/applyTheme.ts` | Setzt die Tokens eines Designs als `--ws-*` am Root (`style.setProperty`) bzw. entfernt sie |
+| `src/webSurvey/previewMode.ts`, `previewSurvey.ts` | Vorschaumodus für den Design-Editor der App mit fester Beispielumfrage |
+| `src/domain/webTheme/webTheme.ts` | Tokens, Defaults, `sanitizeWebThemeTokens`, `toCssVariables`, Kontrastprüfung, Vorschau-Protokoll (aliasfrei, gemeinsam mit App und Lambdas; Test `test/webTheme.test.ts`) |
 | `src/domain/survey/webSurveyPage.ts` | Reine Logik: Token aus der URL, Browsersprache, Prüfung der API-Antworten, einmaliger 429-Wiederholungsversuch, Einrückung der Folgefragen, Skalenwerte (Test `test/webSurveyPage.test.ts`) |
 
 Die Navigation (`flowNavigation`) arbeitet direkt auf dem bereinigten Flow-JSON (`WebSurvey`): Sie braucht weder `name` noch `reprompt` oder `synonyms`.
@@ -254,6 +282,52 @@ Die Seite ist öffentlich; Zugang hat, wer einen gültigen Link besitzt. Maßnah
 * **Antworten der API werden geprüft**, bevor die Seite sie darstellt (`isWebSurvey`); eine unerwartete Antwort ergibt eine Fehlermeldung statt eines Absturzes. Skalen mit mehr als 101 Werten werden abgelehnt.
 * **Kleines Bundle:** Die Seite lädt nur Vue und ihre eigenen Module (kein Genesys-SDK, keine App-Texte, kein `eval`).
 * **Einbettung:** Die Seite darf in fremde Seiten eingebettet werden (gewollt, siehe iframe). Ein Angreifer, der sie einbettet, kann nur das tun, was der Linkinhaber ohnehin kann.
+* **Designs nur als Tokens:** Ein Design enthält nur Hex-Farben (`#rrggbb`), Zahlen in festen Grenzen und Enum-Schlüssel, nie CSS. `url()`, `@import` oder Selektoren sind damit ausgeschlossen. Dieselbe Whitelist-Prüfung läuft beim Speichern, beim Ausliefern und auf der Seite. Die Seite setzt die Werte über die CSSOM (`style.setProperty`); die CSP bleibt unverändert, Schriftdateien werden nicht geladen.
+* **Vorschaumodus** (`?preview=1`): ruft keine API auf und nimmt `postMessage` nur vom eigenen Origin und vom einbettenden Fenster an (`event.origin === location.origin`, `event.source === window.parent`); danach laufen die Tokens durch dieselbe Prüfung. Eine fremde Seite, die `survey.html?preview=1` einbettet, kann also kein Design einspielen.
+
+## Designs
+
+Kunden passen die Umfrageseite an ihre CI an: Schrift, Schriftgrößen getrennt pro Textart, Textfarben, Hintergrund und Akzentfarbe. Gepflegt wird in der App unter **Einstellungen → Web-Designs** (Liste, Standard-Markierung, Anlegen, Duplizieren, Löschen; Bearbeiten nur mit `polly_deploy`, ansehen darf jeder App-Nutzer). Es gibt keine Dateien und keinen Deploy.
+
+**Tokens** (`WebThemeTokens` in `src/domain/webTheme/webTheme.ts`, `schemaVersion: 1`):
+
+* `fontFamily`: `system` (Default), `sans`, `serif`, `humanist`, `rounded` – feste Schrift-Stacks des Systems, keine Webfonts.
+* `text`: pro Textrolle `size` (ganze px, Grenzen pro Rolle), `weight` (400/500/600/700), `lineHeight` (1.0–2.0, höchstens zwei Nachkommastellen).
+
+| Rolle | Elemente | Default | Grenzen (px) |
+| :--- | :--- | :--- | :--- |
+| `heading` | Umfragetitel, Überschrift der Status-/Fehlerseiten | 28 / 700 / 1.25 | 16–48 |
+| `subheading` | Überschrift der Fehlerübersicht | 18 / 600 / 1.56 | 14–36 |
+| `body` | Begrüßung, Verabschiedung, Meldungen, Grundschrift | 16 / 400 / 1.5 | 12–24 |
+| `questionTitle` | Fragetitel | 17 / 600 / 1.5 | 12–32 |
+| `description` | Beschreibung der Frage | 16 / 400 / 1.5 | 12–24 |
+| `option` | Antwortoptionen, Skalenwerte, Eingabe im Textfeld | 16 / 400 / 1.5 | 12–24 |
+| `scaleLabel` | Min-/Max-Labels der Skala | 14 / 400 / 1.5 | 10–20 |
+| `hint` | Zeichenzähler, Pflichtfeld-Hinweis | 14 / 400 / 1.43 | 10–20 |
+| `error` | Fehlertexte an Feldern | 16 / 600 / 1.5 | 12–24 |
+| `button` | Buttons | 16 / 600 / 1.5 | 12–24 |
+
+* `colors` (nur `#rrggbb`): `background` (#f8fafc), `surface` (#ffffff), `text` (#0f172a), `heading` (#0f172a), `textMuted` (#334155), `primary` (#14387f), `onPrimary` (#ffffff), `border` (#64748b), `error` (#b91c1c). Abgeleitete Töne (dunkler/heller Akzent, helle Rahmen) berechnet die CSS mit `color-mix()`; ältere Browser behalten die festen Polly-Töne.
+* `transparentBackground`: Seitenhintergrund transparent (für iframes), Karten behalten `surface`.
+
+Fehlende Rollen, Felder oder Farben werden mit den Defaults aufgefüllt (neue Rollen machen gespeicherte Designs nicht ungültig); unbekannte Felder werden verworfen, Werte außerhalb der Grenzen machen das Design ungültig.
+
+**Auf der Seite:** Die Tokens werden zu CSS-Variablen (`--ws-font-family`, `--ws-<rolle>-size/-weight/-line-height`, Farben, `--ws-page-background`). Größen als `rem` (px / 16). Jede Textrolle hat eine eigene Klasse, Schriftgrößen stehen nur dort. Die NPS-Zeile begrenzt die Schrift der Skalenwerte auf die Zeilenbreite (`min(var(--ws-option-size), 8cqi - 2px)`) und bleibt so auch bei großer Optionsschrift einzeilig. **Bewusste Einschränkung:** Diese Grenze gilt auch, wenn Besucher nur die Grundschrift des Browsers vergrößern (ohne Zoom); die NPS-Werte wachsen dann ab rund 17 px (bei 320 px Breite) nicht mehr mit. Browser-Zoom wirkt voll (WCAG 1.4.4 ist über Zoom erfüllt). Ein Umbruch der NPS-Zeile wäre die Alternative, widerspricht aber der Vorgabe „NPS immer einzeilig“. Ohne Design (oder bei ungültigem Design) gilt das eingebaute Polly-Design; ein ungültiges Design ist kein Fehler.
+
+**Auswahl (Fallback-Kette):** `web_theme_id` der Umfrage (aus dem Prod-Stand) → Standard-Design des Mandanten → eingebautes Polly-Design. Ein **Wechsel** des Designs wirkt wie jede Umfrageänderung erst nach dem Deploy nach Prod. **Inhaltliche Änderungen** an einem Design wirken ohne Deploy auf alle Umfragen, die es nutzen.
+
+**Cache:** `web_survey` lädt alle Designs des Mandanten mit einer Query (parallel zum Prod-Stand) und hält sie 30 Sekunden pro Lambda-Container. Fehler beim Laden der Designs sind nicht fatal, die Seite erscheint dann im Polly-Design.
+
+**Kontrast:** Der Editor prüft nach WCAG (relative Luminanz): 4.5:1 für `text`/`background`, `text`/`surface`, `heading`/`surface`, `textMuted`/`surface`, `primary`/`surface` (Links), `onPrimary`/`primary` (Button) und `error`/`surface`; 3:1 für `border`/`surface` und den Fokus (`primary`/`background`). Unterschreitungen erzeugen nur eine Warnung mit Verhältnis, gespeichert werden kann trotzdem (siehe Barrierefreiheit).
+
+**Vorschau-Protokoll:** Der Editor bettet `survey.html?preview=1&lang=<de|en|fr>` (gleicher Origin) als iframe ein. Die Seite zeigt eine feste Beispielumfrage (alle Fragetypen, eine Folgefrage, Min/Max-Labels, ein Pflichtfehler mit Fehlerübersicht, ein Hinweis), ruft keine API auf, Absenden ist ohne Wirkung. Nachrichten:
+
+| Richtung | Nachricht | Bedeutung |
+| :--- | :--- | :--- |
+| Seite → App | `{ type: "polly:preview-ready" }` | Seite nimmt Nachrichten an; die App schickt das Design |
+| App → Seite | `{ type: "polly:theme", tokens }` | Design anwenden |
+| App → Seite | `{ type: "polly:highlight", role }` | Elemente einer Textrolle markieren (`null` = keine), solange die Zeile im Editor aktiv ist |
+| Seite → App | `{ type: "polly:height", height }` | Höhe des Inhalts (wie bei der normalen Einbettung) |
 
 ## Hosting
 

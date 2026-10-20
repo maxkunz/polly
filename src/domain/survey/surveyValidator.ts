@@ -1,6 +1,7 @@
 import type { Survey, SurveyQuestion, RatingOptions, ChoiceOptions } from "./surveyTypes";
 import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
 import { SURVEY_LANGUAGES } from "./flowTypes";
+import { isWebThemeId } from "../webTheme/webTheme";
 import type { ConditionOperator } from "./flowTypes";
 import { surveyFieldIds, questionFieldIds } from "./surveyFieldIds";
 import { i18n, currentLocaleTag } from "@/i18n";
@@ -431,6 +432,14 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 			field: "survey.language",
 			message: t("validation.languageInvalid"),
 			fieldId: surveyFieldIds.language
+		});
+	}
+
+	if (survey.web_theme_id !== undefined && !isWebThemeId(survey.web_theme_id)) {
+		errors.push({
+			field: "survey.web_theme_id",
+			message: t("validation.webThemeInvalid"),
+			fieldId: surveyFieldIds.webTheme
 		});
 	}
 

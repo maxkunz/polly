@@ -126,6 +126,14 @@ export const en: MessageSchema = {
 			baseUrl: "Base URL for invitation links (web)",
 			baseUrlHint: "Optional. Absolute https URL, e.g. the page the survey is embedded in. Use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended. Without it, the link points to the Polly survey page.",
 			language: "Web survey language",
+			webTheme: "Web survey design",
+			webThemeHint: "Font, text sizes and colours of the survey page. Managed under Settings → Web designs. A change takes effect after deploying to Prod.",
+			webThemeDefault: "Tenant default (Polly design)",
+			webThemeDefaultNamed: "Tenant default ({name})",
+			webThemeMissing: "The selected design was deleted. The survey uses the default design until you choose another one.",
+			webThemeMissingOption: "Deleted design",
+			webThemeLoadingOption: "Selected design (loading …)",
+			webThemeUnavailableOption: "Selected design (list unavailable)",
 			placeholders: {
 				title: "e.g. Customer satisfaction",
 				description: "Internal description or context for the survey...",
@@ -345,6 +353,7 @@ export const en: MessageSchema = {
 		baseUrlInvalid: "The base URL must be a valid, absolute https URL, e.g. https://www.example.com/survey/{placeholder}.",
 		baseUrlTokenCount: "The base URL may contain the placeholder {placeholder} at most once.",
 		languageInvalid: "Please choose a valid language.",
+		webThemeInvalid: "Please choose a valid web design.",
 		scaleLabelTooLong: "“{field}” is too long (max. {max} characters)."
 	},
 
@@ -509,6 +518,116 @@ export const en: MessageSchema = {
 		initErrorFallback: "Initialization failed.",
 		sidebarCollapse: "Collapse sidebar",
 		sidebarExpand: "Expand sidebar"
+	},
+
+	webThemes: {
+		title: "Web designs",
+		intro: "Designs of the public survey page (font, text styles, colours). Each survey chooses its design in the editor; without a choice the default design applies. Changes to a design reach all surveys using it within 30 seconds.",
+		list: {
+			loading: "Loading designs …",
+			empty: "No designs yet. Without a design the survey page uses the Polly design.",
+			default: "Default",
+			edit: "Edit",
+			view: "View",
+			duplicate: "Duplicate",
+			delete: "Delete",
+			create: "New design",
+			newName: "New design",
+			copyName: "{name} (copy)",
+			updated: "Changed {date}",
+			updatedBy: "Changed {date} by {user}",
+			limit: "At most {max} designs per tenant."
+		},
+		editor: {
+			name: "Name",
+			isDefault: "Tenant default design",
+			font: "Font",
+			fontHint: "System fonts; no font files are loaded.",
+			textStyles: "Text styles",
+			textStylesHint: "Size in pixels at the browser's default setting. Zoom and a larger base font of visitors still apply.",
+			role: "Text type",
+			size: "Size",
+			weight: "Weight",
+			lineHeight: "Line height",
+			reset: "Reset to default",
+			resetAll: "Reset all",
+			resetRole: "Reset {role} to default",
+			resetColor: "Reset {color} to default",
+			sizeOf: "Size {role} in pixels, {min} to {max}",
+			weightOf: "Weight {role}",
+			lineHeightOf: "Line height {role}",
+			colors: "Colours",
+			transparentBackground: "Transparent background",
+			transparentHint: "For embedding in an iframe: the page background becomes transparent, cards keep their surface colour.",
+			preview: "Preview",
+			previewHint: "Sample survey with all question types. The text type you are editing is highlighted here.",
+			previewTitle: "Survey page preview",
+			save: "Save",
+			cancel: "Cancel"
+		},
+		roles: {
+			heading: "Heading",
+			subheading: "Subheading",
+			body: "Body text",
+			questionTitle: "Question title",
+			description: "Description",
+			option: "Answer options",
+			scaleLabel: "Scale labels",
+			hint: "Hints",
+			error: "Error texts",
+			button: "Button"
+		},
+		weights: {
+			w400: "Regular (400)",
+			w500: "Medium (500)",
+			w600: "Semibold (600)",
+			w700: "Bold (700)"
+		},
+		fonts: {
+			system: "System font",
+			sans: "Sans serif (Helvetica, Arial)",
+			serif: "Serif (Charter, Georgia)",
+			humanist: "Humanist (Seravek, Calibri)",
+			rounded: "Rounded"
+		},
+		colors: {
+			background: "Page background",
+			surface: "Surfaces (cards)",
+			text: "Text",
+			heading: "Headings",
+			textMuted: "Muted text",
+			primary: "Accent colour",
+			onPrimary: "Text on accent colour",
+			border: "Borders",
+			error: "Errors"
+		},
+		contrast: {
+			warning: "Contrast to {background}: {ratio}:1, at least {minimum}:1 (WCAG AA).",
+			summary: "Contrast warnings: {count}. You can save, but accessibility according to WCAG 2.2 AA is not assured with this design."
+		},
+		delete: {
+			header: "Delete design",
+			message: "Really delete design “{name}”?",
+			usedBy: "It is used by these surveys, which will then show the default design: {surveys}.",
+			unused: "No survey uses this design.",
+			usageUnknown: "Could not check whether surveys use the design; affected surveys will show the default design.",
+			accept: "Delete",
+			reject: "Cancel"
+		},
+		toast: {
+			saved: "Design “{name}” saved",
+			saveFailed: "Design could not be saved",
+			deleted: "Design “{name}” deleted",
+			deleteFailed: "Design could not be deleted"
+		},
+		errors: {
+			missingToken: "Not signed in. Please reload the app.",
+			missingRole: "No permission – deploy rights missing.",
+			limitReached: "The maximum number of designs has been reached.",
+			conflict: "Someone else changed or deleted the design in the meantime. The list has been reloaded and your input is kept. Saving again overwrites the current version.",
+			throttled: "The service is busy. Please try again shortly.",
+			generic: "Web design error"
+		}
 	},
 
 	settings: {

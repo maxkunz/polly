@@ -18,6 +18,7 @@
 * Für alle übrigen Texte gibt es keine eigene Längenbegrenzung, wohl aber für die Gesamtgröße: Das übersetzte Flow-JSON (siehe @survey_translator_for_flow.md) darf höchstens 32.000 Zeichen lang sein, da Architect Strings nur bis zu dieser Länge lesen kann. Gezählt wird das fertige Flow-JSON inklusive technischer Daten (IDs, Feldnamen, Bedingungen). Ein größerer Draft darf gespeichert werden, Deployen nach Stage/Prod ist dann aber gesperrt. Der Editor warnt ab 75 % des Limits.
 * Optionales Feld "base_url" (Web-Kanal, siehe @polly_web.md): Basis-URL für personalisierte Einladungslinks. Wenn gesetzt, muss es eine absolute "https://"-URL sein, die höchstens einen Platzhalter "{token}" enthält. Das Feld kommt nicht ins Flow-JSON.
 * Optionales Feld "language" (Web-Kanal): "de", "en" oder "fr" (Default "de"). Es steuert die festen Texte und das lang-Attribut der Web-Umfrageseite. Neue Umfragen starten mit "de".
+* Optionales Feld "web_theme_id" (Web-Kanal, siehe @polly_web.md, „Designs“): UUID eines Web-Designs des Mandanten. Fehlt das Feld, gilt das Standard-Design des Mandanten. Neue Umfragen haben es nicht, Klonen übernimmt es.
 * Bei den Fragetypen "rating" und "nps" können in "options" optional die Labels "min_label" (für den minimalen Wert) und "max_label" (für den maximalen Wert) angegeben werden, jeweils höchstens 100 Zeichen. Sie werden nur im Web angezeigt und nicht per TTS gesprochen (daher kein TTS-Limit). Bei "nps" gibt es sonst keine "options"; sie entstehen erst, wenn ein Label gesetzt wird.
 * Bei jedem Speichern des Drafts wird "updated_at" auf den aktuellen Zeitpunkt gesetzt und "version" um 1 erhöht (neue Umfragen starten bei version 0); "created_at" wird nur einmal bei der Erstellung gesetzt und danach nicht mehr verändert.
 
@@ -32,6 +33,7 @@
     "closing_message": "Vielen Dank für Ihr Feedback!",
     "base_url": "https://www.beispiel.de/umfrage/{token}",
     "language": "de",
+    "web_theme_id": "5f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f",
     "created_at": "2026-06-30T12:00:00Z",
     "updated_at": "2026-08-06T12:00:00Z",
     "version": 1,

@@ -14,8 +14,11 @@ import {
 	type WebSurveyBlockingStatus,
 	type WebSurveySubmitResult
 } from "@/domain/survey/webSurveyPage";
+import type { SurveyLanguage } from "@/domain/survey/flowTypes";
 import WebQuestion from "./components/WebQuestion.vue";
 import { loadWebSurvey, submitWebSurvey } from "./services/webSurveyApi";
+import { applyTheme } from "./applyTheme";
+import { previewAnswers, previewSurvey } from "./previewSurvey";
 import { setLanguage, t } from "./i18n";
 
 /**
@@ -23,7 +26,13 @@ import { setLanguage, t } from "./i18n";
  * Zustände: loading → invalid | expired | used | unavailable | form → (Absenden) → done | error.
  * `throttled`/`error` beim Laden zeigen „Erneut versuchen“; Fehler beim Absenden erscheinen als
  * Hinweis über dem Formular, die Antworten bleiben erhalten.
+ *
+ * Das Design des Mandanten (`theme` der Antwort) setzt `applyTheme` beim Laden und bei
+ * `survey_changed`. Mit `previewLanguage` (Design-Vorschau der App) zeigt die Seite stattdessen die
+ * Beispielumfrage samt Fehlern und Hinweis; Absenden ist dann ohne Wirkung.
  */
+
+const props = defineProps<{ previewLanguage?: SurveyLanguage | null }>();
 
 type StatusPhase = WebSurveyBlockingStatus | "throttled" | "error";
 type Phase = "loading" | "form" | "done" | StatusPhase;
@@ -138,6 +147,8 @@ async function load(moveFocus: boolean): Promise<void> {
 		phase.value = "invalid";
 	} else {
 		const result = await retryOnceWhenThrottled(() => loadWebSurvey(token), wait);
+		// Bei throttled/error bleibt das bisherige Design (Wiederholung über „Erneut versuchen“)
+		if (result.kind !== "throttled" && result.kind !== "error") applyTheme(result.theme);
 		if (result.kind === "ok") applySurvey(result.survey, {});
 		else phase.value = result.kind;
 	}
@@ -186,6 +197,7 @@ async function handleSubmitResult(result: WebSurveySubmitResult): Promise<void> 
 		case "survey_changed": {
 			// Neue Fassung übernehmen (fehlt sie in der Antwort, neu laden); passende Antworten bleiben
 			let next = result.survey;
+			let theme = result.theme;
 			if (!next) {
 				const reloaded = await retryOnceWhenThrottled(() => loadWebSurvey(token), wait);
 				if (reloaded.kind !== "ok") {
@@ -199,7 +211,11 @@ async function handleSubmitResult(result: WebSurveySubmitResult): Promise<void> 
 					return;
 				}
 				next = reloaded.survey;
+				theme = reloaded.theme;
 			}
+			// Die neue Fassung kann ein anderes Design gewählt haben. Fehlt das Design in der Antwort (z. B.
+			// Designs im Backend gerade nicht lesbar), bleibt das bisherige stehen statt auf Polly zurückzuspringen.
+			if (theme) applyTheme(theme);
 			applySurvey(next, answers.value);
 			showErrors.value = false;
 			notice.value = "surveyChanged";
@@ -226,6 +242,7 @@ async function submit(): Promise<void> {
 	// Ein offener Hinweis bleibt bis zum Ergebnis stehen, damit der Fokus auf „Erneut versuchen“ nicht verloren geht
 	serverErrors.value = [];
 	showErrors.value = true;
+	if (props.previewLanguage) return;
 	if (clientErrors.value.length > 0) {
 		notice.value = null;
 		await focusElement(() => errorSummary.value);
@@ -258,16 +275,22 @@ const noticeText = computed(() => {
 	return "";
 });
 
-void load(false);
+if (props.previewLanguage) {
+	applySurvey(previewSurvey(props.previewLanguage), previewAnswers(props.previewLanguage));
+	showErrors.value = true;
+	notice.value = "error";
+} else {
+	void load(false);
+}
 </script>
 
 <template>
 	<main class="web-page">
-		<p v-if="phase === 'loading'" role="status" class="text-slate-700">{{ t("loading") }}</p>
+		<p v-if="phase === 'loading'" role="status" class="web-loading">{{ t("loading") }}</p>
 
 		<section v-else-if="statusPhase" class="web-card flex flex-col gap-4" aria-labelledby="page-heading">
 			<h1 id="page-heading" ref="pageHeading" tabindex="-1" class="web-heading">{{ t(`status.${statusPhase}.title`) }}</h1>
-			<p role="alert">{{ t(`status.${statusPhase}.text`) }}</p>
+			<p role="alert" class="web-intro">{{ t(`status.${statusPhase}.text`) }}</p>
 			<div v-if="statusPhase === 'throttled' || statusPhase === 'error'">
 				<button type="button" class="web-button" @click="load(true)">{{ t("retry") }}</button>
 			</div>
@@ -275,18 +298,18 @@ void load(false);
 
 		<section v-else-if="phase === 'done'" class="web-card flex flex-col gap-4" aria-labelledby="page-heading">
 			<h1 id="page-heading" ref="pageHeading" tabindex="-1" class="web-heading">{{ t("done.title") }}</h1>
-			<p class="whitespace-pre-line">{{ survey?.closing_prompt.trim() || t("done.fallback") }}</p>
+			<p class="web-intro whitespace-pre-line">{{ survey?.closing_prompt.trim() || t("done.fallback") }}</p>
 		</section>
 
 		<template v-else-if="phase === 'form' && survey">
 			<header class="flex flex-col gap-3">
 				<h1 id="page-heading" ref="pageHeading" tabindex="-1" class="web-heading">{{ survey.title }}</h1>
-				<p v-if="survey.greeting_prompt.trim()" class="whitespace-pre-line">{{ survey.greeting_prompt }}</p>
-				<p class="text-sm text-slate-700">{{ t("requiredHint") }}</p>
+				<p v-if="survey.greeting_prompt.trim()" class="web-intro whitespace-pre-line">{{ survey.greeting_prompt }}</p>
+				<p class="web-hint">{{ t("requiredHint") }}</p>
 			</header>
 
 			<div v-if="notice" ref="noticeBox" tabindex="-1" role="alert" class="web-notice">
-				<p>{{ noticeText }}</p>
+				<p class="web-intro">{{ noticeText }}</p>
 				<div v-if="notice !== 'surveyChanged'">
 					<button type="button" class="web-button web-button--secondary" :aria-disabled="submitting ? 'true' : undefined" @click="submit">
 						{{ t("retry") }}
@@ -301,7 +324,7 @@ void load(false);
 				class="web-error-summary"
 				aria-labelledby="error-summary-heading"
 			>
-				<h2 id="error-summary-heading" class="text-lg font-semibold">{{ t("errorSummary.title", { count: summaryItems.length }) }}</h2>
+				<h2 id="error-summary-heading" class="web-subheading">{{ t("errorSummary.title", { count: summaryItems.length }) }}</h2>
 				<ul class="list-disc pl-5">
 					<li v-for="item in summaryItems" :key="item.key">
 						<a

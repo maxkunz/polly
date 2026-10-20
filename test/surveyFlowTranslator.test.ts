@@ -335,6 +335,13 @@ test("language steht auf oberster Ebene, base_url kommt nicht ins Flow-JSON", ()
 	assert.equal(JSON.stringify(flow).includes("example.com"), false);
 });
 
+test("web_theme_id steht nur im Flow-JSON, wenn es gesetzt ist", () => {
+	assert.equal("web_theme_id" in translateSurveyObject(buildExampleSurvey()), false);
+	const survey = buildExampleSurvey();
+	survey.web_theme_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+	assert.equal(translateSurveyObject(survey).web_theme_id, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+});
+
 test("rating: min_label/max_label landen in options, leere Labels entfallen", () => {
 	const survey = buildExampleSurvey();
 	(survey.questions[2].options as any).min_label = "schlecht";

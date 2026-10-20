@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "primevue/card";
 import InputText from "primevue/inputtext";
@@ -13,6 +13,7 @@ import { BASE_URL_TOKEN_PLACEHOLDER } from "@/constants/surveyConstants";
 import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";
 import FieldError from "@/components/ui/FieldError.vue";
+import { useWebThemes } from "@/composables/useWebThemes";
 
 const props = withDefaults(
 	defineProps<{
@@ -37,6 +38,7 @@ const surveyGreetingId = surveyFieldIds.greeting;
 const surveyClosingId = surveyFieldIds.closing;
 const surveyBaseUrlId = surveyFieldIds.baseUrl;
 const surveyLanguageId = surveyFieldIds.language;
+const surveyWebThemeId = surveyFieldIds.webTheme;
 const { t } = useI18n();
 const { hasError, errorId } = useFieldErrors();
 
@@ -48,6 +50,42 @@ const tokenPlaceholder = BASE_URL_TOKEN_PLACEHOLDER;
 
 // Umfragen ohne Feld (ältere Stände) gelten als Deutsch
 const languageOptions = computed(() => SURVEY_LANGUAGES.map(value => ({ value, label: t(`language.${value}`) })));
+
+// Web-Design: leer = Standard-Design des Mandanten (bzw. eingebautes Polly-Design)
+const { themes: webThemes, loaded: webThemesLoaded, loadError: webThemesError, defaultTheme, load: loadWebThemes } = useWebThemes();
+onMounted(() => void loadWebThemes());
+
+const TENANT_DEFAULT = "";
+const webThemeOptions = computed(() => [
+	{
+		value: TENANT_DEFAULT,
+		label: defaultTheme.value
+			? t("surveyEditor.meta.webThemeDefaultNamed", { name: defaultTheme.value.name })
+			: t("surveyEditor.meta.webThemeDefault")
+	},
+	...webThemes.value.map(theme => ({ value: theme.id, label: theme.name })),
+	// Gewähltes Design, das (noch) nicht in der Liste steht, bleibt sichtbar, damit die Auswahl nicht leer
+	// erscheint oder still wechselt: Liste lädt noch, ist nicht abrufbar oder das Design wurde gelöscht
+	...(unlistedThemeLabel.value ? [{ value: props.survey.web_theme_id!, label: unlistedThemeLabel.value }] : [])
+]);
+
+const unlistedThemeLabel = computed(() => {
+	const id = props.survey.web_theme_id;
+	if (!id || webThemes.value.some(theme => theme.id === id)) return "";
+	if (webThemeMissing.value) return t("surveyEditor.meta.webThemeMissingOption");
+	if (webThemesError.value) return t("surveyEditor.meta.webThemeUnavailableOption");
+	return t("surveyEditor.meta.webThemeLoadingOption");
+});
+
+/** Das gewählte Design gibt es nicht mehr: Die Umfrage fällt auf das Standard-Design zurück. */
+const webThemeMissing = computed(
+	() => !!props.survey.web_theme_id && webThemesLoaded.value && !webThemes.value.some(theme => theme.id === props.survey.web_theme_id)
+);
+
+function setWebTheme(value: string | null): void {
+	if (value) props.survey.web_theme_id = value;
+	else delete props.survey.web_theme_id;
+}
 </script>
 
 <template>
@@ -178,6 +216,33 @@ const languageOptions = computed(() => SURVEY_LANGUAGES.map(value => ({ value, l
 							@update:modelValue="(value: SurveyLanguage) => (survey.language = value)"
 						/>
 						<FieldError :fieldId="surveyLanguageId" />
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+					<div class="md:col-span-8">
+						<div :id="`${surveyWebThemeId}_label`" class="block text-sm font-medium mb-1">
+							{{ t("surveyEditor.meta.webTheme") }}
+						</div>
+						<Select
+							:inputId="surveyWebThemeId"
+							:ariaLabelledby="`${surveyWebThemeId}_label`"
+							:modelValue="survey.web_theme_id ?? TENANT_DEFAULT"
+							:options="webThemeOptions"
+							optionLabel="label"
+							optionValue="value"
+							class="w-full"
+							:disabled="disabled"
+							:invalid="hasError(surveyWebThemeId)"
+							:aria-describedby="[`${surveyWebThemeId}_hint`, errorId(surveyWebThemeId)].filter(Boolean).join(' ')"
+							@update:modelValue="setWebTheme"
+						/>
+						<p :id="`${surveyWebThemeId}_hint`" class="mt-1 text-xs text-[var(--p-text-muted-color)]">
+							<template v-if="webThemeMissing">{{ t("surveyEditor.meta.webThemeMissing") }}</template>
+							<template v-else-if="webThemesError">{{ webThemesError }}</template>
+							<template v-else>{{ t("surveyEditor.meta.webThemeHint") }}</template>
+						</p>
+						<FieldError :fieldId="surveyWebThemeId" />
 					</div>
 				</div>
 			</form>

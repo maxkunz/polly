@@ -20,6 +20,7 @@ import {
 	unreachableAnswerIds
 } from "../src/domain/survey/webSurveyPage";
 import { toWebSurvey } from "../amplify/functions/shared/web_survey_format";
+import { DEFAULT_WEB_THEME_TOKENS } from "../src/domain/webTheme/webTheme";
 
 let passed = 0;
 const pending: Promise<void>[] = [];
@@ -188,6 +189,30 @@ test("Absenden: Status der Lambda", () => {
 	assert.deepEqual(classifySubmitResponse(413, { status: "payload_too_large" }), { kind: "error" });
 	assert.deepEqual(classifySubmitResponse(502, { status: "error" }), { kind: "error" });
 	assert.deepEqual(classifySubmitResponse(200, { status: "used" }), { kind: "used" });
+});
+
+test("Design: gültiges übernehmen, ungültiges und fehlendes ignorieren", () => {
+	const theme = { fontFamily: "serif", colors: { primary: "#AA0000" } };
+	const expected = {
+		...DEFAULT_WEB_THEME_TOKENS,
+		fontFamily: "serif",
+		colors: { ...DEFAULT_WEB_THEME_TOKENS.colors, primary: "#aa0000" }
+	};
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme }), { kind: "ok", survey: SURVEY, theme: expected });
+	assert.deepEqual(classifyLoadResponse(404, { status: "unavailable", theme }), { kind: "unavailable", theme: expected });
+	assert.deepEqual(classifySubmitResponse(409, { status: "used", theme }), { kind: "used", theme: expected });
+	assert.deepEqual(
+		classifySubmitResponse(409, { status: "survey_changed", survey: SURVEY, theme }),
+		{ kind: "survey_changed", survey: SURVEY, theme: expected }
+	);
+	// Ungültiges Design ist kein Fehler: Die Umfrage erscheint im eingebauten Design
+	const invalid = { colors: { text: "url(https://evil.example)" } };
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme: invalid }), { kind: "ok", survey: SURVEY });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme: null }), { kind: "ok", survey: SURVEY });
+	assert.deepEqual(classifySubmitResponse(409, { status: "survey_changed", survey: SURVEY, theme: "x" }), { kind: "survey_changed", survey: SURVEY });
+	// Fehler und Drosselung tragen nie ein Design
+	assert.deepEqual(classifyLoadResponse(502, { status: "error", theme }), { kind: "error" });
+	assert.deepEqual(classifySubmitResponse(200, { status: "ok", theme }), { kind: "ok" });
 });
 
 test("Absenden: invalid_answers übernimmt nur wohlgeformte Fehler", () => {

@@ -48,6 +48,7 @@ Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz no
     - Sprache der Umfrage (`en`/`fr`) steuert Texte und `<html lang>`; Fehlerseiten vor dem Laden nutzen die Browsersprache.
     - Einbettung per iframe mit dem Snippet aus `polly_web.md` (inkl. Höhenanpassung).
     - Lokal: `npm run dev`, dann `http://localhost:5173/s/<jwt>` (Backend über den Dev-Proxy).
+- [ ] M6 Schritt 5 – Web-Designs (Schrift, Textstile pro Rolle, Farben pro Mandant; Wahl pro Umfrage). Plan und Fortschritt (M6a–M6d umgesetzt, M6e Ende-zu-Ende-Test offen): `implementationsplan_web_designs.md`
 
 
 ## Context
@@ -80,6 +81,10 @@ Ausgangslage im Code:
 11. **`/invitations` nur mit Genesys-Bearer:** Cognito-M2M-Tokens (Data Action des Flows) werden mit 403 abgelehnt. Begründung: Für sie gibt es keine Benutzerrollen, und Links erzeugt nur die App-Oberfläche.
 12. **Prod ändert sich zwischen Laden und Absenden:** Die Seite schickt die geladene `surveyVersion` mit. Weicht sie vom aktuellen Prod-Stand ab, antwortet das Backend mit 409 `survey_changed`, speichert nichts und verbraucht den Token nicht. Die Seite lädt die neue Fassung, übernimmt Antworten auf weiterhin vorhandene Fragen (gleiche Frage-ID, Wert noch gültig) und meldet: „Die Umfrage wurde zwischenzeitlich aktualisiert. Bitte prüfen Sie Ihre Antworten und senden Sie erneut ab.“ Ist kein Prod-Stand mehr vorhanden (Rollback ohne Backup, Löschung), erscheint „Umfrage nicht verfügbar“.
 13. **Drosselung (429):** Die Grenzwerte werden bewusst großzügig gewählt (siehe Schritt 2). Bei 429 wartet die Seite, versucht es automatisch einmal erneut und zeigt danach: „Der Dienst ist gerade stark ausgelastet. Bitte versuchen Sie es in einem Moment erneut.“ Ein Button „Erneut versuchen“ erscheint, alle Antworten bleiben erhalten.
+14. **Web-Designs – Speicherort:** eigene DynamoDB-Tabelle pro Mandant, Pflege in der App (Einstellungen → Web-Designs, mit Live-Vorschau); keine Dateien, kein Deploy, kein Data-Table-Feld. Plan: `implementationsplan_web_designs.md`.
+15. **Web-Designs – Zuordnung:** mehrere benannte Designs pro Mandant, eines ist Standard. Jede Umfrage wählt im Editor ihr Design (`web_theme_id`, optional); ohne Auswahl gilt das Standard-Design, ohne Standard-Design das eingebaute Polly-Design.
+16. **Web-Designs – Schriften:** nur feste Schrift-Stacks des Systems, keine hochgeladenen Schriften und keine Google Fonts; CSP unverändert. Größe, Stärke und Zeilenhöhe pro Textart einstellbar.
+17. **Web-Designs – Kontrast:** Kombinationen unter WCAG AA erzeugen im Editor nur eine Warnung, gespeichert werden kann trotzdem. WCAG 2.2 AA ist nur ohne Kontrastwarnung zugesichert, die Verantwortung liegt beim Mandanten.
 
 ## Schritt 0 – Spezifikation aktualisieren (`documentation/polly_web.md`)
 

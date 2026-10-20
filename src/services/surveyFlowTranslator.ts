@@ -332,6 +332,8 @@ export function translateSurveyObject(survey: Survey): FlowSurvey {
 		greeting_prompt: survey.greeting_message ?? "",
 		closing_prompt: survey.closing_message ?? "",
 		...(survey.language ? { language: survey.language } : {}),
+		// Nur für die Lambda web_survey (Wahl des Designs); Architect ignoriert das Feld
+		...(survey.web_theme_id ? { web_theme_id: survey.web_theme_id } : {}),
 		created_at: survey.created_at,
 		updated_at: survey.updated_at,
 		start_question_id: mainQuestions[0].id,

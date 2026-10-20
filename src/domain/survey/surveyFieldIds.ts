@@ -11,6 +11,7 @@ export const surveyFieldIds = {
 	closing: "survey_closing_input",
 	baseUrl: "survey_base_url_input",
 	language: "survey_language_select",
+	webTheme: "survey_web_theme_select",
 	/** Fragenbereich: Anker für Fehler zur Anzahl der Fragen */
 	questions: "survey_questions",
 	/** Fehlerübersicht: Sprungziel, wenn kein Fehler einem Feld zugeordnet ist */

@@ -341,5 +341,53 @@ else
   echo "DATATABLE_ID nicht gesetzt – Lösch-Tests übersprungen."
 fi
 
+# -------------------------------------------------------------------
+# Web-Designs (GET/PUT/DELETE /web-themes)
+# Optional: GENESYS_TOKEN_NO_DEPLOY = Token eines Users OHNE polly_deploy (403-Fall),
+#           WEB_THEME_WRITE=1 legt mit GENESYS_TOKEN ein Test-Design an und löscht es wieder.
+# -------------------------------------------------------------------
+THEME_ID="$(uuidgen | tr 'A-Z' 'a-z')"
+THEME_BODY='{"name":"curl-Test","isDefault":false,"tokens":{"fontFamily":"serif","colors":{"primary":"#aa0000"}}}'
+
+echo ">>> [T1] GET /web-themes (erwartet 200, Liste der Designs)"
+curl -s -w "\nHTTP %{http_code}\n" "${API_URL}/web-themes" "${BASE_HEADERS[@]}"
+echo ""
+
+echo ">>> [T2] PUT /web-themes ohne Token (erwartet 401)"
+curl -s -w "\nHTTP %{http_code}\n" -X PUT "${API_URL}/web-themes/${THEME_ID}" \
+  -H "Content-Type: application/json" -d "${THEME_BODY}"
+echo ""
+
+echo ">>> [T3] PUT /web-themes mit CSS in einer Farbe (erwartet 400 invalid_request, nichts gespeichert)"
+curl -s -w "\nHTTP %{http_code}\n" -X PUT "${API_URL}/web-themes/${THEME_ID}" "${BASE_HEADERS[@]}" \
+  -d '{"name":"x","isDefault":false,"tokens":{"colors":{"text":"url(https://evil.example)"}}}'
+echo ""
+
+echo ">>> [T4] PUT /web-themes mit ungültiger ID (erwartet 400 invalid_request)"
+curl -s -w "\nHTTP %{http_code}\n" -X PUT "${API_URL}/web-themes/kein-uuid" "${BASE_HEADERS[@]}" -d "${THEME_BODY}"
+echo ""
+
+if [ -n "${GENESYS_TOKEN_NO_DEPLOY:-}" ]; then
+  echo ">>> [T5] PUT /web-themes ohne Rolle polly_deploy (erwartet 403 missing_role)"
+  curl -s -w "\nHTTP %{http_code}\n" -X PUT "${API_URL}/web-themes/${THEME_ID}" \
+    -H "Authorization: Bearer ${GENESYS_TOKEN_NO_DEPLOY}" \
+    -H "x-genesys-region: ${GENESYS_REGION}" \
+    -H "Content-Type: application/json" -d "${THEME_BODY}"
+  echo ""
+else
+  echo "GENESYS_TOKEN_NO_DEPLOY nicht gesetzt – 403-Fall übersprungen."
+fi
+
+if [ "${WEB_THEME_WRITE:-}" = "1" ]; then
+  echo ">>> [T6] PUT /web-themes/${THEME_ID} (erwartet 200, Design angelegt; braucht polly_deploy)"
+  curl -s -w "\nHTTP %{http_code}\n" -X PUT "${API_URL}/web-themes/${THEME_ID}" "${BASE_HEADERS[@]}" -d "${THEME_BODY}"
+  echo ""
+  echo ">>> [T7] DELETE /web-themes/${THEME_ID} (erwartet 200)"
+  curl -s -w "\nHTTP %{http_code}\n" -X DELETE "${API_URL}/web-themes/${THEME_ID}" "${BASE_HEADERS[@]}"
+  echo ""
+else
+  echo "WEB_THEME_WRITE nicht gesetzt – Anlegen/Löschen eines Test-Designs übersprungen."
+fi
+
 echo "==== Fertig ===="
 

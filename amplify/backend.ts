@@ -21,6 +21,7 @@ import { surveyResponsesDelete } from "./functions/survey_responses_delete/resou
 import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 import { invitations } from "./functions/invitations/resource";
 import { webSurvey } from "./functions/web_survey/resource";
+import { webThemes } from "./functions/web_themes/resource";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -65,6 +66,7 @@ const backend = defineBackend({
   pollyArchyUpload,
   invitations,
   webSurvey,
+  webThemes,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -164,6 +166,15 @@ invitationTokensTable.addGlobalSecondaryIndex({
   partitionKey: { name: "tenantSurveyId", type: dynamodb.AttributeType.STRING },
   sortKey: { name: "usedAt", type: dynamodb.AttributeType.STRING },
   projectionType: dynamodb.ProjectionType.KEYS_ONLY,
+});
+
+// Web-Designs der öffentlichen Umfrageseite (Tokens, kein CSS), gepflegt in der App. Höchstens 50 pro
+// Mandant (prüft die Lambda web_themes); web_survey liest sie mit einer Query auf tenantId.
+const webSurveyThemesTable = new dynamodb.Table(stack, "WebSurveyThemesTable", {
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "themeId", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.RETAIN,
 });
 
 // Signaturschlüssel der Einladungen (HS256), ein Schlüssel pro Umgebung. Verlässt AWS nie: Die Lambdas
@@ -496,6 +507,8 @@ webSurveyLambda.addEnvironment(
   "SURVEY_DELETION_JOBS_TABLE_NAME",
   surveyDeletionJobsTable.tableName,
 );
+webSurveyThemesTable.grantReadData(webSurveyLambda);
+webSurveyLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
 // Öffentlich ohne Login: attachTenantAuth liefert hier nur Tenants-Tabelle und Tenant-Secret
 // (Genesys-Credentials zum Lesen des Prod-Stands), der Handler ruft resolveTenantContext nicht auf.
 attachTenantAuth(webSurveyLambda);
@@ -537,6 +550,27 @@ if (defaultStage) {
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
   defaultStage.node.addDependency(...webSurveyRoutes);
 }
+
+// Pflege der Web-Designs (lesen: jeder App-Nutzer, schreiben: Genesys-User mit polly_deploy)
+const webThemesLambda = backend.webThemes.resources.lambda as lambda.Function;
+
+webSurveyThemesTable.grantReadWriteData(webThemesLambda);
+webThemesLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
+attachTenantAuth(webThemesLambda);
+
+const webThemesInteg = new integrations.HttpLambdaIntegration("WebThemesInteg", webThemesLambda);
+
+httpApi.addRoutes({
+  path: "/web-themes",
+  methods: [apigw.HttpMethod.GET],
+  integration: webThemesInteg,
+});
+
+httpApi.addRoutes({
+  path: "/web-themes/{id}",
+  methods: [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+  integration: webThemesInteg,
+});
 
 const surveyCleanupLambda = backend.surveyCleanup.resources
   .lambda as lambda.Function;

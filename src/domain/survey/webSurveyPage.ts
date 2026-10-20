@@ -3,6 +3,8 @@ import type { SurveyLanguage } from "./flowTypes";
 import { getReachableQuestions, isFlowAnswers, pruneFlowAnswers } from "./flowNavigation";
 import type { FlowAnswerError, FlowAnswerErrorCode, FlowAnswers } from "./flowNavigation";
 import type { WebNpsQuestion, WebQuestion, WebRatingQuestion, WebSurvey } from "./webSurveyTypes";
+import { sanitizeWebThemeTokens } from "../webTheme/webTheme";
+import type { WebThemeTokens } from "../webTheme/webTheme";
 
 /**
  * Reine Logik der öffentlichen Umfrageseite (`survey.html`, `src/webSurvey/`), siehe
@@ -164,16 +166,31 @@ function isBlockingStatus(value: unknown): value is WebSurveyBlockingStatus {
 	return BLOCKING_STATUSES.includes(value as string);
 }
 
+/**
+ * `theme` = bereinigtes Design aus der Antwort; fehlt, wenn die Antwort keines oder ein ungültiges
+ * enthält (dann gilt das eingebaute Design, das ist kein Fehler).
+ */
 export type WebSurveyLoadResult =
-	| { kind: "ok"; survey: WebSurvey }
-	| { kind: WebSurveyBlockingStatus | "throttled" | "error" };
+	| { kind: "ok"; survey: WebSurvey; theme?: WebThemeTokens }
+	| { kind: WebSurveyBlockingStatus; theme?: WebThemeTokens }
+	| { kind: "throttled" }
+	| { kind: "error" };
 
 export type WebSurveySubmitResult =
 	| { kind: "ok" }
-	| { kind: WebSurveyBlockingStatus | "throttled" | "error" }
+	| { kind: WebSurveyBlockingStatus; theme?: WebThemeTokens }
+	| { kind: "throttled" }
+	| { kind: "error" }
 	/** `survey` = neue Fassung aus der Antwort; `null`, wenn sie fehlt oder unbrauchbar ist (dann neu laden). */
-	| { kind: "survey_changed"; survey: WebSurvey | null }
+	| { kind: "survey_changed"; survey: WebSurvey | null; theme?: WebThemeTokens }
 	| { kind: "invalid_answers"; errors: FlowAnswerError[] };
+
+/** `{ theme }` nur bei gültigem Design, damit die Ergebnisse ohne Design kein leeres Feld tragen. */
+function themeOf(record: Record<string, unknown>): { theme?: WebThemeTokens } {
+	if (record.theme === undefined) return {};
+	const theme = sanitizeWebThemeTokens(record.theme);
+	return theme ? { theme } : {};
+}
 
 /**
  * Ordnet die Antwort von `GET /web-survey` ein. `429` gilt immer als Drosselung: API Gateway liefert
@@ -184,9 +201,9 @@ export function classifyLoadResponse(httpStatus: number, body: unknown): WebSurv
 	const record = isRecord(body) ? body : {};
 	const status = record.status;
 	if (httpStatus === 200 && status === "ok") {
-		return isWebSurvey(record.survey) ? { kind: "ok", survey: record.survey } : { kind: "error" };
+		return isWebSurvey(record.survey) ? { kind: "ok", survey: record.survey, ...themeOf(record) } : { kind: "error" };
 	}
-	if (isBlockingStatus(status)) return { kind: status };
+	if (isBlockingStatus(status)) return { kind: status, ...themeOf(record) };
 	if (status === "throttled") return { kind: "throttled" };
 	return { kind: "error" };
 }
@@ -214,9 +231,9 @@ export function classifySubmitResponse(httpStatus: number, body: unknown): WebSu
 	const record = isRecord(body) ? body : {};
 	const status = record.status;
 	if (httpStatus === 200 && status === "ok") return { kind: "ok" };
-	if (isBlockingStatus(status)) return { kind: status };
+	if (isBlockingStatus(status)) return { kind: status, ...themeOf(record) };
 	if (status === "survey_changed") {
-		return { kind: "survey_changed", survey: isWebSurvey(record.survey) ? record.survey : null };
+		return { kind: "survey_changed", survey: isWebSurvey(record.survey) ? record.survey : null, ...themeOf(record) };
 	}
 	if (status === "invalid_answers") return { kind: "invalid_answers", errors: toAnswerErrors(record.errors) };
 	if (status === "throttled") return { kind: "throttled" };

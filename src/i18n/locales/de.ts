@@ -124,6 +124,14 @@ export const de = {
 			baseUrl: "Basis-URL für Einladungslinks (Web)",
 			baseUrlHint: "Optional. Absolute https-URL, z. B. die Seite, in die die Umfrage eingebettet ist. Mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Ohne Angabe zeigt der Link auf die Polly-Umfrageseite.",
 			language: "Sprache der Web-Umfrage",
+			webTheme: "Design der Web-Umfrage",
+			webThemeHint: "Schrift, Textgrößen und Farben der Umfrageseite. Pflege unter Einstellungen → Web-Designs. Ein Wechsel wirkt nach dem Deploy nach Prod.",
+			webThemeDefault: "Standard des Mandanten (Polly-Design)",
+			webThemeDefaultNamed: "Standard des Mandanten ({name})",
+			webThemeMissing: "Das gewählte Design wurde gelöscht. Die Umfrage nutzt das Standard-Design, bis Sie ein anderes wählen.",
+			webThemeMissingOption: "Gelöschtes Design",
+			webThemeLoadingOption: "Gewähltes Design (wird geladen …)",
+			webThemeUnavailableOption: "Gewähltes Design (Liste nicht abrufbar)",
 			placeholders: {
 				title: "z. B. Kundenzufriedenheit",
 				description: "Interne Beschreibung oder Kontext zur Umfrage...",
@@ -343,6 +351,7 @@ export const de = {
 		baseUrlInvalid: "Die Basis-URL muss eine gültige, absolute https-URL sein, z. B. https://www.beispiel.de/umfrage/{placeholder}.",
 		baseUrlTokenCount: "Die Basis-URL darf den Platzhalter {placeholder} höchstens einmal enthalten.",
 		languageInvalid: "Bitte eine gültige Sprache wählen.",
+		webThemeInvalid: "Bitte ein gültiges Web-Design wählen.",
 		scaleLabelTooLong: "„{field}“ ist zu lang (maximal {max} Zeichen)."
 	},
 
@@ -507,6 +516,116 @@ export const de = {
 		initErrorFallback: "Initialisierung fehlgeschlagen.",
 		sidebarCollapse: "Seitenleiste einklappen",
 		sidebarExpand: "Seitenleiste ausklappen"
+	},
+
+	webThemes: {
+		title: "Web-Designs",
+		intro: "Designs der öffentlichen Umfrageseite (Schrift, Textstile, Farben). Jede Umfrage wählt im Editor ihr Design, ohne Auswahl gilt das Standard-Design. Änderungen an einem Design wirken nach höchstens 30 Sekunden auf allen Umfragen, die es nutzen.",
+		list: {
+			loading: "Designs werden geladen …",
+			empty: "Noch keine Designs. Ohne Design erscheint die Umfrageseite im Polly-Design.",
+			default: "Standard",
+			edit: "Bearbeiten",
+			view: "Ansehen",
+			duplicate: "Duplizieren",
+			delete: "Löschen",
+			create: "Neues Design",
+			newName: "Neues Design",
+			copyName: "{name} (Kopie)",
+			updated: "Geändert {date}",
+			updatedBy: "Geändert {date} von {user}",
+			limit: "Höchstens {max} Designs pro Mandant."
+		},
+		editor: {
+			name: "Name",
+			isDefault: "Standard-Design des Mandanten",
+			font: "Schrift",
+			fontHint: "Schriften des Systems; es werden keine Schriftdateien geladen.",
+			textStyles: "Textstile",
+			textStylesHint: "Größe in Pixeln bei Standardeinstellung des Browsers. Zoom und größere Grundschrift der Besucher wirken weiter.",
+			role: "Textart",
+			size: "Größe",
+			weight: "Stärke",
+			lineHeight: "Zeilenhöhe",
+			reset: "Auf Standard zurücksetzen",
+			resetAll: "Alle auf Standard",
+			resetRole: "{role} auf Standard zurücksetzen",
+			resetColor: "{color} auf Standard zurücksetzen",
+			sizeOf: "Größe {role} in Pixeln, {min} bis {max}",
+			weightOf: "Stärke {role}",
+			lineHeightOf: "Zeilenhöhe {role}",
+			colors: "Farben",
+			transparentBackground: "Hintergrund transparent",
+			transparentHint: "Für die Einbettung per iframe: Der Seitenhintergrund wird durchsichtig, die Karten behalten ihre Flächenfarbe.",
+			preview: "Vorschau",
+			previewHint: "Beispielumfrage mit allen Fragetypen. Beim Bearbeiten einer Textart wird sie hier markiert.",
+			previewTitle: "Vorschau der Umfrageseite",
+			save: "Speichern",
+			cancel: "Abbrechen"
+		},
+		roles: {
+			heading: "Überschrift",
+			subheading: "Zwischenüberschrift",
+			body: "Fließtext",
+			questionTitle: "Fragetitel",
+			description: "Beschreibung",
+			option: "Antwortoptionen",
+			scaleLabel: "Skalen-Labels",
+			hint: "Hinweise",
+			error: "Fehlertexte",
+			button: "Button"
+		},
+		weights: {
+			w400: "Normal (400)",
+			w500: "Mittel (500)",
+			w600: "Halbfett (600)",
+			w700: "Fett (700)"
+		},
+		fonts: {
+			system: "Systemschrift",
+			sans: "Serifenlos (Helvetica, Arial)",
+			serif: "Serifenschrift (Charter, Georgia)",
+			humanist: "Humanistisch (Seravek, Calibri)",
+			rounded: "Abgerundet"
+		},
+		colors: {
+			background: "Seitenhintergrund",
+			surface: "Flächen (Karten)",
+			text: "Text",
+			heading: "Überschriften",
+			textMuted: "Gedämpfter Text",
+			primary: "Akzentfarbe",
+			onPrimary: "Text auf Akzentfarbe",
+			border: "Rahmen",
+			error: "Fehler"
+		},
+		contrast: {
+			warning: "Kontrast zu {background}: {ratio}:1, mindestens {minimum}:1 (WCAG AA).",
+			summary: "Kontrastwarnungen: {count}. Speichern ist möglich, die Barrierefreiheit nach WCAG 2.2 AA ist mit diesem Design aber nicht zugesichert."
+		},
+		delete: {
+			header: "Design löschen",
+			message: "Design „{name}“ wirklich löschen?",
+			usedBy: "Es wird von diesen Umfragen genutzt, die danach das Standard-Design zeigen: {surveys}.",
+			unused: "Keine Umfrage nutzt dieses Design.",
+			usageUnknown: "Ob Umfragen das Design nutzen, konnte nicht geprüft werden; betroffene Umfragen zeigen danach das Standard-Design.",
+			accept: "Löschen",
+			reject: "Abbrechen"
+		},
+		toast: {
+			saved: "Design „{name}“ gespeichert",
+			saveFailed: "Design konnte nicht gespeichert werden",
+			deleted: "Design „{name}“ gelöscht",
+			deleteFailed: "Design konnte nicht gelöscht werden"
+		},
+		errors: {
+			missingToken: "Nicht angemeldet. Bitte die App neu laden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			limitReached: "Die Höchstzahl an Designs ist erreicht.",
+			conflict: "Das Design wurde zwischenzeitlich von jemand anderem geändert oder gelöscht. Die Liste ist neu geladen, Ihre Eingaben sind erhalten. Erneutes Speichern überschreibt den aktuellen Stand.",
+			throttled: "Der Dienst ist gerade ausgelastet. Bitte gleich erneut versuchen.",
+			generic: "Fehler bei den Web-Designs"
+		}
 	},
 
 	settings: {

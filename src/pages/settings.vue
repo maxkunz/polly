@@ -9,6 +9,7 @@ import Select from "primevue/select";
 import { useToast } from "primevue/usetoast";
 
 import PageHeader from "@/components/layout/PageHeader.vue";
+import WebThemesCard from "@/components/webTheme/WebThemesCard.vue";
 import { useAppStore } from "@/stores/appStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
@@ -177,6 +178,8 @@ function startUninstall() {
 					</div>
 				</template>
 			</Card>
+
+			<WebThemesCard v-if="setup" />
 
 			<Card>
 				<template #title>{{ t("settings.setup.title") }}</template>

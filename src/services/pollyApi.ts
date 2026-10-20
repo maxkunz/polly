@@ -5,7 +5,9 @@ import { API_PREFIX } from "@/constants/apiConstants";
 export class PollyApiError extends Error {
 	constructor(
 		message: string,
-		public readonly status: number
+		public readonly status: number,
+		/** Fehlercode aus dem Body (`code`), falls das Backend einen liefert, z. B. `limit_reached`. */
+		public readonly code?: string
 	) {
 		super(message);
 		this.name = "PollyApiError";
@@ -41,13 +43,15 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
 	if (!response.ok) {
 		let message = `HTTP ${response.status}`;
+		let code: string | undefined;
 		try {
 			const body = await response.json();
 			if (body?.message) message = String(body.message);
+			if (typeof body?.code === "string") code = body.code;
 		} catch {
 			// Antwort ohne JSON-Body
 		}
-		throw new PollyApiError(message, response.status);
+		throw new PollyApiError(message, response.status, code);
 	}
 	return response;
 }

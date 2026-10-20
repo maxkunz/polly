@@ -126,6 +126,14 @@ export const fr: MessageSchema = {
 			baseUrl: "URL de base des liens d'invitation (web)",
 			baseUrlHint: "Facultatif. URL https absolue, p. ex. la page dans laquelle le sondage est intégré. {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Sans valeur, le lien pointe vers la page de sondage Polly.",
 			language: "Langue du sondage web",
+			webTheme: "Design du sondage web",
+			webThemeHint: "Police, tailles de texte et couleurs de la page du sondage. Gestion sous Paramètres → Designs web. Un changement prend effet après le déploiement en Prod.",
+			webThemeDefault: "Standard du client (design Polly)",
+			webThemeDefaultNamed: "Standard du client ({name})",
+			webThemeMissing: "Le design choisi a été supprimé. Le sondage utilise le design standard jusqu’à ce que vous en choisissiez un autre.",
+			webThemeMissingOption: "Design supprimé",
+			webThemeLoadingOption: "Design choisi (chargement …)",
+			webThemeUnavailableOption: "Design choisi (liste indisponible)",
 			placeholders: {
 				title: "p. ex. Satisfaction client",
 				description: "Description interne ou contexte de l'enquête...",
@@ -345,6 +353,7 @@ export const fr: MessageSchema = {
 		baseUrlInvalid: "L'URL de base doit être une URL https absolue valide, p. ex. https://www.exemple.fr/sondage/{placeholder}.",
 		baseUrlTokenCount: "L'URL de base ne peut contenir le paramètre {placeholder} qu'une seule fois.",
 		languageInvalid: "Veuillez choisir une langue valide.",
+		webThemeInvalid: "Veuillez choisir un design web valide.",
 		scaleLabelTooLong: "« {field} » est trop long ({max} caractères maximum)."
 	},
 
@@ -509,6 +518,116 @@ export const fr: MessageSchema = {
 		initErrorFallback: "Échec de l'initialisation.",
 		sidebarCollapse: "Réduire la barre latérale",
 		sidebarExpand: "Développer la barre latérale"
+	},
+
+	webThemes: {
+		title: "Designs web",
+		intro: "Designs de la page publique du sondage (police, styles de texte, couleurs). Chaque sondage choisit son design dans l’éditeur ; sans choix, le design standard s’applique. Les modifications d’un design atteignent tous les sondages qui l’utilisent en 30 secondes au plus.",
+		list: {
+			loading: "Chargement des designs …",
+			empty: "Aucun design pour l’instant. Sans design, la page du sondage utilise le design Polly.",
+			default: "Standard",
+			edit: "Modifier",
+			view: "Afficher",
+			duplicate: "Dupliquer",
+			delete: "Supprimer",
+			create: "Nouveau design",
+			newName: "Nouveau design",
+			copyName: "{name} (copie)",
+			updated: "Modifié {date}",
+			updatedBy: "Modifié {date} par {user}",
+			limit: "Au maximum {max} designs par client."
+		},
+		editor: {
+			name: "Nom",
+			isDefault: "Design standard du client",
+			font: "Police",
+			fontHint: "Polices du système ; aucun fichier de police n’est chargé.",
+			textStyles: "Styles de texte",
+			textStylesHint: "Taille en pixels avec le réglage par défaut du navigateur. Le zoom et une police de base plus grande des visiteurs restent effectifs.",
+			role: "Type de texte",
+			size: "Taille",
+			weight: "Graisse",
+			lineHeight: "Interligne",
+			reset: "Rétablir la valeur standard",
+			resetAll: "Tout rétablir",
+			resetRole: "Rétablir {role}",
+			resetColor: "Rétablir {color}",
+			sizeOf: "Taille {role} en pixels, de {min} à {max}",
+			weightOf: "Graisse {role}",
+			lineHeightOf: "Interligne {role}",
+			colors: "Couleurs",
+			transparentBackground: "Fond transparent",
+			transparentHint: "Pour l’intégration par iframe : le fond de la page devient transparent, les cartes gardent leur couleur.",
+			preview: "Aperçu",
+			previewHint: "Sondage d’exemple avec tous les types de questions. Le type de texte en cours de modification y est mis en évidence.",
+			previewTitle: "Aperçu de la page du sondage",
+			save: "Enregistrer",
+			cancel: "Annuler"
+		},
+		roles: {
+			heading: "Titre",
+			subheading: "Sous-titre",
+			body: "Texte courant",
+			questionTitle: "Titre de question",
+			description: "Description",
+			option: "Options de réponse",
+			scaleLabel: "Libellés d’échelle",
+			hint: "Indications",
+			error: "Textes d’erreur",
+			button: "Bouton"
+		},
+		weights: {
+			w400: "Normal (400)",
+			w500: "Moyen (500)",
+			w600: "Demi-gras (600)",
+			w700: "Gras (700)"
+		},
+		fonts: {
+			system: "Police système",
+			sans: "Sans empattement (Helvetica, Arial)",
+			serif: "Avec empattement (Charter, Georgia)",
+			humanist: "Humaniste (Seravek, Calibri)",
+			rounded: "Arrondie"
+		},
+		colors: {
+			background: "Fond de page",
+			surface: "Surfaces (cartes)",
+			text: "Texte",
+			heading: "Titres",
+			textMuted: "Texte atténué",
+			primary: "Couleur d’accent",
+			onPrimary: "Texte sur couleur d’accent",
+			border: "Bordures",
+			error: "Erreurs"
+		},
+		contrast: {
+			warning: "Contraste avec {background} : {ratio}:1, au moins {minimum}:1 (WCAG AA).",
+			summary: "Avertissements de contraste : {count}. L’enregistrement est possible, mais l’accessibilité selon WCAG 2.2 AA n’est pas garantie avec ce design."
+		},
+		delete: {
+			header: "Supprimer le design",
+			message: "Supprimer vraiment le design « {name} » ?",
+			usedBy: "Il est utilisé par ces sondages, qui afficheront ensuite le design standard : {surveys}.",
+			unused: "Aucun sondage n’utilise ce design.",
+			usageUnknown: "Impossible de vérifier si des sondages utilisent ce design ; les sondages concernés afficheront le design standard.",
+			accept: "Supprimer",
+			reject: "Annuler"
+		},
+		toast: {
+			saved: "Design « {name} » enregistré",
+			saveFailed: "Le design n’a pas pu être enregistré",
+			deleted: "Design « {name} » supprimé",
+			deleteFailed: "Le design n’a pas pu être supprimé"
+		},
+		errors: {
+			missingToken: "Non connecté. Veuillez recharger l’application.",
+			missingRole: "Pas d’autorisation – droits de déploiement manquants.",
+			limitReached: "Le nombre maximal de designs est atteint.",
+			conflict: "Quelqu’un d’autre a modifié ou supprimé le design entre-temps. La liste a été rechargée et vos saisies sont conservées. Un nouvel enregistrement écrase la version actuelle.",
+			throttled: "Le service est surchargé. Veuillez réessayer dans un instant.",
+			generic: "Erreur des designs web"
+		}
 	},
 
 	settings: {

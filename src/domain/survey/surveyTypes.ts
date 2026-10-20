@@ -56,6 +56,8 @@ export interface Survey {
 	base_url?: string;
 	/** Sprache der Web-Umfrageseite, Default "de". */
 	language?: SurveyLanguage;
+	/** Web-Design der Umfrageseite (ID aus den Einstellungen → Web-Designs); fehlt = Standard des Mandanten. */
+	web_theme_id?: string;
 	created_at?: string;
 	updated_at?: string;
 	version?: number;
@@ -323,6 +325,7 @@ export function cloneSurvey(source: Survey): Survey {
 		closing_message: source.closing_message,
 		base_url: source.base_url,
 		language: source.language,
+		...(source.web_theme_id ? { web_theme_id: source.web_theme_id } : {}),
 		created_at: new Date().toISOString(),
 		version: 0,
 		questions: (source.questions || []).map(q => cloneSurveyQuestion(q))

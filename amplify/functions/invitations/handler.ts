@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { POLLY_ROLE_DEPLOY } from "../../../src/constants/permissionConstants";
-import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
-import { getSurveyTableAccess, loadProdSurvey, loadProjectTag } from "../shared/genesys_survey_check";
-import { fetchWithTimeout, readRequestBody } from "../shared/http";
+import { requireCallerRole } from "../shared/caller_roles";
+import { loadProdSurvey } from "../shared/genesys_survey_check";
+import { readRequestBody } from "../shared/http";
 import { loadInvitationKeys } from "../shared/invitation_keys";
 import { signInvitation } from "../shared/invitation_token";
 import {
@@ -10,7 +10,6 @@ import {
   getGenesysRegion,
   loadTenantCredentials,
   resolveTenantContext,
-  type TenantCredentials,
 } from "../shared/tenant_auth";
 import { parseInvitationRequest } from "./request";
 
@@ -47,42 +46,6 @@ function parseJson(text: string): unknown {
   }
 }
 
-type CallerRoles =
-  | { status: "ok"; roles: string[] }
-  | { status: "unauthorized"; httpStatus: number }
-  | { status: "error"; httpStatus?: number; error?: string };
-
-/** Rollen des Aufrufers wie im Frontend (`loadCurrentUserRoles`), mit seinem eigenen Genesys-Token. */
-async function loadCallerRoles(region: string, token: string): Promise<CallerRoles> {
-  let res: Response;
-  try {
-    res = await fetchWithTimeout(`https://api.${region}/api/v2/users/me?expand=authorization`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-  } catch (err: any) {
-    // Timeout oder Netzwerkfehler: als Genesys-Fehler melden statt als 500
-    return { status: "error", error: String(err?.message ?? err) };
-  }
-  if (res.status === 401) return { status: "unauthorized", httpStatus: res.status };
-  // 403: dem Token fehlt der Scope authorization:readonly, wie im Frontend gilt der User dann als ohne Rolle
-  if (res.status === 403) return { status: "ok", roles: [] };
-  if (!res.ok) return { status: "error", httpStatus: res.status };
-  const me: any = await res.json();
-  const roles: Array<{ name?: unknown }> = Array.isArray(me?.authorization?.roles) ? me.authorization.roles : [];
-  return { status: "ok", roles: roles.map((role) => String(role?.name ?? "")).filter(Boolean) };
-}
-
-type ProjectTagResult = { ok: true; projectTag: string | undefined } | { ok: false; httpStatus?: number; error: string };
-
-/** Projekt-Tag der Installation, damit die präfixierte Rolle wie im Frontend erkannt wird. */
-async function loadInstallationProjectTag(credentials: TenantCredentials): Promise<ProjectTagResult> {
-  try {
-    return { ok: true, projectTag: await loadProjectTag(await getSurveyTableAccess(credentials)) };
-  } catch (err: any) {
-    return { ok: false, httpStatus: err?.status, error: String(err?.message ?? err) };
-  }
-}
-
 async function createInvitations(event: AnyApiGwEvent, tenantId: string, region: string): Promise<AnyResult> {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const body = readRequestBody(event, INVITATION_MAX_BODY_BYTES);
@@ -96,24 +59,15 @@ async function createInvitations(event: AnyApiGwEvent, tenantId: string, region:
     return jsonResponse(502, { code: "no_credentials", message: "No Genesys backend credentials for tenant" });
   }
 
-  // Rollen und Projekt-Tag sind unabhängig voneinander: parallel laden spart einen Genesys-Umlauf
-  const [caller, projectTag] = await Promise.all([
-    loadCallerRoles(region, getAuthorizationToken(event)),
-    loadInstallationProjectTag(credentials),
-  ]);
-  if (caller.status === "unauthorized") return jsonResponse(401, { code: "unauthorized", message: "Genesys token invalid" });
-  if (caller.status === "error") {
-    console.error("[invitations] cannot load roles", { tenantId, httpStatus: caller.httpStatus, error: caller.error });
-    return jsonResponse(caller.httpStatus === 429 ? 429 : 502, { code: "genesys_error", message: "Cannot load user roles" });
-  }
-  if (!projectTag.ok) {
-    console.error("[invitations] cannot read __meta", { tenantId, error: projectTag.error });
-    return jsonResponse(projectTag.httpStatus === 429 ? 429 : 502, { code: "genesys_error", message: "Cannot read setup metadata" });
-  }
-  if (!hasPollyRole(caller.roles, POLLY_ROLE_DEPLOY, projectTag.projectTag)) {
-    console.warn("[invitations] missing role", { tenantId, projectTag: projectTag.projectTag });
-    return jsonResponse(403, { code: "missing_role", message: `Role ${POLLY_ROLE_DEPLOY} required` });
-  }
+  const roleCheck = await requireCallerRole({
+    logPrefix: "[invitations]",
+    tenantId,
+    region,
+    token: getAuthorizationToken(event),
+    credentials,
+    role: POLLY_ROLE_DEPLOY,
+  });
+  if (!roleCheck.ok) return jsonResponse(roleCheck.httpStatus, { code: roleCheck.code, message: roleCheck.message });
 
   const prod = await loadProdSurvey(tenantId, surveyId, credentials);
   if (prod.status === "unavailable") {

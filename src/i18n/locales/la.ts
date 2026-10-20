@@ -127,6 +127,14 @@ export const la: MessageSchema = {
 			baseUrl: "URL basis pro nexibus invitationis (interretialis)",
 			baseUrlHint: "Optionale. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Sine ea nexus ad paginam Polly ducit.",
 			language: "Lingua quaestionis interretialis",
+			webTheme: "Forma quaestionis interretialis",
+			webThemeHint: "Litterae, magnitudines et colores paginae. Cura sub Optiones → Formae interretiales. Mutatio post Prod valet.",
+			webThemeDefault: "Forma communis (Polly)",
+			webThemeDefaultNamed: "Forma communis ({name})",
+			webThemeMissing: "Forma electa deleta est. Quaestio formam communem adhibet.",
+			webThemeMissingOption: "Forma deleta",
+			webThemeLoadingOption: "Forma electa (oneratur …)",
+			webThemeUnavailableOption: "Forma electa (index non praesto)",
 			placeholders: {
 				title: "e. g. Satisfactio clientium",
 				description: "Descriptio interna vel contextus percontationis...",
@@ -346,6 +354,7 @@ export const la: MessageSchema = {
 		baseUrlInvalid: "URL basis debet esse URL https absoluta et valida, e. g. https://www.exemplum.de/quaestio/{placeholder}.",
 		baseUrlTokenCount: "URL basis signum {placeholder} semel tantum continere potest.",
 		languageInvalid: "Linguam validam elige.",
+		webThemeInvalid: "Formam validam elige.",
 		scaleLabelTooLong: "„{field}“ nimis longum est (maximum {max} litterae)."
 	},
 
@@ -510,6 +519,116 @@ export const la: MessageSchema = {
 		initErrorFallback: "Initium defecit.",
 		sidebarCollapse: "Latus complica",
 		sidebarExpand: "Latus explica"
+	},
+
+	webThemes: {
+		title: "Formae interretiales",
+		intro: "Formae paginae publicae (litterae, stili, colores). Quaeque quaestio formam suam eligit; sine electione forma communis valet. Mutationes intra triginta secunda valent.",
+		list: {
+			loading: "Formae onerantur …",
+			empty: "Nullae formae adhuc. Sine forma pagina formam Polly adhibet.",
+			default: "Communis",
+			edit: "Muta",
+			view: "Inspice",
+			duplicate: "Duplica",
+			delete: "Dele",
+			create: "Nova forma",
+			newName: "Nova forma",
+			copyName: "{name} (exemplar)",
+			updated: "Mutata {date}",
+			updatedBy: "Mutata {date} ab {user}",
+			limit: "Non plus quam {max} formae."
+		},
+		editor: {
+			name: "Nomen",
+			isDefault: "Forma communis",
+			font: "Litterae",
+			fontHint: "Litterae systematis; nulla documenta litterarum onerantur.",
+			textStyles: "Stili textus",
+			textStylesHint: "Magnitudo in punctis imaginis. Amplificatio legentium valet.",
+			role: "Genus textus",
+			size: "Magnitudo",
+			weight: "Pondus",
+			lineHeight: "Altitudo versus",
+			reset: "Restitue",
+			resetAll: "Omnia restitue",
+			resetRole: "{role} restitue",
+			resetColor: "{color} restitue",
+			sizeOf: "Magnitudo {role}, {min} ad {max}",
+			weightOf: "Pondus {role}",
+			lineHeightOf: "Altitudo versus {role}",
+			colors: "Colores",
+			transparentBackground: "Fundus pellucidus",
+			transparentHint: "Ad inserendum per iframe: fundus paginae pellucidus fit.",
+			preview: "Prospectus",
+			previewHint: "Quaestio exemplaris cum omnibus generibus. Genus textus hic notatur.",
+			previewTitle: "Prospectus paginae",
+			save: "Serva",
+			cancel: "Omitte"
+		},
+		roles: {
+			heading: "Titulus",
+			subheading: "Subtitulus",
+			body: "Textus",
+			questionTitle: "Titulus quaestionis",
+			description: "Descriptio",
+			option: "Responsa",
+			scaleLabel: "Tituli scalae",
+			hint: "Indicia",
+			error: "Errores",
+			button: "Puga"
+		},
+		weights: {
+			w400: "Normale (400)",
+			w500: "Medium (500)",
+			w600: "Semigrave (600)",
+			w700: "Grave (700)"
+		},
+		fonts: {
+			system: "Litterae systematis",
+			sans: "Sine apicibus",
+			serif: "Cum apicibus",
+			humanist: "Humanisticae",
+			rounded: "Rotundae"
+		},
+		colors: {
+			background: "Fundus paginae",
+			surface: "Superficies",
+			text: "Textus",
+			heading: "Tituli",
+			textMuted: "Textus remissus",
+			primary: "Color insignis",
+			onPrimary: "Textus in colore insigni",
+			border: "Margines",
+			error: "Errores"
+		},
+		contrast: {
+			warning: "Discrimen ad {background}: {ratio}:1, saltem {minimum}:1 (WCAG AA).",
+			summary: "Monita discriminis: {count}. Servare licet, sed WCAG 2.2 AA non praestatur."
+		},
+		delete: {
+			header: "Formam dele",
+			message: "Formam „{name}“ vere delere?",
+			usedBy: "Hae quaestiones eam adhibent: {surveys}.",
+			unused: "Nulla quaestio hanc formam adhibet.",
+			usageUnknown: "Usus probari non potuit.",
+			accept: "Dele",
+			reject: "Omitte"
+		},
+		toast: {
+			saved: "Forma „{name}“ servata",
+			saveFailed: "Forma servari non potuit",
+			deleted: "Forma „{name}“ deleta",
+			deleteFailed: "Forma deleri non potuit"
+		},
+		errors: {
+			missingToken: "Non inscriptus. Applicationem renova.",
+			missingRole: "Sine iure – iura deploy desunt.",
+			limitReached: "Numerus maximus formarum attactus est.",
+			conflict: "Alius formam interim mutavit aut delevit. Index renovatus est, tua servata sunt. Iterum servare statum novum superscribit.",
+			throttled: "Ministerium occupatum est. Mox iterum tempta.",
+			generic: "Error formarum"
+		}
 	},
 
 	settings: {

@@ -118,7 +118,7 @@ function onCommentInput(event: Event): void {
 				:aria-describedby="joinIds(describedBy, ids.counter)"
 				@input="onCommentInput"
 			></textarea>
-			<p :id="ids.counter" class="text-sm text-slate-600">
+			<p :id="ids.counter" class="web-hint">
 				{{ t("commentCounter", { count: commentText.length, max: WEB_COMMENT_MAX_CHARS }) }}
 			</p>
 		</div>

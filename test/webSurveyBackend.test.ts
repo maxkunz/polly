@@ -13,7 +13,10 @@ import {
 	readRequestBody,
 	WEB_SURVEY_MAX_BODY_BYTES
 } from "../amplify/functions/web_survey/request";
+import { isValidThemeId, parseWebThemeRequest, pickTheme, toWebTheme } from "../amplify/functions/shared/web_themes";
 import { hasPollyRole } from "../src/domain/permissions/roleCheck";
+import { DEFAULT_WEB_THEME_TOKENS, defaultWebThemeTokens } from "../src/domain/webTheme/webTheme";
+import type { WebTheme } from "../src/domain/webTheme/webTheme";
 import { pruneFlowAnswers } from "../src/domain/survey/flowNavigation";
 import type { FlowCondition, FlowSurvey } from "../src/domain/survey/flowTypes";
 
@@ -300,6 +303,85 @@ test("buildStoredAnswers: Schlüssel ist der technische Fragename, Format wie im
 		frage_85a238d2: { type: "nps", value: 9, answeredAt: now },
 		frage_86c4a809: { type: "yes_no", value: false, answeredAt: now }
 	});
+});
+
+const THEME_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const THEME_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const THEME_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+function theme(id: string, isDefault: boolean, primary: string): WebTheme {
+	const tokens = defaultWebThemeTokens();
+	tokens.colors.primary = primary;
+	return { id, name: id.slice(0, 4), isDefault, tokens, updatedAt: "2026-10-20T00:00:00.000Z" };
+}
+
+test("pickTheme: gewähltes Design, sonst Standard, sonst keines", () => {
+	const themes = [theme(THEME_A, false, "#aa0000"), theme(THEME_B, true, "#00bb00")];
+	assert.equal(pickTheme(themes, THEME_A)?.colors.primary, "#aa0000", "gewähltes Design");
+	assert.equal(pickTheme(themes)?.colors.primary, "#00bb00", "ohne Wahl: Standard");
+	assert.equal(pickTheme(themes, null)?.colors.primary, "#00bb00");
+	assert.equal(pickTheme(themes, THEME_C)?.colors.primary, "#00bb00", "gelöschtes Design: Standard");
+	assert.equal(pickTheme([theme(THEME_A, false, "#aa0000")], THEME_C), undefined, "ohne Standard: eingebautes Design");
+	assert.equal(pickTheme([], THEME_A), undefined);
+});
+
+test("parseWebThemeRequest: Name, Standard-Markierung, Tokens", () => {
+	const ok = parseWebThemeRequest({ name: "  CI Blau  ", isDefault: true, tokens: { colors: { primary: "#0000FF" } }, extra: 1 });
+	assert.ok(ok.ok);
+	assert.equal(ok.request.name, "CI Blau");
+	assert.equal(ok.request.isDefault, true);
+	assert.equal(ok.request.tokens.colors.primary, "#0000ff");
+	assert.equal(ok.request.tokens.colors.text, DEFAULT_WEB_THEME_TOKENS.colors.text);
+	const withoutDefault = parseWebThemeRequest({ name: "x", tokens: {} });
+	assert.ok(withoutDefault.ok && withoutDefault.request.isDefault === false);
+
+	assert.equal(parseWebThemeRequest(null).ok, false);
+	assert.equal(parseWebThemeRequest([]).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "", tokens: {} }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "   ", tokens: {} }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "x".repeat(61), tokens: {} }).ok, false);
+	assert.ok(parseWebThemeRequest({ name: "x".repeat(60), tokens: {} }).ok);
+	assert.equal(parseWebThemeRequest({ name: "a\nb", tokens: {} }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: 5, tokens: {} }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "x", isDefault: "yes", tokens: {} }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "x" }).ok, false, "Tokens fehlen");
+	assert.equal(parseWebThemeRequest({ name: "x", tokens: { colors: { text: "url(x)" } } }).ok, false);
+});
+
+test("parseWebThemeRequest: expectedUpdatedAt für optimistisches Sperren", () => {
+	const create = parseWebThemeRequest({ name: "x", tokens: {} });
+	assert.ok(create.ok && create.request.expectedUpdatedAt === null, "fehlt = neues Design");
+	const explicitNull = parseWebThemeRequest({ name: "x", tokens: {}, expectedUpdatedAt: null });
+	assert.ok(explicitNull.ok && explicitNull.request.expectedUpdatedAt === null);
+	const update = parseWebThemeRequest({ name: "x", tokens: {}, expectedUpdatedAt: "2026-10-20T10:00:00.000Z" });
+	assert.ok(update.ok && update.request.expectedUpdatedAt === "2026-10-20T10:00:00.000Z");
+	assert.equal(parseWebThemeRequest({ name: "x", tokens: {}, expectedUpdatedAt: "" }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "x", tokens: {}, expectedUpdatedAt: 5 }).ok, false);
+	assert.equal(parseWebThemeRequest({ name: "x", tokens: {}, expectedUpdatedAt: "x".repeat(41) }).ok, false);
+});
+
+test("toWebTheme: DynamoDB-Eintrag prüfen und auffüllen", () => {
+	const item = {
+		tenantId: "t1",
+		themeId: THEME_A,
+		name: "CI",
+		isDefault: true,
+		tokens: { fontFamily: "serif" },
+		updatedAt: "2026-10-20T10:00:00.000Z",
+		updatedBy: "Anna"
+	};
+	const result = toWebTheme(item);
+	assert.ok(result);
+	assert.deepEqual(Object.keys(result).sort(), ["id", "isDefault", "name", "tokens", "updatedAt", "updatedBy"]);
+	assert.equal(result.id, THEME_A);
+	assert.equal(result.tokens.fontFamily, "serif");
+	assert.deepEqual(result.tokens.text, DEFAULT_WEB_THEME_TOKENS.text);
+	assert.equal(toWebTheme({ ...item, updatedBy: undefined })?.updatedBy, undefined);
+	assert.equal(toWebTheme({ ...item, tokens: { fontFamily: "Comic Sans" } }), null);
+	assert.equal(toWebTheme({ ...item, themeId: "x" }), null);
+	assert.equal(toWebTheme(undefined), null);
+	assert.ok(isValidThemeId(THEME_A));
+	assert.equal(isValidThemeId("../a"), false);
 });
 
 console.log(`\n${passed} Tests bestanden`);

@@ -148,6 +148,14 @@ test("Sprache: nur de, en, fr; fehlend ist erlaubt", () => {
 	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), language: "xx" as never }), [surveyFieldIds.language]);
 });
 
+test("Web-Design: nur UUID; fehlend ist erlaubt", () => {
+	assert.deepEqual(fieldIdsOf(survey([question({})])), []);
+	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), web_theme_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }), []);
+	for (const value of ["", "default", "../x", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaa"]) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), web_theme_id: value }), [surveyFieldIds.webTheme], value);
+	}
+});
+
 test("Min/Max-Labels bei rating und nps sind auf 100 Zeichen begrenzt", () => {
 	const ok = "a".repeat(100);
 	const tooLong = "a".repeat(101);
