@@ -275,7 +275,7 @@ function save(): void {
 										:allowEmpty="false"
 										showButtons
 										suffix=" px"
-										inputClass="w-20"
+										inputClass="w-28"
 										:aria-label="t('webThemes.editor.sizeOf', { role: t(`webThemes.roles.${role}`), min: WEB_TEXT_SIZE_LIMITS[role].min, max: WEB_TEXT_SIZE_LIMITS[role].max })"
 										:disabled="readonly"
 									/>
@@ -301,7 +301,7 @@ function save(): void {
 										:maxFractionDigits="2"
 										:allowEmpty="false"
 										showButtons
-										inputClass="w-16"
+										inputClass="w-24"
 										:aria-label="t('webThemes.editor.lineHeightOf', { role: t(`webThemes.roles.${role}`) })"
 										:disabled="readonly"
 									/>
