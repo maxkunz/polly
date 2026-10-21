@@ -19,7 +19,7 @@ export const de = {
 		fallback: "Ihre Antworten wurden gespeichert."
 	},
 	stagePreview: {
-		banner: "Vorschau (Stage) – Ihre Antworten werden nicht gespeichert.",
+		banner: "Vorschau von Version {version} (Stage) – Ihre Antworten werden nicht gespeichert.",
 		notSaved: "In der Vorschau werden keine Ergebnisse gespeichert."
 	},
 	errorSummary: {

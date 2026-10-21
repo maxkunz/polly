@@ -62,7 +62,7 @@ Header: `{ "alg": "HS256", "typ": "JWT", "kid": "<8 Zeichen>" }`.
 
 In der Deployment-Ansicht öffnet der Button **„Webvorschau“** (nur mit Feature Flag `web_survey`, aktiv mit `polly_deploy` und vorhandenem Stage-Stand) den Stage-Stand als Web-Umfrage in einem neuen Tab. Dazu signiert `POST /api/invitations/preview` bei jedem Klick einen neuen Token mit `stage: true`, `multi: true` und `exp` = jetzt + 7 Tage (`PREVIEW_TOKEN_TTL_SECONDS`, vom Server gesetzt). Der Link zeigt immer auf `<polly-origin>/s/<jwt>`, nicht auf die Basis-URL der Umfrage.
 
-* Die Seite zeigt im Formular einen Hinweisbalken („Vorschau (Stage) – Ihre Antworten werden nicht gespeichert“) und auf der Endseite statt „Ihre Antworten wurden gespeichert“ den Hinweis, dass in der Vorschau keine Ergebnisse gespeichert werden.
+* Die Seite zeigt im Formular einen Hinweisbalken („Vorschau von Version <n> (Stage) – Ihre Antworten werden nicht gespeichert“, `version` des Stage-Stands) und auf der Endseite statt „Ihre Antworten wurden gespeichert“ den Hinweis, dass in der Vorschau keine Ergebnisse gespeichert werden.
 * Das Absenden läuft wie bei echten Links durch alle Prüfungen (Token, Stage frisch laden, `survey_changed`, `validateFlowAnswers`), schreibt aber weder Antwort noch Aggregate noch `InvitationTokens`. Das erzwingt das Backend, nicht die Seite.
 * Das Fenster wird synchron im Klick geöffnet und erst nach dem Abruf des Tokens auf den Link gesetzt (sonst greift der Popup-Blocker). In Genesys läuft die App im iframe: Die Integration braucht dafür in den iframe-Sandbox-Optionen `allow-popups` (am besten auch `allow-popups-to-escape-sandbox`). Wird das Fenster trotzdem blockiert, zeigt die App den Link zum Anklicken.
 

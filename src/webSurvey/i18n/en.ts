@@ -16,7 +16,7 @@ export const en: WebSurveyMessages = {
 		fallback: "Your answers have been saved."
 	},
 	stagePreview: {
-		banner: "Preview (stage) – your answers will not be saved.",
+		banner: "Preview of version {version} (stage) – your answers will not be saved.",
 		notSaved: "No results are saved in preview mode."
 	},
 	errorSummary: {

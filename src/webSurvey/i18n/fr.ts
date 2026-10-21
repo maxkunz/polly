@@ -16,7 +16,7 @@ export const fr: WebSurveyMessages = {
 		fallback: "Vos réponses ont été enregistrées."
 	},
 	stagePreview: {
-		banner: "Aperçu (stage) – vos réponses ne seront pas enregistrées.",
+		banner: "Aperçu de la version {version} (stage) – vos réponses ne seront pas enregistrées.",
 		notSaved: "Aucun résultat n’est enregistré en mode aperçu."
 	},
 	errorSummary: {

@@ -314,7 +314,7 @@ if (props.previewLanguage) {
 		</section>
 
 		<template v-else-if="phase === 'form' && survey">
-			<p v-if="isStagePreview" class="web-preview-banner web-hint">{{ t("stagePreview.banner") }}</p>
+			<p v-if="isStagePreview" class="web-preview-banner web-hint">{{ t("stagePreview.banner", { version: survey.version }) }}</p>
 			<header class="flex flex-col gap-3">
 				<h1 id="page-heading" ref="pageHeading" tabindex="-1" class="web-heading">{{ survey.title }}</h1>
 				<p v-if="survey.greeting_prompt.trim()" class="web-intro whitespace-pre-line">{{ survey.greeting_prompt }}</p>

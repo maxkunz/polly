@@ -26,15 +26,42 @@ export function useWebPreview(surveyId: string) {
 			if (error.status === 429) return t("deployment.webPreviewErrors.throttled");
 			return `${t("deployment.webPreviewErrors.generic")}: ${error.message}`;
 		}
-		if (error instanceof Error && error.message) return `${t("deployment.webPreviewErrors.generic")}: ${error.message}`;
+		// Kein instanceof Error: Fehler aus dem Vorschaufenster stammen aus dessen Realm
+		const message = (error as { message?: unknown } | null)?.message;
+		if (typeof message === "string" && message) return `${t("deployment.webPreviewErrors.generic")}: ${message}`;
 		return t("deployment.webPreviewErrors.generic");
+	}
+
+	/** Schließt das Vorschaufenster; Fehler (z. B. Sandbox der Genesys-Einbettung) sind hier egal. */
+	function closeQuietly(previewWindow: Window | null): void {
+		try {
+			previewWindow?.close();
+		} catch {
+			// ignorieren
+		}
+	}
+
+	/**
+	 * Lädt den Link im vorab geöffneten Fenster. false, wenn das nicht geht (Fenster blockiert, geschlossen
+	 * oder die iframe-Sandbox von Genesys verbietet das Navigieren) – dann zeigt die App den Link zum Anklicken.
+	 */
+	function navigate(previewWindow: Window | null, url: string): boolean {
+		if (!previewWindow) return false;
+		try {
+			if (previewWindow.closed) return false;
+			previewWindow.location.replace(url);
+			return true;
+		} catch (error) {
+			console.warn("[webPreview] Vorschaufenster konnte nicht navigiert werden:", error);
+			closeQuietly(previewWindow);
+			return false;
+		}
 	}
 
 	async function openWebPreview(): Promise<void> {
 		if (isOpening.value) return;
 		// Fenster synchron im Klick öffnen: Nach dem (asynchronen) Abruf des Tokens würde der Popup-Blocker greifen
 		const previewWindow = window.open("about:blank", "_blank");
-		if (previewWindow) previewWindow.opener = null;
 
 		isOpening.value = true;
 		errorMessage.value = "";
@@ -43,16 +70,16 @@ export function useWebPreview(surveyId: string) {
 			// Zweite Absicherung neben dem deaktivierten Button; serverseitig prüft die Lambda selbst
 			await app.refreshRoles();
 			if (!app.canDeploy) {
-				previewWindow?.close();
+				closeQuietly(previewWindow);
 				errorMessage.value = t("deployment.webPreviewErrors.missingRole");
 				return;
 			}
 			const { jwt } = await createPreviewInvitation(surveyId);
 			const url = buildPreviewUrl(window.location.origin, jwt);
-			if (previewWindow && !previewWindow.closed) previewWindow.location.href = url;
-			else blockedUrl.value = url;
+			if (!navigate(previewWindow, url)) blockedUrl.value = url;
 		} catch (error) {
-			previewWindow?.close();
+			console.error("[webPreview] Webvorschau konnte nicht geöffnet werden:", error);
+			closeQuietly(previewWindow);
 			errorMessage.value = toErrorMessage(error);
 		} finally {
 			isOpening.value = false;
