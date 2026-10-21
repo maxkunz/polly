@@ -631,7 +631,16 @@ export const la: MessageSchema = {
 		}
 	},
 
+	features: {
+		web_survey: {
+			label: "Quaestiones interretiales",
+			description: "Quaestiones per nexum invitationis in navigatro, cum formis interretialibus et optionibus in editore."
+		}
+	},
 	settings: {
+		features: {
+			title: "Facultates activae"
+		},
 		setup: {
 			title: "Institutio",
 			empty: "Nulla metadata institutionis praesto sunt.",
@@ -717,6 +726,8 @@ export const la: MessageSchema = {
 			mappingDataTable: "Data Table assignationis agminum",
 			dataTableHint: "Nomina plena Data Tables. Si tabula eodem nomine iam exstat, assumitur et deinstituendo non delebitur.",
 			dataTableNamesCollide: "Duae Data Tables nomina diversa requirunt.",
+			features: "Facultates",
+			featuresHint: "Electio in linea __meta servatur et post installationem tantum in Data Table mutari potest.",
 			next: "Proximum"
 		},
 		step2: {
@@ -727,6 +738,8 @@ export const la: MessageSchema = {
 			oauthClient: "Client OAuth",
 			division: "Divisio",
 			newDivision: "Nova: {name}_division",
+			features: "Facultates",
+			noFeatures: "Nullae",
 			surveyDataTable: "Data Table percontationum",
 			mappingDataTable: "Data Table assignationis agminum",
 			back: "Redi",

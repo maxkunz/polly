@@ -1,6 +1,10 @@
+import { normalizeFeatures, type FeatureFlags } from "./features/featureFlags";
+
 export class Meta {
 	appTitle: string;
 	setup: Record<string, any> | null;
+	/** Feature Flags der Installation (siehe domain/features/featureFlags.ts) */
+	features: FeatureFlags;
 	private extras: Record<string, unknown>;
 
 	constructor(init?: Record<string, unknown>) {
@@ -9,10 +13,12 @@ export class Meta {
 			init?.setup && typeof init.setup === "object"
 				? (init.setup as Record<string, any>)
 				: null;
+		this.features = normalizeFeatures(init?.features);
 
 		const extras = { ...(init ?? {}) };
 		delete extras.appTitle;
 		delete extras.setup;
+		delete extras.features;
 		this.extras = extras;
 	}
 
@@ -27,7 +33,8 @@ export class Meta {
 		return {
 			...this.extras,
 			appTitle: this.appTitle,
-			setup: this.setup
+			setup: this.setup,
+			features: this.features
 		};
 	}
 }

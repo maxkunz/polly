@@ -138,6 +138,18 @@
                     />
                   </div>
                 </div>
+
+                <div class="form-section">
+                  <label class="section-label">{{ t("setup.step1.features") }}</label>
+                  <div v-for="flag in FEATURE_FLAGS" :key="flag.key" class="toggle-row">
+                    <ToggleSwitch v-model="selectedFeatures[flag.key]" :inputId="`feature_${flag.key}`" :disabled="isWorking" />
+                    <label :for="`feature_${flag.key}`" class="toggle-text">
+                      {{ t(`features.${flag.key}.label`) }}
+                      <span class="feature-desc">{{ t(`features.${flag.key}.description`) }}</span>
+                    </label>
+                  </div>
+                  <small class="feature-desc">{{ t("setup.step1.featuresHint") }}</small>
+                </div>
               </div>
 
               <div class="step-actions">
@@ -171,6 +183,11 @@
                 <div class="summary-card">
                   <div class="summary-title">{{ t("setup.step2.division") }}</div>
                   <div class="summary-value">{{ divisionSummary }}</div>
+                </div>
+
+                <div class="summary-card">
+                  <div class="summary-title">{{ t("setup.step2.features") }}</div>
+                  <div class="summary-value">{{ featuresSummary }}</div>
                 </div>
               </div>
 
@@ -208,6 +225,7 @@ import { getAllClients } from "@/services/genesys/oauth_backend";
 import { getListDivisions } from "@/services/genesys/division";
 import { evaluateSetupPermissions, loadSetupPermissionSnapshot, type SetupPermissionReport, type SetupPermissionSnapshot } from "@/services/setupPermissions";
 import { useAppStore } from "@/stores/appStore";
+import { FEATURE_FLAGS, defaultSetupFeatures, enabledFeatures } from "@/domain/features/featureFlags";
 
 const app = useAppStore();
 const toast = useToast();
@@ -240,6 +258,8 @@ const selectedIntegrationId = ref("");
 const selectedOAuthId = ref("");
 const selectedDivisionId = ref("");
 const useExistingDivision = ref(false);
+// Feature Flags: nur im Onboarding wählbar, danach nur noch direkt in der Data Table
+const selectedFeatures = ref(defaultSetupFeatures());
 const permissionSnapshot = ref<SetupPermissionSnapshot | null>(null);
 const permissionReport = ref<SetupPermissionReport | null>(null);
 const permissionToastShown = ref(false);
@@ -270,6 +290,11 @@ const selectedDivisionName = computed(() => {
 
 const divisionSummary = computed(() => {
   return useExistingDivision.value ? selectedDivisionName.value || "-" : t("setup.step2.newDivision", { name: projectName.value || "-" });
+});
+
+const featuresSummary = computed(() => {
+  const keys = enabledFeatures(selectedFeatures.value);
+  return keys.length ? keys.map(key => t(`features.${key}.label`)).join(", ") : t("setup.step2.noFeatures");
 });
 
 function handleDivisionToggle() {
@@ -358,6 +383,7 @@ async function handleStart() {
       selectedOAuthId.value,
       selectedDivisionId.value,
       selectedDivisionName.value,
+      selectedFeatures.value,
       addLog
     );
 
@@ -642,6 +668,12 @@ async function startApp() {
 
 .toggle-panel {
   margin-top: 6px;
+}
+
+.feature-desc {
+  display: block;
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .step-actions {

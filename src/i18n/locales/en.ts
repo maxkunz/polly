@@ -630,7 +630,16 @@ export const en: MessageSchema = {
 		}
 	},
 
+	features: {
+		web_survey: {
+			label: "Web surveys",
+			description: "Surveys via invitation link in the browser, including web designs and web settings in the editor."
+		}
+	},
 	settings: {
+		features: {
+			title: "Enabled features"
+		},
 		setup: {
 			title: "Setup",
 			empty: "No setup metadata available.",
@@ -716,6 +725,8 @@ export const en: MessageSchema = {
 			mappingDataTable: "Queue mapping data table",
 			dataTableHint: "Full names of the data tables. If a table with this name already exists, it is reused and not deleted on uninstall.",
 			dataTableNamesCollide: "The two data tables need different names.",
+			features: "Features",
+			featuresHint: "The selection is stored in the __meta row and can only be changed directly in the data table after installation.",
 			next: "Next"
 		},
 		step2: {
@@ -726,6 +737,8 @@ export const en: MessageSchema = {
 			oauthClient: "OAuth Client",
 			division: "Division",
 			newDivision: "New: {name}_division",
+			features: "Features",
+			noFeatures: "None",
 			surveyDataTable: "Survey data table",
 			mappingDataTable: "Queue mapping data table",
 			back: "Back",

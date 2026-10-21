@@ -630,7 +630,16 @@ export const fr: MessageSchema = {
 		}
 	},
 
+	features: {
+		web_survey: {
+			label: "Enquêtes web",
+			description: "Enquêtes via lien d'invitation dans le navigateur, y compris les designs web et les paramètres web dans l'éditeur."
+		}
+	},
 	settings: {
+		features: {
+			title: "Fonctionnalités activées"
+		},
 		setup: {
 			title: "Installation",
 			empty: "Aucune métadonnée d'installation disponible.",
@@ -716,6 +725,8 @@ export const fr: MessageSchema = {
 			mappingDataTable: "Data Table du mapping des Queues",
 			dataTableHint: "Noms complets des Data Tables. Si une table portant ce nom existe déjà, elle est reprise et n'est pas supprimée lors de la désinstallation.",
 			dataTableNamesCollide: "Les deux Data Tables doivent avoir des noms différents.",
+			features: "Fonctionnalités",
+			featuresHint: "La sélection est enregistrée dans la ligne __meta et ne peut être modifiée après l'installation que directement dans la Data Table.",
 			next: "Suivant"
 		},
 		step2: {
@@ -726,6 +737,8 @@ export const fr: MessageSchema = {
 			oauthClient: "Client OAuth",
 			division: "Division",
 			newDivision: "Nouvelle : {name}_division",
+			features: "Fonctionnalités",
+			noFeatures: "Aucune",
 			surveyDataTable: "Data Table des enquêtes",
 			mappingDataTable: "Data Table du mapping des Queues",
 			back: "Retour",

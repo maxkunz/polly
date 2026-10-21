@@ -628,7 +628,16 @@ export const de = {
 		}
 	},
 
+	features: {
+		web_survey: {
+			label: "Web-Umfragen",
+			description: "Umfragen per Einladungslink im Browser, inkl. Web-Designs und Web-Einstellungen im Editor."
+		}
+	},
 	settings: {
+		features: {
+			title: "Aktivierte Funktionen"
+		},
 		setup: {
 			title: "Setup",
 			empty: "Keine Setup-Metadaten verfügbar.",
@@ -714,6 +723,8 @@ export const de = {
 			mappingDataTable: "Data Table Queue-Mapping",
 			dataTableHint: "Vollständige Namen der Data Tables. Existiert bereits eine Tabelle mit diesem Namen, wird sie übernommen und beim Deinstallieren nicht gelöscht.",
 			dataTableNamesCollide: "Die beiden Data Tables brauchen unterschiedliche Namen.",
+			features: "Funktionen",
+			featuresHint: "Die Auswahl wird in der __meta-Zeile gespeichert und kann nach der Installation nur noch direkt in der Data Table geändert werden.",
 			next: "Weiter"
 		},
 		step2: {
@@ -724,6 +735,8 @@ export const de = {
 			oauthClient: "OAuth-Client",
 			division: "Division",
 			newDivision: "Neu: {name}_division",
+			features: "Funktionen",
+			noFeatures: "Keine",
 			surveyDataTable: "Data Table Umfragen",
 			mappingDataTable: "Data Table Queue-Mapping",
 			back: "Zurück",

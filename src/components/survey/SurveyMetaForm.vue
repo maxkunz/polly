@@ -14,6 +14,7 @@ import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";
 import FieldError from "@/components/ui/FieldError.vue";
 import { useWebThemes } from "@/composables/useWebThemes";
+import { useAppStore } from "@/stores/appStore";
 
 const props = withDefaults(
 	defineProps<{
@@ -40,6 +41,7 @@ const surveyBaseUrlId = surveyFieldIds.baseUrl;
 const surveyLanguageId = surveyFieldIds.language;
 const surveyWebThemeId = surveyFieldIds.webTheme;
 const { t } = useI18n();
+const app = useAppStore();
 const { hasError, errorId } = useFieldErrors();
 
 // Nach dem ersten Speichern ist der Name unveränderlich; vorher eine Vorschau aus dem Titel zeigen
@@ -53,7 +55,10 @@ const languageOptions = computed(() => SURVEY_LANGUAGES.map(value => ({ value, l
 
 // Web-Design: leer = Standard-Design des Mandanten (bzw. eingebautes Polly-Design)
 const { themes: webThemes, loaded: webThemesLoaded, loadError: webThemesError, defaultTheme, load: loadWebThemes } = useWebThemes();
-onMounted(() => void loadWebThemes());
+// Web-Felder nur mit Feature Flag web_survey; ohne Flag werden beim Speichern die Standardwerte gesetzt
+onMounted(() => {
+	if (app.webSurveyEnabled) void loadWebThemes();
+});
 
 // Nicht leer: PrimeVue Select zeigt bei "" den Platzhalter statt der passenden Option
 const TENANT_DEFAULT = "__default__";
@@ -179,7 +184,7 @@ function setWebTheme(value: string | null): void {
 					</div>
 				</div>
 
-				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+				<div v-if="app.webSurveyEnabled" class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					<div class="md:col-span-8">
 						<label :for="surveyBaseUrlId" class="block text-sm font-medium mb-1">
 							{{ t("surveyEditor.meta.baseUrl") }}
@@ -220,7 +225,7 @@ function setWebTheme(value: string | null): void {
 					</div>
 				</div>
 
-				<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+				<div v-if="app.webSurveyEnabled" class="grid grid-cols-1 md:grid-cols-12 gap-4">
 					<div class="md:col-span-8">
 						<div :id="`${surveyWebThemeId}_label`" class="block text-sm font-medium mb-1">
 							{{ t("surveyEditor.meta.webTheme") }}

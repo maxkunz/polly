@@ -390,7 +390,12 @@ export function validateQuestion(
 	return errors;
 }
 
-export function validateSurvey(survey: Survey): ValidationError[] {
+export interface ValidateSurveyOptions {
+	/** Feature Flag web_survey; ohne Flag sind die Web-Felder ausgeblendet und werden nicht geprüft */
+	webSurvey?: boolean;
+}
+
+export function validateSurvey(survey: Survey, { webSurvey = true }: ValidateSurveyOptions = {}): ValidationError[] {
 	const { t } = i18n.global;
 	const errors: ValidationError[] = [];
 
@@ -418,29 +423,31 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 		if (error) errors.push(error);
 	}
 
-	const baseUrlKey = baseUrlError(survey.base_url);
-	if (baseUrlKey) {
-		errors.push({
-			field: "survey.base_url",
-			message: t(`validation.${baseUrlKey}`, { placeholder: BASE_URL_TOKEN_PLACEHOLDER }),
-			fieldId: surveyFieldIds.baseUrl
-		});
-	}
+	if (webSurvey) {
+		const baseUrlKey = baseUrlError(survey.base_url);
+		if (baseUrlKey) {
+			errors.push({
+				field: "survey.base_url",
+				message: t(`validation.${baseUrlKey}`, { placeholder: BASE_URL_TOKEN_PLACEHOLDER }),
+				fieldId: surveyFieldIds.baseUrl
+			});
+		}
 
-	if (survey.language !== undefined && !(SURVEY_LANGUAGES as readonly string[]).includes(survey.language)) {
-		errors.push({
-			field: "survey.language",
-			message: t("validation.languageInvalid"),
-			fieldId: surveyFieldIds.language
-		});
-	}
+		if (survey.language !== undefined && !(SURVEY_LANGUAGES as readonly string[]).includes(survey.language)) {
+			errors.push({
+				field: "survey.language",
+				message: t("validation.languageInvalid"),
+				fieldId: surveyFieldIds.language
+			});
+		}
 
-	if (survey.web_theme_id !== undefined && !isWebThemeId(survey.web_theme_id)) {
-		errors.push({
-			field: "survey.web_theme_id",
-			message: t("validation.webThemeInvalid"),
-			fieldId: surveyFieldIds.webTheme
-		});
+		if (survey.web_theme_id !== undefined && !isWebThemeId(survey.web_theme_id)) {
+			errors.push({
+				field: "survey.web_theme_id",
+				message: t("validation.webThemeInvalid"),
+				fieldId: surveyFieldIds.webTheme
+			});
+		}
 	}
 
 	const totalQuestions = countAllQuestions(survey.questions || []);

@@ -102,7 +102,7 @@ const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions
 					@click="emit('deploy')"
 				/>
 			</span>
-			<span v-if="!isNew" v-tooltip.top="deployTooltip">
+			<span v-if="!isNew && app.webSurveyEnabled" v-tooltip.top="deployTooltip">
 				<Button
 					size="small"
 					severity="info"

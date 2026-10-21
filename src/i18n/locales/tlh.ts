@@ -631,7 +631,16 @@ export const tlh: MessageSchema = {
 		}
 	},
 
+	features: {
+		web_survey: {
+			label: "Web QIn",
+			description: "Web QIn: rI'meH rarwI' 'ej Web HaSta mIw."
+		}
+	},
 	settings: {
+		features: {
+			title: "laH chu'lu'pu'bogh"
+		},
 		setup: {
 			title: "jommeH",
 			empty: "jommeH De' tu'lu'be'.",
@@ -717,6 +726,8 @@ export const tlh: MessageSchema = {
 			mappingDataTable: "tlhegh nobmeH Data Table",
 			dataTableHint: "Data Tables pongmey naQ. pong vam ghajbogh Data Table tu'lu'chugh, lo'lu' 'ej jomHa'lu'DI' Qaw'lu'be'.",
 			dataTableNamesCollide: "cha' Data Tables pongmey pIm poQlu'.",
+			features: "laH",
+			featuresHint: "__meta tlheghDaq wIvlu'pu'bogh pollu'. jom pIq Data TableDaq neH choHlu'laH.",
 			next: "veb"
 		},
 		step2: {
@@ -727,6 +738,8 @@ export const tlh: MessageSchema = {
 			oauthClient: "OAuth De'wI'",
 			division: "Sep",
 			newDivision: "chu': {name}_division",
+			features: "laH",
+			noFeatures: "pagh",
 			surveyDataTable: "yu'ghItlh Data Table",
 			mappingDataTable: "tlhegh nobmeH Data Table",
 			back: "yIchegh",

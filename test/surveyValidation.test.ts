@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { FollowUpRule, QuestionOptions, Survey, SurveyQuestion } from "../src/domain/survey/surveyTypes";
+import { resetWebSettings } from "../src/domain/survey/surveyTypes";
 import { validateSurvey } from "../src/domain/survey/surveyValidator";
 import { questionFieldIds, surveyFieldIds } from "../src/domain/survey/surveyFieldIds";
 
@@ -172,6 +173,20 @@ test("Min/Max-Labels bei rating und nps sind auf 100 Zeichen begrenzt", () => {
 		fieldIdsOf(survey([question({ type: "rating", options: { min_value: 1, max_value: 5, max_label: tooLong } })])),
 		[questionFieldIds.maxLabel(Q)]
 	);
+});
+
+test("Ohne Feature Flag web_survey werden die Web-Felder nicht geprüft", () => {
+	const s = { ...survey([question({})]), base_url: "http://x", language: "xx" as never, web_theme_id: "default" };
+	assert.deepEqual(validateSurvey(s, { webSurvey: false }).map(e => e.fieldId), []);
+	assert.deepEqual(validateSurvey(s).map(e => e.fieldId), [surveyFieldIds.baseUrl, surveyFieldIds.language, surveyFieldIds.webTheme]);
+});
+
+test("resetWebSettings setzt die Standardwerte einer neuen Umfrage", () => {
+	const s: Survey = { ...survey([question({})]), base_url: "https://example.com/{token}", language: "fr", web_theme_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" };
+	resetWebSettings(s);
+	assert.equal(s.base_url, "");
+	assert.equal(s.language, "de");
+	assert.equal("web_theme_id" in s, false);
 });
 
 console.log(`\n${passed} Tests bestanden`);

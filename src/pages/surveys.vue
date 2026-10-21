@@ -193,7 +193,7 @@ const isReportView = computed(
 );
 
 const isInviteView = computed(
-	() => route.query.invite === "1" && !!selectedSurveyId.value
+	() => route.query.invite === "1" && !!selectedSurveyId.value && app.webSurveyEnabled
 );
 
 const selectedSurvey = computed(

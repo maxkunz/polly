@@ -4,6 +4,8 @@ Zusätzlich zu den Kanälen Telefon und Chat (Genesys Architect) gibt es den Kan
 
 Zielniveau der Umfrageseite: **WCAG 2.2 AA**.
 
+In der App ist der Web-Kanal nur sichtbar, wenn das Feature Flag `web_survey` aktiv ist (siehe [feature_flags.md](feature_flags.md)).
+
 ## Entscheidungen im Überblick
 
 1. **Signatur im Backend:** `POST /api/invitations` signiert die Einladungen mit HS256. Der Schlüssel liegt in AWS Secrets Manager, der JWT-Header enthält `kid` (Rotation).

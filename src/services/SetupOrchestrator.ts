@@ -14,6 +14,7 @@ import { POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING } from "@/con
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 import inboundFlowTemplate from "@/templates/genesys/inboundFlowStructure.yaml?raw";
+import { normalizeFeatures, type FeatureFlags } from "@/domain/features/featureFlags";
 
 type FlowSetupResource = {
   id: string;
@@ -72,6 +73,7 @@ export async function runFullProvisioning(
   oauthFrontendId: string,
   divisionId: string,
   divisionName: string,
+  features: FeatureFlags,
   onProgress: (msg: string) => void
 ): Promise<{
   integrationUrl: string;
@@ -138,6 +140,9 @@ export async function runFullProvisioning(
     botFlow: { id: "", name: names.botFlow },
     inboundFlow: { id: "", name: names.inboundFlow },
   } satisfies SetupMeta;
+  // Feature Flags werden nur hier gesetzt, danach nur noch direkt in der Data Table
+  const selectedFeatures = normalizeFeatures(features);
+  app.domain.meta.features = selectedFeatures;
   const setupState = app.domain.meta.setup as SetupMeta;
 
   try {
@@ -184,7 +189,7 @@ export async function runFullProvisioning(
     setupState.dataTable.id = datatableId;
 
     await addDataTableRow(datatableId, buildEmptySurveyRow("__lock"));
-    await addDataTableRow(datatableId, buildMetaRow({ appTitle: projectTag, setup: null }));
+    await addDataTableRow(datatableId, buildMetaRow({ appTitle: projectTag, setup: null, features: selectedFeatures }));
     await addDataTableRow(datatableId, {
       ...buildEmptySurveyRow("survey_list"),
       Draft: "[]",
@@ -363,7 +368,7 @@ export async function runFullProvisioning(
     setupState.status = "installed";
     setupState.installedAt = new Date().toISOString();
 
-    await updateDataTableRow(datatableId, "__meta", buildMetaRow({ appTitle: projectTag, setup: setupState }));
+    await updateDataTableRow(datatableId, "__meta", buildMetaRow({ appTitle: projectTag, setup: setupState, features: selectedFeatures }));
     onProgress("Setup metadata stored in __meta.");
     onProgress("Installation complete.");
 

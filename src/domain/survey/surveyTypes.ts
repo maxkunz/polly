@@ -278,6 +278,16 @@ export function createEmptySurvey(): Survey {
 	};
 }
 
+/**
+ * Setzt die Web-Felder auf die Standardwerte wie bei createEmptySurvey (Feature Flag web_survey aus).
+ * Ändert die Umfrage direkt.
+ */
+export function resetWebSettings(survey: Survey): void {
+	survey.base_url = "";
+	survey.language = DEFAULT_SURVEY_LANGUAGE;
+	delete survey.web_theme_id;
+}
+
 export function cloneSurveyQuestion(source: SurveyQuestion): SurveyQuestion {
 	const newId = crypto.randomUUID();
 	let clonedOptions: QuestionOptions | undefined;
