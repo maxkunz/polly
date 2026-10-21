@@ -61,11 +61,11 @@ if [ -z "$GENESYS_TOKEN" ]; then
   exit 1
 fi
 
-# IDs für den Test
+# IDs für den Test. SURVEY_ID muss in der Data Table DIESER Installation existieren, sonst liefern [1]–[5] 404.
 CONVERSATION_ID="test-conv-$(date +%s)"
-SURVEY_ID="1718e427-0661-4716-95f5-4b1e4bc0233a"
-SURVEY_NAME="mini_1718e427"
-SURVEY_VERSION=5
+SURVEY_ID="${SURVEY_ID:-1718e427-0661-4716-95f5-4b1e4bc0233a}"
+SURVEY_NAME="${SURVEY_NAME:-mini_1718e427}"
+SURVEY_VERSION="${SURVEY_VERSION:-5}"
 
 BASE_HEADERS=(
   -H "Authorization: Bearer ${GENESYS_TOKEN}"
@@ -82,7 +82,7 @@ echo ""
 # 1. Erste Antwort senden: yes_no Frage
 # -------------------------------------------------------------------
 echo ">>> [1] POST /survey-responses – yes_no Antwort"
-curl -s -X POST "${API_URL}/survey-responses" \
+curl -v -X POST "${API_URL}/survey-responses" \
   "${BASE_HEADERS[@]}" \
   -d "{
     \"conversationId\": \"${CONVERSATION_ID}\",
@@ -290,9 +290,9 @@ curl -s -X POST "${API_URL}/survey-responses" \
 echo ""
 
 # -------------------------------------------------------------------
-# 16. Fehlerfall: kein Auth-Token (401 erwartet)
+# 16. Fehlerfall: ungültiges Auth-Token (401 erwartet)
 # -------------------------------------------------------------------
-echo ">>> [15] POST /survey-responses – invalid Token (401 erwartet)"
+echo ">>> [16] POST /survey-responses – invalid Token (401 erwartet)"
 curl -s -X POST "${API_URL}/survey-responses" \
   -H "Authorization: Bearer invalidTokenhahahahaxxor" \
   -H "x-genesys-region: ${GENESYS_REGION}" \
@@ -304,6 +304,25 @@ curl -s -X POST "${API_URL}/survey-responses" \
     \"questionType\": \"nps\",
     \"value\": 5
   }" | jq .
+echo ""
+
+# -------------------------------------------------------------------
+# 17. Fehlerfall: Umfrage existiert nicht in diesem Mandanten (404 erwartet)
+# -------------------------------------------------------------------
+UNKNOWN_SURVEY_ID="$(uuidgen | tr 'A-Z' 'a-z')"
+echo ">>> [17] POST /survey-responses – unbekannte Umfrage ${UNKNOWN_SURVEY_ID} (erwartet 404 survey_not_found, nichts gespeichert)"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/survey-responses" \
+  "${BASE_HEADERS[@]}" \
+  -d "{\"conversationId\": \"${CONVERSATION_ID}-unknown\", \"surveyId\": \"${UNKNOWN_SURVEY_ID}\", \"questionName\": \"q\", \"questionType\": \"nps\", \"value\": 5}"
+echo ""
+
+# -------------------------------------------------------------------
+# 18. Fehlerfall: surveyId ist keine UUID (400 erwartet)
+# -------------------------------------------------------------------
+echo ">>> [18] POST /survey-responses – surveyId keine UUID (erwartet 400)"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/survey-responses" \
+  "${BASE_HEADERS[@]}" \
+  -d "{\"conversationId\": \"${CONVERSATION_ID}-baduuid\", \"surveyId\": \"kein-uuid\", \"questionName\": \"q\", \"questionType\": \"nps\", \"value\": 5}"
 echo ""
 
 # -------------------------------------------------------------------
