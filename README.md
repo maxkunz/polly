@@ -7,7 +7,6 @@ A Genesys Cloud app ("Polly") for post-call surveys:
 - publishing surveys to a Genesys Data Table, played back by an Architect flow
 - a backend that stores survey responses in DynamoDB and exports them as CSV
 
-
 ## Overview
 
 - surveys are edited in the frontend (draft) and deployed to stage/prod
