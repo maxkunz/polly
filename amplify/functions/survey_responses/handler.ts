@@ -7,6 +7,8 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { resolveTenantContext } from "../shared/tenant_auth";
 import { isSurveyBeingDeleted, updateSurveyAggregate } from "../shared/survey_results";
+import { checkSurveyExists } from "../shared/genesys_survey_check";
+import { isValidSurveyId } from "../shared/survey_id";
 
 type AnyApiGwEvent = any;
 type AnyResult = { statusCode: number; headers: Record<string, string>; body: string };
@@ -175,9 +177,33 @@ async function submitSurveyResponse(event: AnyApiGwEvent, tenantId: string): Pro
     return jsonResponse(400, { message: "questionName or isCompleted: true is required" });
   }
 
-  // Antworten zu gelöschten Umfragen ignorieren (200, damit der Flow nicht in den Fehlerpfad läuft)
+  if (!isValidSurveyId(surveyId)) {
+    return jsonResponse(400, { message: "surveyId must be a UUID" });
+  }
+
+  // Antworten zu gelöschten Umfragen ignorieren (200, damit der Flow nicht in den Fehlerpfad läuft).
+  // Vor der Existenzprüfung, denn nach dem Löschen fehlt die Zeile in der Data Table.
   if (await isSurveyBeingDeleted(tenantId, surveyId)) {
     return jsonResponse(200, { message: "Survey deleted, answer ignored", ignored: true, session: {} });
+  }
+
+  // Nur Umfragen aus der Data Table des Mandanten; ist das Ergebnis unklar, wird trotzdem gespeichert
+  const existence = await checkSurveyExists(tenantId, surveyId);
+  if (existence.status === "absent") {
+    return jsonResponse(404, { message: "Survey not found", code: "survey_not_found" });
+  }
+  if (existence.status === "error" && !existence.cached) {
+    if (existence.kind === "config") {
+      // Fester Text für einen CloudWatch-Alarm: die Prüfung ist für diesen Mandanten wirkungslos
+      console.error("[survey_responses] SURVEY_CHECK_CONFIG_ERROR", { tenantId, surveyId, reason: existence.reason });
+    } else {
+      console.warn("[survey_responses] survey existence check failed, accepting answer", {
+        tenantId,
+        surveyId,
+        reason: existence.reason,
+        throttled: existence.throttled ?? false,
+      });
+    }
   }
 
   const now = new Date().toISOString();

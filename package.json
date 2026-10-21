@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "tsx test/surveyFlowTranslator.test.ts && tsx test/surveyResponsesExport.test.ts && tsx test/surveyDeletion.test.ts && tsx test/genesysRegion.test.ts && tsx test/flowPayloadBudget.test.ts && tsx test/ttsTextLimit.test.ts && tsx test/technicalName.test.ts && tsx test/surveyValidation.test.ts && tsx test/surveyRow.test.ts && tsx test/invitationToken.test.ts && tsx test/flowNavigation.test.ts && tsx test/webSurveyBackend.test.ts && tsx test/invitationLinks.test.ts && tsx test/webSurveyPage.test.ts && tsx test/webTheme.test.ts && tsx test/featureFlags.test.ts"
+    "test": "tsx test/surveyFlowTranslator.test.ts && tsx test/surveyResponsesExport.test.ts && tsx test/surveyDeletion.test.ts && tsx test/genesysRegion.test.ts && tsx test/flowPayloadBudget.test.ts && tsx test/ttsTextLimit.test.ts && tsx test/technicalName.test.ts && tsx test/surveyValidation.test.ts && tsx test/surveyRow.test.ts && tsx test/invitationToken.test.ts && tsx test/flowNavigation.test.ts && tsx test/webSurveyBackend.test.ts && tsx test/invitationLinks.test.ts && tsx test/webSurveyPage.test.ts && tsx test/webTheme.test.ts && tsx test/featureFlags.test.ts && tsx test/surveyExistence.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.975.0",

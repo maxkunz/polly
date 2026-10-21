@@ -182,6 +182,33 @@ Content-Type: application/json
 }
 ```
 
+#### Prüfung der Umfrage
+
+Antworten werden nur zu Umfragen des eigenen Mandanten gespeichert. Die Reihenfolge der Prüfungen:
+
+1. `surveyId` muss eine UUID sein, sonst `400`.
+2. Läuft für die Umfrage ein Lösch-Job, kommt `200 { "ignored": true }` zurück und es wird nichts gespeichert. Der Flow läuft so nicht in den Fehlerpfad.
+3. Die Zeile `survey_<id>` muss in der Umfrage-Data-Table des Mandanten existieren. Geprüft wird nur die Zeile, nicht der Prod-Stand, weil der Flow über die Test-Rufnummer `Stage` abspielt. Fehlt die Zeile, kommt `404` und es wird nichts gespeichert.
+
+Das Backend liest die Zeile mit den Client Credentials des Mandanten und merkt sich das Ergebnis pro Lambda-Instanz, um das Genesys-Rate-Limit zu schonen: Umfrage vorhanden 30 min, nicht vorhanden 5 min, Prüfung fehlgeschlagen 60 s. Eine gerade gelöschte Umfrage kann daher noch bis zu 30 min Antworten annehmen; dagegen schützt der Lösch-Job aus Schritt 2.
+
+Ist das Ergebnis unklar, wird die Antwort **trotzdem gespeichert** (fail-open), damit keine echten Antworten aus laufenden Anrufen verloren gehen:
+* Vorübergehende Fehler (Genesys 429/5xx, Timeout, Netzwerk) werden als Warnung geloggt.
+* Konfigurationsfehler (Credentials oder `surveyDataTableId` fehlen im Mandanteneintrag, Token-Abruf abgelehnt, 401/403 auf die Zeile) werden als Fehler mit dem festen Text `SURVEY_CHECK_CONFIG_ERROR` geloggt. In diesem Zustand ist die Prüfung für den Mandanten wirkungslos. Empfehlung: in CloudWatch einen Metric Filter auf `SURVEY_CHECK_CONFIG_ERROR` in der Log-Gruppe der Lambda `survey_responses` mit Alarm einrichten.
+
+Ein Fehler wird pro Instanz nur einmal je Cache-Dauer geloggt.
+
+#### Fehlerantworten
+
+| Status | Body | Ursache |
+|---|---|---|
+| `400` | `{ "message": "Invalid JSON body" }` | Body ist kein JSON. |
+| `400` | `{ "message": "conversationId and surveyId are required" }` | Pflichtfeld fehlt. |
+| `400` | `{ "message": "questionName or isCompleted: true is required" }` | Weder Antwort noch Abschluss. |
+| `400` | `{ "message": "surveyId must be a UUID" }` | `surveyId` ist keine UUID. |
+| `401` | `{ "message": "…" }` | Token fehlt oder ist ungültig, Mandant unbekannt oder nicht freigegeben. |
+| `404` | `{ "message": "Survey not found", "code": "survey_not_found" }` | Umfrage existiert nicht in der Data Table des Mandanten. |
+
 ---
 
 ### 4.2 GET `/survey-responses/aggregates`

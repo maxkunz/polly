@@ -15,6 +15,9 @@ import { parseProdSurvey } from "./web_survey_format";
  *
  * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage, `loadProjectTag` den Projekt-Tag
  * der Installation aus der Zeile `__meta`.
+ *
+ * Antworten aus dem Flow: `checkSurveyExists` prüft (mit Cache), dass die Zeile `survey_<id>` in der
+ * Data Table des Mandanten existiert, damit keine Antworten zu fremden oder erfundenen Umfragen gespeichert werden.
  */
 
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
@@ -147,6 +150,92 @@ export async function assertSurveyAbsent(
   }
 
   return { status: "absent" };
+}
+
+// ---------------------------------------------------------------------------
+// Existenzprüfung für Antworten aus dem Flow
+// ---------------------------------------------------------------------------
+
+export type SurveyExistenceResult =
+  | { status: "exists" }
+  | { status: "absent" }
+  /** `config` = Credentials/Data Table fehlen, Token-Abruf abgelehnt oder 401/403; sonst `transient`. */
+  | { status: "error"; kind: "transient" | "config"; reason: string; throttled?: boolean };
+
+const SURVEY_EXISTS_TTL_MS = 30 * 60 * 1000;
+const SURVEY_ABSENT_TTL_MS = 5 * 60 * 1000;
+// Auch unklare Ergebnisse kurz merken, damit eine Störung bei Genesys nicht mit jeder Antwort weiter angefragt wird
+const SURVEY_CHECK_ERROR_TTL_MS = 60 * 1000;
+const SURVEY_EXISTENCE_CACHE_MAX = 1000;
+
+const surveyExistenceCache = new Map<string, { result: SurveyExistenceResult; expiresAt: number }>();
+
+const CONFIG_ERROR_HTTP_STATUS = new Set([400, 401, 403]);
+
+function existenceError(reason: string, httpStatus?: number): SurveyExistenceResult {
+  return {
+    status: "error",
+    kind: httpStatus !== undefined && CONFIG_ERROR_HTTP_STATUS.has(httpStatus) ? "config" : "transient",
+    reason,
+    ...(httpStatus === 429 ? { throttled: true } : {}),
+  };
+}
+
+async function querySurveyExists(tenantId: string, surveyId: string, credentials?: TenantCredentials): Promise<SurveyExistenceResult> {
+  let tenantCredentials: TenantCredentials | undefined;
+  try {
+    tenantCredentials = credentials ?? (await loadTenantCredentials(tenantId));
+  } catch (err: any) {
+    return existenceError(`Loading tenant credentials failed: ${err?.message ?? "unknown error"}`);
+  }
+  if (!tenantCredentials) return { status: "error", kind: "config", reason: "No Genesys credentials for tenant" };
+  if (!tenantCredentials.surveyDataTableId) {
+    return { status: "error", kind: "config", reason: "No survey data table registered for tenant" };
+  }
+
+  try {
+    const access = await getSurveyTableAccess(tenantCredentials);
+    const row = await getRow(access.region, access.token, access.dataTableId, `survey_${surveyId}`);
+    if (row.status === 200) return { status: "exists" };
+    if (row.status === 404) return { status: "absent" };
+    return existenceError(`Survey row HTTP ${row.status}`, row.status);
+  } catch (err: any) {
+    return existenceError(err?.message ?? "request failed", err?.status);
+  }
+}
+
+/**
+ * Prüft, ob die Zeile `survey_<id>` in der Umfrage-Data-Table des Mandanten existiert (Stage oder Prod egal).
+ * Ergebnisse werden pro Lambda-Instanz gecacht: vorhanden 30 min, nicht vorhanden 5 min, Fehler 60 s.
+ * `cached` zeigt, ob das Ergebnis aus dem Cache stammt (z. B. um Fehler nur einmal zu loggen).
+ */
+export async function checkSurveyExists(
+  tenantId: string,
+  surveyId: string,
+  credentials?: TenantCredentials
+): Promise<SurveyExistenceResult & { cached: boolean }> {
+  const cacheKey = `${tenantId}:${surveyId}`;
+  const now = Date.now();
+  const cached = surveyExistenceCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return { ...cached.result, cached: true };
+
+  const result = await querySurveyExists(tenantId, surveyId, credentials);
+  const ttl =
+    result.status === "exists" ? SURVEY_EXISTS_TTL_MS : result.status === "absent" ? SURVEY_ABSENT_TTL_MS : SURVEY_CHECK_ERROR_TTL_MS;
+
+  // Abgelaufene Einträge verwerfen, Größe begrenzen
+  const storedAt = Date.now();
+  if (surveyExistenceCache.size >= SURVEY_EXISTENCE_CACHE_MAX) {
+    for (const [k, v] of surveyExistenceCache) if (v.expiresAt <= storedAt) surveyExistenceCache.delete(k);
+    if (surveyExistenceCache.size >= SURVEY_EXISTENCE_CACHE_MAX) surveyExistenceCache.clear();
+  }
+  surveyExistenceCache.set(cacheKey, { result, expiresAt: storedAt + ttl });
+  return { ...result, cached: false };
+}
+
+/** Nur für Tests. */
+export function clearSurveyExistenceCache(): void {
+  surveyExistenceCache.clear();
 }
 
 // ---------------------------------------------------------------------------
