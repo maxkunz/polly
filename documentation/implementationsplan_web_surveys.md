@@ -49,6 +49,18 @@ Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz no
     - Einbettung per iframe mit dem Snippet aus `polly_web.md` (inkl. Höhenanpassung).
     - Lokal: `npm run dev`, dann `http://localhost:5173/s/<jwt>` (Backend über den Dev-Proxy).
 - [ ] M6 Schritt 5 – Web-Designs (Schrift, Textstile pro Rolle, Farben pro Mandant; Wahl pro Umfrage). Plan und Fortschritt (M6a–M6d umgesetzt, M6e Ende-zu-Ende-Test offen): `implementationsplan_web_designs.md`
+- [x] M7 Webvorschau des Stage-Stands  (2026-10-21)
+  - Umsetzung:
+    - Button „Webvorschau“ in der Deployment-Ansicht (nur mit `web_survey`; aktiv mit `polly_deploy` und Stage-Stand). `POST /api/invitations/preview` signiert pro Klick einen Token mit `stage: true`, `multi: true`, 7 Tage gültig (`PREVIEW_TOKEN_TTL_SECONDS` in `invitationLinks.ts`, gemeinsam mit der Lambda).
+    - `verifyInvitation` lehnt Stage-Tokens ohne `exp` oder mit mehr als 7 Tagen Laufzeit ab.
+    - `loadFlowSurvey(…, "Prod" | "Stage")` in `genesys_survey_check.ts`, `loadProdSurvey` ist ein Wrapper davon. `web_survey` liest bei `stage` die Spalte `Stage` (eigener Cache-Eintrag), meldet `preview: true` und speichert beim Absenden nach allen Prüfungen nichts.
+    - Seite: Hinweisbalken im Formular, Endseite mit „In der Vorschau werden keine Ergebnisse gespeichert“.
+    - Link immer `<polly-origin>/s/<jwt>`, nicht die Basis-URL.
+  - Testbar nach dem Deploy:
+    - Umfrage nach Stage deployen, „Webvorschau“ → neuer Tab mit dem Stage-Stand und Hinweisbalken. Absenden → Endseite mit Hinweis; im Report-CSV erscheint keine Antwort.
+    - Ohne Stage-Stand bzw. ohne `polly_deploy` ist der Button gesperrt (API: `409 no_stage` bzw. `403`). Ohne Feature Flag `web_survey` fehlt er.
+    - Blockiert der Browser bzw. die iframe-Sandbox von Genesys das Fenster, zeigt die App den Link zum Anklicken. Für das automatische Öffnen braucht die Integration `allow-popups` in den Sandbox-Optionen.
+    - `tools/survey_responses.sh` prüft `POST /invitations/preview` und das Absenden ohne Speichern.
 
 
 ## Context

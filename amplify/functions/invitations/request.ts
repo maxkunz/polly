@@ -2,7 +2,7 @@ import { INVITATION_COUNT_MAX, INVITATION_COUNT_MIN } from "../../../src/domain/
 import { isValidSurveyId } from "../shared/survey_id";
 
 /**
- * Prüfung des Request-Bodys von `POST /invitations` (rein, ohne AWS; siehe `test/webSurveyBackend.test.ts`).
+ * Prüfung der Request-Bodys von `POST /invitations` und `POST /invitations/preview` (rein, ohne AWS; siehe `test/webSurveyBackend.test.ts`).
  * Format: `documentation/polly_web.md`.
  */
 
@@ -51,4 +51,20 @@ export function parseInvitationRequest(body: unknown, nowSeconds: number): Invit
     return { ok: true, request: { surveyId, count, multi, exp } };
   }
   return { ok: true, request: { surveyId, count, multi } };
+}
+
+/** Body von `POST /invitations/preview`: nur die Umfrage; Laufzeit und Mehrfachnutzung setzt der Server. */
+export type PreviewRequestResult =
+  | { ok: true; surveyId: string }
+  | { ok: false; message: string };
+
+export function parsePreviewRequest(body: unknown): PreviewRequestResult {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { ok: false, message: "Body must be a JSON object" };
+  }
+  const { surveyId } = body as Record<string, unknown>;
+  if (!isValidSurveyId(surveyId)) {
+    return { ok: false, message: "surveyId must be a valid UUID" };
+  }
+  return { ok: true, surveyId };
 }

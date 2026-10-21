@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { PREVIEW_TOKEN_TTL_SECONDS } from "../../../src/domain/survey/invitationLinks";
 
 /**
  * Einladungslinks des Web-Kanals: JWT mit HS256, siehe `documentation/polly_web.md`.
@@ -21,6 +22,11 @@ export type InvitationClaims = {
   iat: number;
   /** Optionales Ablaufdatum der Einladung (Epoch-Sekunden); fehlt es, läuft sie nie ab. */
   exp?: number;
+  /**
+   * Webvorschau: zeigt den Stage-Stand statt Prod, Antworten werden nicht gespeichert.
+   * Nur `true` wird übernommen; ein Stage-Token braucht `exp` mit höchstens `PREVIEW_TOKEN_TTL_SECONDS` nach `iat`.
+   */
+  stage?: true;
 };
 
 /** `invalid`: Format, Signatur, `alg`, `kid` oder Claims falsch. `expired`: `exp` erreicht. */
@@ -87,11 +93,22 @@ function isEpochSeconds(value: unknown): value is number {
 /** Prüft die Pflicht-Claims und gibt nur die bekannten Felder zurück. */
 function parseClaims(payload: unknown): InvitationClaims | null {
   if (!isRecord(payload)) return null;
-  const { tenant_id, survey_id, token_id, multi, iat, exp } = payload;
+  const { tenant_id, survey_id, token_id, multi, iat, exp, stage } = payload;
   if (!isNonEmptyString(tenant_id) || !isNonEmptyString(survey_id) || !isNonEmptyString(token_id)) return null;
   if (typeof multi !== "boolean" || !isEpochSeconds(iat)) return null;
   if (exp !== undefined && !isEpochSeconds(exp)) return null;
-  return { tenant_id, survey_id, token_id, multi, iat, ...(exp !== undefined ? { exp } : {}) };
+  if (stage !== undefined && typeof stage !== "boolean") return null;
+  // Vorschau-Links laufen immer ab, damit ein Stage-Link nicht unbegrenzt weiterverwendet werden kann
+  if (stage === true && (exp === undefined || exp - iat > PREVIEW_TOKEN_TTL_SECONDS)) return null;
+  return {
+    tenant_id,
+    survey_id,
+    token_id,
+    multi,
+    iat,
+    ...(exp !== undefined ? { exp } : {}),
+    ...(stage === true ? { stage: true as const } : {})
+  };
 }
 
 /**

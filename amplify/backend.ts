@@ -477,10 +477,18 @@ invitationsLambda.addEnvironment(
 );
 attachTenantAuth(invitationsLambda);
 
+const invitationsInteg = new integrations.HttpLambdaIntegration("InvitationsInteg", invitationsLambda);
+
 httpApi.addRoutes({
   path: "/invitations",
   methods: [apigw.HttpMethod.POST],
-  integration: new integrations.HttpLambdaIntegration("InvitationsInteg", invitationsLambda),
+  integration: invitationsInteg,
+});
+// Webvorschau des Stage-Stands (Token mit stage: true, 7 Tage gültig)
+httpApi.addRoutes({
+  path: "/invitations/preview",
+  methods: [apigw.HttpMethod.POST],
+  integration: invitationsInteg,
 });
 
 const webSurveyLambda = backend.webSurvey.resources.lambda as lambda.Function;

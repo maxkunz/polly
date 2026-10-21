@@ -389,5 +389,46 @@ else
   echo "WEB_THEME_WRITE nicht gesetzt – Anlegen/Löschen eines Test-Designs übersprungen."
 fi
 
+# -------------------------------------------------------------------
+# Webvorschau des Stage-Stands (POST /invitations/preview, braucht polly_deploy)
+# Optional: PREVIEW_SURVEY_ID = Umfrage mit Stage-Stand (Default: SURVEY_ID)
+# -------------------------------------------------------------------
+PREVIEW_SURVEY_ID="${PREVIEW_SURVEY_ID:-$SURVEY_ID}"
+
+echo ">>> [P1] POST /invitations/preview ohne Token (erwartet 401)"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/invitations/preview" \
+  -H "Content-Type: application/json" -d "{\"surveyId\":\"${PREVIEW_SURVEY_ID}\"}"
+echo ""
+
+echo ">>> [P2] POST /invitations/preview mit ungültiger surveyId (erwartet 400 invalid_request)"
+curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/invitations/preview" "${BASE_HEADERS[@]}" -d '{"surveyId":"kein-uuid"}'
+echo ""
+
+echo ">>> [P3] POST /invitations/preview (erwartet 200 mit jwt und exp = jetzt + 7 Tage; 409 no_stage ohne Stage-Stand)"
+PREVIEW_RESPONSE="$(curl -s -X POST "${API_URL}/invitations/preview" "${BASE_HEADERS[@]}" -d "{\"surveyId\":\"${PREVIEW_SURVEY_ID}\"}")"
+echo "${PREVIEW_RESPONSE}" | jq .
+PREVIEW_JWT="$(echo "${PREVIEW_RESPONSE}" | jq -r '.jwt // empty')"
+echo ""
+
+if [ -n "$PREVIEW_JWT" ]; then
+  echo ">>> [P4] GET /web-survey mit Vorschau-Token (erwartet status ok, preview: true, Stage-Stand)"
+  PREVIEW_SURVEY="$(curl -s "${API_URL}/web-survey?token=${PREVIEW_JWT}")"
+  echo "${PREVIEW_SURVEY}" | jq '{status, preview, version: .survey.version, title: .survey.title}'
+  PREVIEW_VERSION="$(echo "${PREVIEW_SURVEY}" | jq -r '.survey.version // 0')"
+  echo ""
+
+  echo ">>> [P5] POST /web-survey/submit mit falscher surveyVersion (erwartet 409 survey_changed mit preview: true)"
+  curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/web-survey/submit" \
+    -H "Content-Type: application/json" -d "{\"token\":\"${PREVIEW_JWT}\",\"surveyVersion\":-1,\"answers\":{}}" | sed 's/"survey":{.*},"/"survey":{…},"/'
+  echo ""
+
+  echo ">>> [P6] POST /web-survey/submit ohne Antworten (erwartet 200 {status: ok, preview: true}, bei Pflichtfragen 400 invalid_answers; nichts gespeichert)"
+  curl -s -w "\nHTTP %{http_code}\n" -X POST "${API_URL}/web-survey/submit" \
+    -H "Content-Type: application/json" -d "{\"token\":\"${PREVIEW_JWT}\",\"surveyVersion\":${PREVIEW_VERSION},\"answers\":{}}"
+  echo ""
+else
+  echo "Kein Vorschau-Token erhalten – P4–P6 übersprungen."
+fi
+
 echo "==== Fertig ===="
 

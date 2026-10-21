@@ -394,6 +394,18 @@ export const la: MessageSchema = {
 		unknownError: "Error ignotus in publicatione",
 		draftChanged: "Exemplar interim mutatum est (ostensum: v{expected}, nunc: v{current}), e. g. ab alio usore. Nihil publicatum est. Aspectus nunc statum hodiernum ostendit – quaeso, inspice et iterum publica.",
 		prodChanged: "Prod interim mutatum est, e. g. publicatione alterius usoris. Reversio peracta non est. Aspectus nunc statum hodiernum ostendit – quaeso, inspice et reversionem, si opus est, iterum perage.",
+		webPreview: "Praevisio interretialis",
+		webPreviewAriaLabel: "Versionem Stage ut percontationem interretialem in nova tabula aperi",
+		webPreviewHint: "Praevisio versionem Stage ut percontationem interretialem in nova tabula aperit. Nexus {days} dies valet, responsa non servantur.",
+		webPreviewBlocked: "Navigatrum novam fenestram impedivit.",
+		webPreviewOpenLink: "Praevisionem aperi",
+		webPreviewErrors: {
+			missingToken: "Non inscriptus – quaeso paginam renova.",
+			missingRole: "Nulla licentia – iura publicandi desunt.",
+			noStage: "Huic percontationi nulla versio Stage publicata est.",
+			throttled: "Nimiae petitiones – quaeso mox iterum conare.",
+			generic: "Praevisio aperiri non potuit"
+		},
 		payloadTooLarge: "Summa textuum percontationis nimia est ({length} ex maximo {max} litteris cum datis technicis), itaque publicari non potest. Quaeso, textus longiores in editore contrahe et percontationem iterum serva."
 	},
 

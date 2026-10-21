@@ -7,6 +7,7 @@ import {
 	verifyInvitation,
 	type InvitationClaims
 } from "../amplify/functions/shared/invitation_token";
+import { PREVIEW_TOKEN_TTL_SECONDS } from "../src/domain/survey/invitationLinks";
 
 let passed = 0;
 
@@ -232,6 +233,36 @@ test("signieren lehnt fehlenden Schlüssel und ungültige Claims ab", () => {
 	assert.throws(() => signInvitation(CLAIMS, { kid: KEY.kid, secret: "" }, NOW));
 	assert.throws(() => signInvitation({ ...CLAIMS, tenant_id: "" }, KEY, NOW));
 	assert.throws(() => signInvitation({ ...CLAIMS, exp: 1.5 }, KEY, NOW));
+});
+
+test("Webvorschau: stage-Claim bleibt erhalten, ohne stage kein Feld", () => {
+	const claims: InvitationClaims = { ...CLAIMS, stage: true, exp: NOW + PREVIEW_TOKEN_TTL_SECONDS };
+	const jwt = signInvitation(claims, KEY, NOW);
+	assert.equal(decodePart(jwt, 1).stage, true);
+	assert.deepEqual(verifyInvitation(jwt, [KEY], NOW), { ok: true, claims });
+	assert.equal("stage" in decodePart(signInvitation(CLAIMS, KEY, NOW), 1), false);
+});
+
+test("Webvorschau: stage: false wird verworfen, andere Typen sind ungültig", () => {
+	const withFalse = craft(validHeader(), { ...CLAIMS, stage: false });
+	assert.deepEqual(verifyInvitation(withFalse, [KEY], NOW), { ok: true, claims: CLAIMS });
+	assert.deepEqual(verifyInvitation(craft(validHeader(), { ...CLAIMS, stage: "true" }), [KEY], NOW), { ok: false, error: "invalid" });
+});
+
+test("Webvorschau: stage ohne exp oder mit längerer Laufzeit ist ungültig", () => {
+	const { exp: _exp, ...withoutExp } = CLAIMS;
+	assert.deepEqual(verifyInvitation(craft(validHeader(), { ...withoutExp, stage: true }), [KEY], NOW), { ok: false, error: "invalid" });
+	const tooLong = craft(validHeader(), { ...CLAIMS, stage: true, exp: NOW + PREVIEW_TOKEN_TTL_SECONDS + 1 });
+	assert.deepEqual(verifyInvitation(tooLong, [KEY], NOW), { ok: false, error: "invalid" });
+	assert.throws(() => signInvitation({ ...withoutExp, stage: true }, KEY, NOW));
+	assert.throws(() => signInvitation({ ...CLAIMS, stage: true, exp: NOW + PREVIEW_TOKEN_TTL_SECONDS + 1 }, KEY, NOW));
+});
+
+test("Webvorschau: nach 7 Tagen abgelaufen", () => {
+	const exp = NOW + PREVIEW_TOKEN_TTL_SECONDS;
+	const jwt = signInvitation({ ...CLAIMS, stage: true, exp }, KEY, NOW);
+	assert.equal(verifyInvitation(jwt, [KEY], exp).ok, true);
+	assert.deepEqual(verifyInvitation(jwt, [KEY], exp + 1), { ok: false, error: "expired" });
 });
 
 console.log(`\n${passed} Tests bestanden`);

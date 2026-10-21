@@ -394,6 +394,18 @@ export const tlh: MessageSchema = {
 		unknownError: "ngeHlu'DI' Qagh Sovbe'lu'bogh",
 		draftChanged: "Draft choHlu'pu' (leghlu'bogh: v{expected}, DaH: v{current}), latlh lo'wI' choHpu' DichDaq. pagh ngeHlu'pu'. DaH Dotlh 'anglu' – yIlegh 'ej yIngeHqa'.",
 		prodChanged: "Prod choHlu'pu', latlh lo'wI' ngeHpu' DichDaq. Rollback ta'lu'be'. DaH Dotlh 'anglu' – yIlegh 'ej Rollback yIta'qa' DaneHchugh.",
+		webPreview: "Qo'noS Hotlh",
+		webPreviewAriaLabel: "Stage yu'ghItlh Qo'noS Hotlh chu' Daq yIpoSmoH",
+		webPreviewHint: "Qo'noS Hotlh Stage yu'ghItlh poSmoH. {days} jaj Qap rar, jangmey polbe'lu'.",
+		webPreviewBlocked: "Qorwagh chu' bot Qo'noS jIH.",
+		webPreviewOpenLink: "Qo'noS Hotlh yIpoSmoH",
+		webPreviewErrors: {
+			missingToken: "yI'elbe' – nav yIchu'qa'.",
+			missingRole: "chaw' tu'be'lu' – ngeH chaw' Daghajbe'.",
+			noStage: "yu'ghItlh vam Stage ngeHbe'lu'.",
+			throttled: "tlhob law'qu' – loQ yIloS 'ej yInIDqa'.",
+			generic: "Qo'noS Hotlh poSmoHlaHbe'lu'"
+		},
 		payloadTooLarge: "yu'ghItlh ghItlh Hoch tIn law'qu' ({length} / {max} ngutlh law'qu', De'wI' De' tu'lu'); ngeHlaHbe'lu'. choHwI' Daq ghItlhmey tIn yIHabmoH 'ej yu'ghItlh yIpolqa'."
 	},
 

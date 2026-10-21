@@ -18,6 +18,10 @@ export const de = {
 		title: "Vielen Dank!",
 		fallback: "Ihre Antworten wurden gespeichert."
 	},
+	stagePreview: {
+		banner: "Vorschau (Stage) – Ihre Antworten werden nicht gespeichert.",
+		notSaved: "In der Vorschau werden keine Ergebnisse gespeichert."
+	},
 	errorSummary: {
 		title: "Bitte prüfen Sie Ihre Angaben | Bitte prüfen Sie {count} Angaben",
 		required: "Bitte beantworten Sie diese Frage.",

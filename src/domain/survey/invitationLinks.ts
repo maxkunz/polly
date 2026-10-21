@@ -9,6 +9,10 @@ import { CSV_BOM, CSV_SEPARATOR, formatCsvText } from "../../utils/csv";
 export const INVITATION_COUNT_MIN = 1;
 export const INVITATION_COUNT_MAX = 5000;
 
+/** Gültigkeit eines Webvorschau-Links (Stage-Stand), vom Server fest gesetzt. */
+export const PREVIEW_TOKEN_TTL_DAYS = 7;
+export const PREVIEW_TOKEN_TTL_SECONDS = PREVIEW_TOKEN_TTL_DAYS * 24 * 60 * 60;
+
 /** Platzhalter in der Basis-URL, an dessen Stelle der Token tritt. */
 export const INVITATION_TOKEN_PLACEHOLDER = "{token}";
 
@@ -46,6 +50,11 @@ export function buildInvitationUrl(baseUrl: string | null | undefined, jwt: stri
 	if (!path.includes("?")) separator = "?";
 	else if (!path.endsWith("?") && !path.endsWith("&")) separator = "&";
 	return `${path}${separator}token=${jwt}${fragment}`;
+}
+
+/** Link einer Webvorschau: immer die Polly-Umfrageseite, nie die Basis-URL der Umfrage. */
+export function buildPreviewUrl(origin: string, jwt: string): string {
+	return `${origin.replace(/\/+$/, "")}${WEB_SURVEY_PATH_PREFIX}${jwt}`;
 }
 
 function pad(value: number): string {

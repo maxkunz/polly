@@ -5,7 +5,7 @@ import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
 import type { WebTheme, WebThemeTokens } from "../../../src/domain/webTheme/webTheme";
 import { pruneFlowAnswers, validateFlowAnswers } from "../../../src/domain/survey/flowNavigation";
 import type { WebSurveySubmitStatus } from "../../../src/domain/survey/webSurveyTypes";
-import { loadProdSurvey, type ProdSurveyResult } from "../shared/genesys_survey_check";
+import { loadFlowSurvey, type ProdSurveyResult } from "../shared/genesys_survey_check";
 import { loadInvitationKeys } from "../shared/invitation_keys";
 import { verifyInvitation, type InvitationClaims } from "../shared/invitation_token";
 import { updateSurveyAggregate } from "../shared/survey_results";
@@ -23,6 +23,8 @@ import { normalizeToken, parseSubmitRequest, readRequestBody } from "./request";
  *
  * Jede Antwort hat ein Feld `status` (`WebSurveySubmitStatus`), an dem sich die Umfrageseite orientiert.
  * Dazu kommt, wo der Mandant bekannt ist, das Design der Seite als bereinigte Tokens (`theme`, optional).
+ * Webvorschau-Links (Claim `stage`) zeigen den Stage-Stand mit `preview: true`; beim Absenden wird
+ * alles geprüft, aber nichts gespeichert.
  */
 
 type AnyApiGwEvent = any;
@@ -40,8 +42,9 @@ const WEB_THEMES_TABLE_NAME = process.env.WEB_THEMES_TABLE_NAME ?? "";
 /** Aufbewahrung benutzter Einmal-Tokens (DynamoDB-TTL `ttl`). */
 const USED_TOKEN_RETENTION_SECONDS = 180 * 24 * 60 * 60;
 /**
- * Cache des Prod-Stands für GET im Lambda-Container: Große Kampagnen würden sonst bei jedem Seitenaufruf
- * die Genesys-API des Mandanten belasten (Rate-Limit). Das Absenden liest immer frisch und aktualisiert den Cache.
+ * Cache des Prod-Stands (bzw. Stage-Stands bei Webvorschau) für GET im Lambda-Container: Große Kampagnen
+ * würden sonst bei jedem Seitenaufruf die Genesys-API des Mandanten belasten (Rate-Limit). Das Absenden
+ * liest immer frisch und aktualisiert den Cache.
  */
 const PROD_CACHE_TTL_MS = 30 * 1000;
 const PROD_CACHE_MAX_ENTRIES = 500;
@@ -99,6 +102,11 @@ async function loadTenantThemesCached(tenantId: string): Promise<WebTheme[]> {
     console.error("[web_survey] cannot load themes", { tenantId, error: String((err as Error)?.message ?? err) });
     return [];
   }
+}
+
+/** `{ preview: true }` nur bei Webvorschau-Links (Stage-Stand, nichts wird gespeichert). */
+function previewField(claims: InvitationClaims): { preview?: true } {
+  return claims.stage ? { preview: true } : {};
 }
 
 /** `{ theme }` nur, wenn es ein Design gibt (sonst bleibt das Feld weg). */
@@ -175,15 +183,17 @@ function invitationErrorResponse(
 }
 
 // ---------------------------------------------------------------------------
-// Prod-Stand
+// Prod- bzw. Stage-Stand
 // ---------------------------------------------------------------------------
 
+/** Prod-Stand, bei Webvorschau-Links (`stage`) der Stage-Stand. */
 async function loadProd(claims: InvitationClaims, credentials: TenantCredentials, fresh: boolean): Promise<ProdSurveyResult> {
-  const cacheKey = `${claims.tenant_id}#${claims.survey_id}`;
+  const column = claims.stage ? "Stage" : "Prod";
+  const cacheKey = `${claims.tenant_id}#${claims.survey_id}#${column}`;
   const cached = prodCache.get(cacheKey);
   if (!fresh && cached && cached.expiresAt > Date.now()) return { status: "ok", survey: cached.survey };
 
-  const result = await loadProdSurvey(claims.tenant_id, claims.survey_id, credentials);
+  const result = await loadFlowSurvey(claims.tenant_id, claims.survey_id, credentials, column);
   if (result.status === "ok") {
     if (prodCache.size >= PROD_CACHE_MAX_ENTRIES) prodCache.clear();
     prodCache.set(cacheKey, { survey: result.survey, expiresAt: Date.now() + PROD_CACHE_TTL_MS });
@@ -202,9 +212,10 @@ function prodErrorResponse(
   if (result.status === "unavailable") {
     return jsonResponse(forSubmit ? 404 : 200, { status: "unavailable", ...themeField(theme) });
   }
-  console.error("[web_survey] cannot load Prod", {
+  console.error("[web_survey] cannot load survey", {
     tenantId: claims.tenant_id,
     surveyId: claims.survey_id,
+    stage: claims.stage === true,
     reason: result.reason,
   });
   return result.throttled ? jsonResponse(429, { status: "throttled" }) : jsonResponse(502, { status: "error" });
@@ -239,6 +250,7 @@ async function getWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
     status: "ok",
     survey: toWebSurvey(prod.survey),
     ...themeField(pickTheme(themes, prod.survey.web_theme_id)),
+    ...previewField(check.claims),
   });
 }
 
@@ -331,11 +343,22 @@ async function submitWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
       status: "survey_changed",
       survey: toWebSurvey(survey),
       ...themeField(pickTheme(themes, survey.web_theme_id)),
+      ...previewField(claims),
     });
   }
 
   const errors = validateFlowAnswers(survey, answers);
   if (errors.length > 0) return jsonResponse(400, { status: "invalid_answers", errors });
+
+  // Webvorschau: alles geprüft wie beim echten Absenden, gespeichert wird nichts (auch keine Aggregate)
+  if (claims.stage) {
+    console.log("[web_survey] preview submit, not saved", {
+      tenantId: claims.tenant_id,
+      surveyId: claims.survey_id,
+      surveyVersion: currentVersion,
+    });
+    return jsonResponse(200, { status: "ok", preview: true });
+  }
 
   const now = new Date().toISOString();
   const responseId = submissionId ?? randomUUID();

@@ -393,6 +393,18 @@ export const fr: MessageSchema = {
 		unknownError: "Erreur inconnue lors du déploiement",
 		draftChanged: "Le brouillon a été modifié entre-temps (affiché : v{expected}, actuel : v{current}), p. ex. par un autre utilisateur. Rien n'a été déployé. La vue affiche maintenant l'état actuel – veuillez vérifier et déployer à nouveau.",
 		prodChanged: "Prod a été modifié entre-temps, p. ex. par le déploiement d'un autre utilisateur. Le Rollback n'a pas été effectué. La vue affiche maintenant l'état actuel – veuillez vérifier et relancer le Rollback si nécessaire.",
+		webPreview: "Aperçu web",
+		webPreviewAriaLabel: "Ouvrir la version Stage comme enquête web dans un nouvel onglet",
+		webPreviewHint: "L’aperçu web ouvre la version Stage comme enquête web dans un nouvel onglet. Le lien est valable {days} jours, les réponses ne sont pas enregistrées.",
+		webPreviewBlocked: "Le navigateur a bloqué la nouvelle fenêtre.",
+		webPreviewOpenLink: "Ouvrir l’aperçu web",
+		webPreviewErrors: {
+			missingToken: "Non connecté – veuillez recharger la page.",
+			missingRole: "Aucune autorisation – les droits de déploiement manquent.",
+			noStage: "Aucune version Stage n’est déployée pour cette enquête.",
+			throttled: "Trop de requêtes – veuillez réessayer dans un instant.",
+			generic: "Impossible d’ouvrir l’aperçu web"
+		},
 		payloadTooLarge: "Le volume total de texte de l'enquête est trop important ({length} sur {max} caractères maximum, données techniques comprises) ; elle ne peut donc pas être déployée. Veuillez raccourcir les textes les plus longs dans l'éditeur et enregistrer à nouveau l'enquête."
 	},
 

@@ -391,6 +391,18 @@ export const de = {
 		unknownError: "Unbekannter Fehler beim Deployment",
 		draftChanged: "Der Entwurf wurde zwischenzeitlich geändert (angezeigt: v{expected}, aktuell: v{current}), z. B. von einem anderen Nutzer. Es wurde nichts deployt. Die Ansicht zeigt jetzt den aktuellen Stand – bitte prüfen und erneut deployen.",
 		prodChanged: "Prod wurde zwischenzeitlich geändert, z. B. durch ein Deployment eines anderen Nutzers. Der Rollback wurde nicht ausgeführt. Die Ansicht zeigt jetzt den aktuellen Stand – bitte prüfen und den Rollback ggf. erneut ausführen.",
+		webPreview: "Webvorschau",
+		webPreviewAriaLabel: "Stage-Stand als Web-Umfrage in neuem Tab öffnen",
+		webPreviewHint: "Webvorschau öffnet den Stage-Stand als Web-Umfrage in einem neuen Tab. Der Link gilt {days} Tage, Antworten werden nicht gespeichert.",
+		webPreviewBlocked: "Der Browser hat das neue Fenster blockiert.",
+		webPreviewOpenLink: "Webvorschau öffnen",
+		webPreviewErrors: {
+			missingToken: "Nicht angemeldet – bitte die Seite neu laden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			noStage: "Für diese Umfrage ist kein Stage-Stand deployt.",
+			throttled: "Zu viele Anfragen – bitte in einem Moment erneut versuchen.",
+			generic: "Webvorschau konnte nicht geöffnet werden"
+		},
 		payloadTooLarge: "Die Gesamttextmenge der Umfrage ist zu groß ({length} von maximal {max} Zeichen inkl. technischer Daten), daher kann sie nicht deployt werden. Bitte kürzen Sie längere Texte im Editor und speichern Sie die Umfrage erneut."
 	},
 

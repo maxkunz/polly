@@ -3,6 +3,7 @@ import {
 	INVITATION_CSV_HEADER,
 	buildInvitationCsv,
 	buildInvitationUrl,
+	buildPreviewUrl,
 	expirationFromDate,
 	formatInvitationExpiration
 } from "../src/domain/survey/invitationLinks";
@@ -102,6 +103,11 @@ test("CSV: Escape und Formelschutz in der URL", () => {
 
 test("CSV ohne Zeilen enthält nur die Kopfzeile", () => {
 	assert.equal(buildInvitationCsv([]), `\uFEFF${INVITATION_CSV_HEADER}\r\n`);
+});
+
+test("Webvorschau-Link: immer die Polly-Seite /s/<jwt>", () => {
+	assert.equal(buildPreviewUrl(ORIGIN, JWT), `${ORIGIN}/s/${JWT}`);
+	assert.equal(buildPreviewUrl(`${ORIGIN}//`, JWT), `${ORIGIN}/s/${JWT}`);
 });
 
 console.log(`\n${passed} Tests bestanden`);

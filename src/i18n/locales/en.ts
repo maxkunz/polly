@@ -393,6 +393,18 @@ export const en: MessageSchema = {
 		unknownError: "Unknown error during deployment",
 		draftChanged: "The draft was changed in the meantime (shown: v{expected}, current: v{current}), e.g. by another user. Nothing was deployed. The view now shows the current state – please review and deploy again.",
 		prodChanged: "Prod was changed in the meantime, e.g. by another user's deployment. The rollback was not performed. The view now shows the current state – please review and run the rollback again if needed.",
+		webPreview: "Web preview",
+		webPreviewAriaLabel: "Open the stage version as a web survey in a new tab",
+		webPreviewHint: "Web preview opens the stage version as a web survey in a new tab. The link is valid for {days} days, answers are not saved.",
+		webPreviewBlocked: "The browser blocked the new window.",
+		webPreviewOpenLink: "Open web preview",
+		webPreviewErrors: {
+			missingToken: "Not signed in – please reload the page.",
+			missingRole: "No permission – deploy rights are missing.",
+			noStage: "No stage version has been deployed for this survey.",
+			throttled: "Too many requests – please try again in a moment.",
+			generic: "Web preview could not be opened"
+		},
 		payloadTooLarge: "The total text volume of the survey is too large ({length} of max. {max} characters incl. technical data), so it cannot be deployed. Please shorten longer texts in the editor and save the survey again."
 	},
 

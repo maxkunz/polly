@@ -162,7 +162,7 @@ export type SurveyTableAccess = {
 
 export type ProdSurveyResult =
   | { status: "ok"; survey: FlowSurvey }
-  /** Kein Prod-Stand, Umfrage gelöscht oder Löschung läuft. */
+  /** Kein Prod- bzw. Stage-Stand, Umfrage gelöscht oder Löschung läuft. */
   | { status: "unavailable"; reason: string }
   /** Genesys nicht erreichbar oder Zugriff fehlt; `throttled` bei HTTP 429 von Genesys. */
   | { status: "error"; reason: string; throttled?: boolean };
@@ -179,15 +179,28 @@ export async function getSurveyTableAccess(credentials: TenantCredentials): Prom
   return { region: credentials.region, token, dataTableId };
 }
 
+/** Spalte der Zeile `survey_<id>`, aus der ein Flow-Stand gelesen wird. */
+export type FlowSurveyColumn = "Prod" | "Stage";
+
 /**
  * Lädt den Prod-Stand der Umfrage aus der Data Table des Mandanten. Liegt ein Lösch-Job vor
  * (`SurveyDeletionJobsTable`), gilt die Umfrage als nicht verfügbar, auch wenn die Zeile noch existiert.
  * Ohne `credentials` werden sie über `loadTenantCredentials` geladen.
  */
-export async function loadProdSurvey(
+export function loadProdSurvey(
   tenantId: string,
   surveyId: string,
   credentials?: TenantCredentials
+): Promise<ProdSurveyResult> {
+  return loadFlowSurvey(tenantId, surveyId, credentials, "Prod");
+}
+
+/** Wie `loadProdSurvey`, liest aber die angegebene Spalte (`Stage` für die Webvorschau). */
+export async function loadFlowSurvey(
+  tenantId: string,
+  surveyId: string,
+  credentials: TenantCredentials | undefined,
+  column: FlowSurveyColumn
 ): Promise<ProdSurveyResult> {
   if (!isValidSurveyId(surveyId)) return { status: "unavailable", reason: "Invalid surveyId" };
   if (await isSurveyBeingDeleted(tenantId, surveyId)) return { status: "unavailable", reason: "Survey is being deleted" };
@@ -201,8 +214,8 @@ export async function loadProdSurvey(
     if (row.status === 404) return { status: "unavailable", reason: "Survey row not found" };
     if (row.status !== 200) return errorResult(`Survey row HTTP ${row.status}`, row.status);
 
-    const survey = parseProdSurvey(row.body?.Prod, surveyId);
-    if (!survey) return { status: "unavailable", reason: "No valid Prod version" };
+    const survey = parseProdSurvey(row.body?.[column], surveyId);
+    if (!survey) return { status: "unavailable", reason: `No valid ${column} version` };
     return { status: "ok", survey };
   } catch (err: any) {
     return errorResult(err?.message ?? "request failed", err?.status);

@@ -15,6 +15,10 @@ export const en: WebSurveyMessages = {
 		title: "Thank you!",
 		fallback: "Your answers have been saved."
 	},
+	stagePreview: {
+		banner: "Preview (stage) – your answers will not be saved.",
+		notSaved: "No results are saved in preview mode."
+	},
 	errorSummary: {
 		title: "Please check your answer | Please check {count} answers",
 		required: "Please answer this question.",

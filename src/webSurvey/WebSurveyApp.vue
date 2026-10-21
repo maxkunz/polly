@@ -30,6 +30,9 @@ import { setLanguage, t } from "./i18n";
  * Das Design des Mandanten (`theme` der Antwort) setzt `applyTheme` beim Laden und bei
  * `survey_changed`. Mit `previewLanguage` (Design-Vorschau der App) zeigt die Seite stattdessen die
  * Beispielumfrage samt Fehlern und Hinweis; Absenden ist dann ohne Wirkung.
+ *
+ * Webvorschau (`preview` in der Antwort, Link aus der Deployment-Ansicht): zeigt den Stage-Stand mit
+ * Hinweisbalken; das Absenden läuft normal, das Backend speichert aber nichts.
  */
 
 const props = defineProps<{ previewLanguage?: SurveyLanguage | null }>();
@@ -47,6 +50,8 @@ const survey = shallowRef<WebSurvey | null>(null);
 const answers = ref<FlowAnswers>({});
 const submitting = ref(false);
 const notice = ref<Notice | null>(null);
+/** Webvorschau des Stage-Stands (vom Backend gemeldet): Hinweis im Formular und auf der Endseite. */
+const isStagePreview = ref(false);
 /** Fehler am Feld erst nach dem ersten Absenden zeigen, danach live aktualisieren. */
 const showErrors = ref(false);
 /** Fehler aus `400 invalid_answers`; gelten bis zur nächsten Änderung. */
@@ -149,7 +154,10 @@ async function load(moveFocus: boolean): Promise<void> {
 		const result = await retryOnceWhenThrottled(() => loadWebSurvey(token), wait);
 		// Bei throttled/error bleibt das bisherige Design (Wiederholung über „Erneut versuchen“)
 		if (result.kind !== "throttled" && result.kind !== "error") applyTheme(result.theme);
-		if (result.kind === "ok") applySurvey(result.survey, {});
+		if (result.kind === "ok") {
+			isStagePreview.value = result.preview;
+			applySurvey(result.survey, {});
+		}
 		else phase.value = result.kind;
 	}
 	if (moveFocus) await focusElement(() => pageHeading.value);
@@ -268,6 +276,8 @@ function focusQuestion(questionId: string): void {
 	(input ?? container)?.focus();
 }
 
+const doneText = computed(() => survey.value?.closing_prompt.trim() || (isStagePreview.value ? "" : t("done.fallback")));
+
 const noticeText = computed(() => {
 	if (notice.value === "surveyChanged") return t("notice.surveyChanged");
 	if (notice.value === "throttled") return t("notice.throttled");
@@ -298,10 +308,13 @@ if (props.previewLanguage) {
 
 		<section v-else-if="phase === 'done'" class="web-card flex flex-col gap-4" aria-labelledby="page-heading">
 			<h1 id="page-heading" ref="pageHeading" tabindex="-1" class="web-heading">{{ t("done.title") }}</h1>
-			<p class="web-intro whitespace-pre-line">{{ survey?.closing_prompt.trim() || t("done.fallback") }}</p>
+			<!-- In der Vorschau passt der Standardtext „gespeichert“ nicht, dort steht nur die Verabschiedung -->
+			<p v-if="doneText" class="web-intro whitespace-pre-line">{{ doneText }}</p>
+			<p v-if="isStagePreview" role="status" class="web-preview-banner web-hint">{{ t("stagePreview.notSaved") }}</p>
 		</section>
 
 		<template v-else-if="phase === 'form' && survey">
+			<p v-if="isStagePreview" class="web-preview-banner web-hint">{{ t("stagePreview.banner") }}</p>
 			<header class="flex flex-col gap-3">
 				<h1 id="page-heading" ref="pageHeading" tabindex="-1" class="web-heading">{{ survey.title }}</h1>
 				<p v-if="survey.greeting_prompt.trim()" class="web-intro whitespace-pre-line">{{ survey.greeting_prompt }}</p>

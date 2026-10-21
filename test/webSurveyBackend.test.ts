@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseInvitationRequest, INVITATION_COUNT_MAX } from "../amplify/functions/invitations/request";
+import { parseInvitationRequest, parsePreviewRequest, INVITATION_COUNT_MAX } from "../amplify/functions/invitations/request";
 import {
 	buildStoredAnswers,
 	parseProdSurvey,
@@ -134,6 +134,16 @@ test("parseInvitationRequest: gültige Anfrage mit und ohne exp", () => {
 	});
 	// exp: null zählt wie fehlend
 	assert.equal(parseInvitationRequest({ surveyId: SURVEY_ID, count: 1, multi: true, exp: null }, NOW).ok, true);
+});
+
+test("parsePreviewRequest: nur surveyId, sonst nichts übernommen", () => {
+	assert.deepEqual(parsePreviewRequest({ surveyId: SURVEY_ID }), { ok: true, surveyId: SURVEY_ID });
+	// Laufzeit und Mehrfachnutzung setzt der Server, Felder des Clients werden ignoriert
+	assert.deepEqual(parsePreviewRequest({ surveyId: SURVEY_ID, exp: 4102444800, multi: false }), { ok: true, surveyId: SURVEY_ID });
+	assert.equal(parsePreviewRequest({ surveyId: "nope" }).ok, false);
+	assert.equal(parsePreviewRequest({}).ok, false);
+	assert.equal(parsePreviewRequest(null).ok, false);
+	assert.equal(parsePreviewRequest([SURVEY_ID]).ok, false);
 });
 
 test("parseInvitationRequest: Anzahl 1 bis 5000", () => {

@@ -418,6 +418,14 @@ legend.web-question__title {
 	background: var(--ws-primary-light);
 }
 
+/* Webvorschau des Stage-Stands: Hinweis, dass nichts gespeichert wird (Schrift über die Rolle web-hint) */
+.web-preview-banner {
+	padding: 0.5rem 0.75rem;
+	border: 2px dashed var(--ws-border);
+	border-radius: 0.5rem;
+	background: var(--ws-surface);
+}
+
 /*
  * Vorschau in der App (survey.html?preview=1): Die App hebt die Elemente einer Textrolle hervor,
  * während die zugehörige Zeile im Editor aktiv ist (Attribut am Root, gesetzt von previewMode.ts).

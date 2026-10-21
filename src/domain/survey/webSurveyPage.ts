@@ -169,9 +169,10 @@ function isBlockingStatus(value: unknown): value is WebSurveyBlockingStatus {
 /**
  * `theme` = bereinigtes Design aus der Antwort; fehlt, wenn die Antwort keines oder ein ungültiges
  * enthält (dann gilt das eingebaute Design, das ist kein Fehler).
+ * `preview` = Webvorschau des Stage-Stands: Antworten werden beim Absenden nicht gespeichert.
  */
 export type WebSurveyLoadResult =
-	| { kind: "ok"; survey: WebSurvey; theme?: WebThemeTokens }
+	| { kind: "ok"; survey: WebSurvey; theme?: WebThemeTokens; preview: boolean }
 	| { kind: WebSurveyBlockingStatus; theme?: WebThemeTokens }
 	| { kind: "throttled" }
 	| { kind: "error" };
@@ -201,7 +202,9 @@ export function classifyLoadResponse(httpStatus: number, body: unknown): WebSurv
 	const record = isRecord(body) ? body : {};
 	const status = record.status;
 	if (httpStatus === 200 && status === "ok") {
-		return isWebSurvey(record.survey) ? { kind: "ok", survey: record.survey, ...themeOf(record) } : { kind: "error" };
+		return isWebSurvey(record.survey)
+			? { kind: "ok", survey: record.survey, ...themeOf(record), preview: record.preview === true }
+			: { kind: "error" };
 	}
 	if (isBlockingStatus(status)) return { kind: status, ...themeOf(record) };
 	if (status === "throttled") return { kind: "throttled" };

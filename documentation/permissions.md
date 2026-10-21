@@ -5,7 +5,7 @@ Polly prüft im Frontend drei Genesys-Cloud-Rollen des eingeloggten Users. Die P
 | Rolle | Erlaubt |
 |---|---|
 | `<projectTag>_polly_write` (oder `polly_write`) | Umfragen anlegen, klonen, bearbeiten/speichern, löschen |
-| `<projectTag>_polly_deploy` (oder `polly_deploy`) | Deploy nach Stage und Prod, Rollback, Queue-Mapping speichern, Einladungslinks für Web-Umfragen erzeugen, Web-Designs anlegen/ändern/löschen (Einstellungen) |
+| `<projectTag>_polly_deploy` (oder `polly_deploy`) | Deploy nach Stage und Prod, Rollback, Queue-Mapping speichern, Einladungslinks für Web-Umfragen erzeugen, Webvorschau des Stage-Stands öffnen, Web-Designs anlegen/ändern/löschen (Einstellungen) |
 | `<projectTag>_polly_reporting` (oder `polly_reporting`) | Umfrageergebnisse exportieren (CSV-Download im Report) |
 
 - Ohne Rolle hat ein User nur Lesezugriff. Er kann Umfragen im schreibgeschützten Editor ansehen und die Report-Vorschau öffnen, aber keine Ergebnisse exportieren.
@@ -13,7 +13,7 @@ Polly prüft im Frontend drei Genesys-Cloud-Rollen des eingeloggten Users. Die P
 - Fehlende Rechte zeigen sich als deaktivierte Buttons mit Tooltip und als Hinweisbanner im Editor bzw. in der Deploy-Ansicht.
 - Read-only-User nehmen kein Umfrage-Lock und sehen keinen Lock-Konflikt-Dialog.
 
-**Ausnahme Einladungslinks:** `POST /invitations` prüft `polly_deploy` zusätzlich **serverseitig** (Rollen des Aufrufers über `/api/v2/users/me?expand=authorization`, gleiche Namenslogik inkl. `projectTag`-Präfix), da der Endpunkt gültige Einladungen signiert. Cognito-M2M-Tokens werden dort mit `403` abgelehnt. Siehe [polly_web.md](polly_web.md).
+**Ausnahme Einladungslinks:** `POST /invitations` und `POST /invitations/preview` (Webvorschau) prüfen `polly_deploy` zusätzlich **serverseitig** (Rollen des Aufrufers über `/api/v2/users/me?expand=authorization`, gleiche Namenslogik inkl. `projectTag`-Präfix), da der Endpunkt gültige Einladungen signiert. Cognito-M2M-Tokens werden dort mit `403` abgelehnt. Siehe [polly_web.md](polly_web.md).
 
 **Ausnahme Web-Designs:** `PUT`/`DELETE /web-themes/{id}` prüfen `polly_deploy` ebenso serverseitig (gemeinsame Prüfung in `amplify/functions/shared/caller_roles.ts`), M2M-Tokens bekommen `403 forbidden_m2m`. `GET /web-themes` (Liste, Auswahl im Umfrage-Editor) darf jeder angemeldete App-Nutzer; ohne `polly_deploy` öffnet die Einstellungsseite Designs nur zum Ansehen. Die Wahl des Designs einer Umfrage ist Teil des Drafts und erfordert wie jede Änderung `polly_write`.
 

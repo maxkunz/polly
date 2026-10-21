@@ -164,7 +164,7 @@ test("isWebSurvey lehnt unbrauchbare Fassungen ab", () => {
 });
 
 test("Laden: Status der Lambda und Drosselung", () => {
-	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY }), { kind: "ok", survey: SURVEY });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY }), { kind: "ok", survey: SURVEY, preview: false });
 	for (const status of ["invalid", "expired", "used", "unavailable"] as const) {
 		assert.deepEqual(classifyLoadResponse(200, { status }), { kind: status });
 	}
@@ -174,6 +174,14 @@ test("Laden: Status der Lambda und Drosselung", () => {
 	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: { id: "x" } }), { kind: "error" });
 	assert.deepEqual(classifyLoadResponse(200, null), { kind: "error" });
 	assert.deepEqual(classifyLoadResponse(500, "<html>"), { kind: "error" });
+});
+
+test("Laden: Webvorschau nur bei preview === true", () => {
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, preview: true }), { kind: "ok", survey: SURVEY, preview: true });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, preview: "true" }), { kind: "ok", survey: SURVEY, preview: false });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, preview: 1 }), { kind: "ok", survey: SURVEY, preview: false });
+	// Vorschau-Absendung ohne Speicherung ist für die Seite ein normales ok
+	assert.deepEqual(classifySubmitResponse(200, { status: "ok", preview: true }), { kind: "ok" });
 });
 
 test("Absenden: Status der Lambda", () => {
@@ -198,7 +206,7 @@ test("Design: gültiges übernehmen, ungültiges und fehlendes ignorieren", () =
 		fontFamily: "serif",
 		colors: { ...DEFAULT_WEB_THEME_TOKENS.colors, primary: "#aa0000" }
 	};
-	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme }), { kind: "ok", survey: SURVEY, theme: expected });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme }), { kind: "ok", survey: SURVEY, theme: expected, preview: false });
 	assert.deepEqual(classifyLoadResponse(404, { status: "unavailable", theme }), { kind: "unavailable", theme: expected });
 	assert.deepEqual(classifySubmitResponse(409, { status: "used", theme }), { kind: "used", theme: expected });
 	assert.deepEqual(
@@ -207,8 +215,8 @@ test("Design: gültiges übernehmen, ungültiges und fehlendes ignorieren", () =
 	);
 	// Ungültiges Design ist kein Fehler: Die Umfrage erscheint im eingebauten Design
 	const invalid = { colors: { text: "url(https://evil.example)" } };
-	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme: invalid }), { kind: "ok", survey: SURVEY });
-	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme: null }), { kind: "ok", survey: SURVEY });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme: invalid }), { kind: "ok", survey: SURVEY, preview: false });
+	assert.deepEqual(classifyLoadResponse(200, { status: "ok", survey: SURVEY, theme: null }), { kind: "ok", survey: SURVEY, preview: false });
 	assert.deepEqual(classifySubmitResponse(409, { status: "survey_changed", survey: SURVEY, theme: "x" }), { kind: "survey_changed", survey: SURVEY });
 	// Fehler und Drosselung tragen nie ein Design
 	assert.deepEqual(classifyLoadResponse(502, { status: "error", theme }), { kind: "error" });
