@@ -368,3 +368,25 @@ Fehlende Rollen, Felder oder Farben werden mit den Defaults aufgefüllt (neue Ro
 * Amplify setzt standardmäßig weder `X-Frame-Options` noch `frame-ancestors`; die Einbettung in iframes funktioniert also ohne weitere Einstellung. Werden in Amplify eigene Header gesetzt (Custom headers), dürfen sie für `/survey.html` und `/s/**` kein `X-Frame-Options` bzw. kein einschränkendes `frame-ancestors` enthalten. Empfohlen sind dort `X-Content-Type-Options: nosniff` und `Referrer-Policy: no-referrer`.
 
 **Lokal:** `npm run dev` bzw. `npm run preview` schreiben `/s/<jwt>` wie die Rewrite-Regel auf `survey.html` um (Plugin in `vite.config.ts`). Die Seite ruft das Backend dabei über den Dev-Proxy auf (`API_PREFIX`, also `/api` bzw. das Präfix aus `VITE_API_PREFIX`).
+
+## Debugging & Test
+
+Die curl-Suite `tools/survey_responses.sh` deckt die Standardfälle ab. Die Variablen heißen wie dort: `API_URL` (mit Präfix, z. B. `https://<app>.amplifyapp.com/api`), `GENESYS_TOKEN` (Bearer aus dem Genesys-Portal, Rolle `polly_deploy`), `GENESYS_REGION`.
+
+**Abgelaufene Einladung erzeugen:** Über die App geht das nicht, denn `POST /invitations` lehnt ein `exp` in der Vergangenheit ab (`400`, `exp must be in the future`). Stattdessen eine Einladung anlegen, die nach 60 Sekunden abläuft:
+
+```bash
+EXP=$(( $(date +%s) + 60 ))
+curl -s -X POST "$API_URL/invitations" \
+  -H "authorization: Bearer $GENESYS_TOKEN" \
+  -H "x-genesys-region: $GENESYS_REGION" \
+  -H 'content-type: application/json' \
+  -d "{\"surveyId\":\"<survey-uuid>\",\"count\":1,\"multi\":false,\"exp\":$EXP}"
+```
+
+Die Antwort enthält den Token unter `tokens[0].jwt`. Nach Ablauf (die Sekunde `exp` gilt noch als gültig) sollte gelten:
+
+* `GET /web-survey?token=<jwt>` liefert `200 {"status":"expired"}`, und die Seite `/s/<jwt>` zeigt die Meldung für abgelaufene Einladungen.
+* `POST /web-survey/submit` liefert `403 {"status":"expired"}`.
+
+**Gefälschte Einladung:** Ein Token, der mit einem fremden Schlüssel signiert ist, ergibt immer `invalid`, auch wenn sein `exp` schon erreicht ist, weil die Signatur vor dem Ablauf geprüft wird. Das gilt bei bekanntem `kid` (die Signaturprüfung schlägt fehl) und bei unbekanntem `kid` (es wird kein Schlüssel gefunden). Ergebnis: `GET` liefert `200 {"status":"invalid"}`, `submit` liefert `403 {"status":"invalid"}`.
