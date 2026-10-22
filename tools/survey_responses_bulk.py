@@ -40,7 +40,7 @@ Optionen (jeweils auch per Umgebungsvariable):
                           alle Verbindungen (API und Genesys) über einen SOCKS5-Proxy leiten,
                           DNS wird dabei auch über den Proxy aufgelöst.
                           Benötigt: pip install pysocks
-  API_URL, GENESYS_REGION wie in survey_responses.sh
+  API_URL, GENESYS_REGION wie in api_tests.py
 
 ACHTUNG: Schreibt echte Daten in die deployte API.
 """

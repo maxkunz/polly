@@ -371,9 +371,9 @@ Fehlende Rollen, Felder oder Farben werden mit den Defaults aufgefüllt (neue Ro
 
 ## Debugging & Test
 
-Die curl-Suite `tools/survey_responses.sh` deckt die Standardfälle ab. Die Variablen heißen wie dort: `API_URL` (mit Präfix, z. B. `https://<app>.amplifyapp.com/api`), `GENESYS_TOKEN` (Bearer aus dem Genesys-Portal, Rolle `polly_deploy`), `GENESYS_REGION`.
+Die Testsuite `tools/api_tests.py` deckt die Standardfälle ab (`python3 tools/api_tests.py`, Optionen mit `--help`). Die Umgebungsvariablen: `API_URL` (Pflicht, mit Präfix, z. B. `https://<app>.amplifyapp.com/api`), `GENESYS_TOKEN` (Bearer aus dem Genesys-Portal, Rolle `polly_deploy`), `GENESYS_REGION`; Umfrage-IDs per Parameter (`--survey-id`, …). Die Suite erzeugt die Einladungen selbst über `POST /invitations` (eine gültige für 1 Stunde, eine mit 5 s Laufzeit für den Ablauf-Fall, den sie ganz am Ende prüft); `--web-token` ersetzt nur die gültige.
 
-**Abgelaufene Einladung erzeugen:** Über die App geht das nicht, denn `POST /invitations` lehnt ein `exp` in der Vergangenheit ab (`400`, `exp must be in the future`). Stattdessen eine Einladung anlegen, die nach 60 Sekunden abläuft:
+**Abgelaufene Einladung von Hand erzeugen** (die Suite macht das in [W8]/[W9] automatisch): Über die App geht das nicht, denn `POST /invitations` lehnt ein `exp` in der Vergangenheit ab (`400`, `exp must be in the future`). Stattdessen eine Einladung anlegen, die nach 60 Sekunden abläuft:
 
 ```bash
 EXP=$(( $(date +%s) + 60 ))

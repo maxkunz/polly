@@ -36,7 +36,7 @@ Nach Abschluss hier abhaken und Abweichungen vom Plan kurz notieren. Fassen Sie 
     - Nacharbeiten aus dem Code-Review (2026-10-20): `load(true)` wartet eine laufende Abfrage ab und lädt danach neu; bei `409 conflict` bleiben die Eingaben im Editor, die Liste wird neu geladen, erneutes Speichern überschreibt bewusst. Die Auswahl im Umfrage-Editor zeigt ein gewähltes, noch nicht geladenes bzw. nicht abrufbares Design als Platzhalter statt leer. Prüfung gespeicherter Designs einmal in `parseWebTheme` (Domain), Query einmal in `shared/web_themes_table.ts`. Löschhinweis parst jede Zelle höchstens einmal. Die Seite behält bei `survey_changed` ohne `theme` das bisherige Design.
   - Testbar nach dem Deploy (Branch-Umgebung, siehe `branch_umgebung_einrichten.md`): Einstellungen → Web-Designs: Design anlegen, Textstile und Farben ändern (Vorschau folgt live, die aktive Zeile wird markiert), Kontrastwarnung erzeugen und trotzdem speichern, Standard setzen, duplizieren, löschen. Im Umfrage-Editor Design wählen, nach Prod deployen und Einladungslink öffnen.
 - [ ] M6e Doku und Ende-zu-Ende-Test
-  - Doku erledigt (2026-10-20): `polly_web.md` (Entscheidung 9, Abschnitt „Designs“, Endpunkte `/web-themes`, Tabelle, Feld `theme`, Sicherheit, Barrierefreiheit, Umsetzung), `survey_definition.md`, `survey_translator_for_flow.md`, `permissions.md`, `CLAUDE.md`, Entscheidungen 14–17 in `implementationsplan_web_surveys.md`, `tools/survey_responses.sh` (Fälle T1–T7).
+  - Doku erledigt (2026-10-20): `polly_web.md` (Entscheidung 9, Abschnitt „Designs“, Endpunkte `/web-themes`, Tabelle, Feld `theme`, Sicherheit, Barrierefreiheit, Umsetzung), `survey_definition.md`, `survey_translator_for_flow.md`, `permissions.md`, `CLAUDE.md`, Entscheidungen 14–17 in `implementationsplan_web_surveys.md`, `tools/api_tests.py` (Fälle T1–T7).
   - Offen: Prüfung im Browser mit aktiver CSP (`npm run build`, `npx vite preview`), Vorschau aus fremder Origin, Ende-zu-Ende über eine Branch-Umgebung (siehe Verifikation).
 
 ## Context
@@ -272,7 +272,7 @@ Abgeleitete Töne (`--ws-primary-dark`, `-light`, `-accent`) berechnet die CSS m
   6. Ohne `polly_deploy`: Liste sichtbar, Bearbeiten gesperrt. `PUT /web-themes/…` liefert 403.
   7. axe/Lighthouse mit dem Default-Design ohne Fehler.
   8. Ein Design mit der Höchstgröße jeder Rolle bei 320 px Breite und 400 % Zoom: kein horizontales Scrollen, NPS bleibt einzeilig. Ein Design mit abweichenden Werten pro Rolle: In den DevTools hat jedes Element genau den Wert seiner Rolle.
-- `tools/survey_responses.sh`: Fälle für `GET /web-themes` und `PUT` ohne Rolle.
+- `tools/api_tests.py`: Fälle für `GET /web-themes` und `PUT` ohne Rolle.
 
 ## Reihenfolge
 

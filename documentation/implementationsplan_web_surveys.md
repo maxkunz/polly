@@ -14,12 +14,12 @@ Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz no
     - Zusätzlich: Der Prod-Stand wird bei GET 30 s pro Container gecacht (schont das Genesys-Rate-Limit). `409 survey_changed` liefert die neue Fassung gleich mit, die Seite muss nicht neu laden. Genesys-429 wird als `429 throttled` weitergegeben.
     - `reservedConcurrentExecutions` ist per Amplify-Umgebungsvariable `WEB_SURVEY_RESERVED_CONCURRENCY` änderbar (Default aus, z. B. `50` schaltet sie ein), weil Konten mit kleinem Kontingent sonst nicht deployen können.
     - Statuscodes von `/invitations` und `/web-survey/submit` sind in `polly_web.md` als Tabellen festgelegt. Die Typen für die Seite stehen in `src/domain/survey/webSurveyTypes.ts`.
-    - Neuer Test `test/webSurveyBackend.test.ts`; die curl-Suite liegt unter `tools/survey_responses.sh` (nicht `test/`).
+    - Neuer Test `test/webSurveyBackend.test.ts`; die Python-Suite liegt unter `tools/api_tests.py` (nicht `test/`).
   - Testbar nach dem Deploy (noch ohne Oberfläche):
     - `POST /api/invitations` mit dem Genesys-Bearer aus der App (Header `x-genesys-region`), z. B. `{"surveyId":"<uuid>","count":3,"multi":false}`. Ohne `polly_deploy` → 403, mit M2M-Token → 403, ohne Prod-Stand → 409.
     - `GET /api/web-survey?token=<jwt>` liefert das bereinigte Flow-JSON. `POST /api/web-survey/submit` speichert eine Antwort. Sie erscheint im Report-CSV mit `Channel` = `web`; ein zweites Absenden mit demselben Einmal-Token → 409 `used`.
     - Der Report-Export hat die neue letzte Spalte `Channel` (bestehende Antworten: `flow`).
-    - `tools/survey_responses.sh` prüft die öffentlichen Fälle ohne Token, mit `WEB_TOKEN=<jwt>` auch Laden und `survey_changed`.
+    - `tools/api_tests.py` prüft die öffentlichen Fälle ohne Token, mit `WEB_TOKEN=<jwt>` auch Laden und `survey_changed`.
 - [x] M4 Schritt 3 – Unterseite „Einladungslinks“ (Genesys-App)  (2026-10-19)
   - Abweichungen:
     - CSV-Escape und Formelschutz liegen jetzt in `src/utils/csv.ts` (aliasfrei); `survey_responses_export/csv.ts` importiert und reexportiert sie. Der Report-Download nutzt dort auch `CSV_BOM`.
@@ -60,7 +60,7 @@ Nach Abschluss eines Meilensteins hier abhaken und Abweichungen vom Plan kurz no
     - Umfrage nach Stage deployen, „Webvorschau“ → neuer Tab mit dem Stage-Stand und Hinweisbalken. Absenden → Endseite mit Hinweis; im Report-CSV erscheint keine Antwort.
     - Ohne Stage-Stand bzw. ohne `polly_deploy` ist der Button gesperrt (API: `409 no_stage` bzw. `403`). Ohne Feature Flag `web_survey` fehlt er.
     - Blockiert der Browser bzw. die iframe-Sandbox von Genesys das Fenster, zeigt die App den Link zum Anklicken. Für das automatische Öffnen braucht die Integration `allow-popups` in den Sandbox-Optionen.
-    - `tools/survey_responses.sh` prüft `POST /invitations/preview` und das Absenden ohne Speichern.
+    - `tools/api_tests.py` prüft `POST /invitations/preview` und das Absenden ohne Speichern.
 
 
 ## Context
@@ -322,7 +322,7 @@ Diese Seite wird öffentlich erreichbar sein, es muss also sorgfältig auf Siche
   7. `POST /invitations` mit Cognito-M2M-Token → 403; mit Genesys-User ohne `polly_deploy` → 403.
   8. Älterer Prod-Stand ohne `language` → Seite auf Deutsch, `<html lang="de">`.
   9. Einbettung in eine lokale HTML-Seite per iframe mit `{token}`-Weitergabe.
-- `test/survey_responses.sh` um curl-Fälle für `/web-survey` erweitern (öffentlich, ohne `GENESYS_TOKEN`).
+- `tools/api_tests.py` um Fälle für `/web-survey` erweitern (öffentlich, ohne `GENESYS_TOKEN`).
 - **Barrierefreiheit:**
   - axe DevTools bzw. Lighthouse ohne Fehler
   - reiner Tastaturdurchlauf
