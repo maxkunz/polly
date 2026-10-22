@@ -241,8 +241,17 @@ legend.web-question__title {
 	cursor: pointer;
 }
 
-.web-option:hover {
-	border-color: var(--ws-primary);
+/*
+ * Hover zeigt dasselbe wie der Tastaturfokus (Rahmen in Primärfarbe plus Outline, 3:1-Kontrast, nicht nur Farbe).
+ * Nur bei Geräten mit echtem Hover, sonst bliebe der Zustand nach einem Tipp auf Touch-Geräten hängen.
+ * Die Auswahl bleibt über Hintergrund und Fettschrift unterscheidbar.
+ */
+@media (hover: hover) {
+	.web-option:hover {
+		border-color: var(--ws-primary);
+		outline: 3px solid var(--ws-primary);
+		outline-offset: 2px;
+	}
 }
 
 .web-option:has(input:checked) {
