@@ -288,12 +288,48 @@ legend.web-question__title {
 	gap: 0.5rem;
 }
 
+/*
+ * Skalenwerte (rating/nps): Das native Radio bleibt im DOM (Tastatur, Screenreader, Sprachsteuerung),
+ * ist aber nur visuell versteckt: unsichtbar (opacity), aber über die ganze Kachel gelegt, damit Klick,
+ * Touch und Touch-Exploration das Radio treffen. Nicht display:none/visibility:hidden, sonst nicht fokussierbar.
+ * Die Ziffer steht mittig; Fokus und Auswahl zeigt die Kachel (Rahmen, Hintergrund, Fettschrift).
+ */
 .web-option--scale {
+	position: relative;
 	flex: 1 0 3rem;
-	flex-direction: column;
 	justify-content: center;
-	gap: 0.25rem;
 	padding: 0.5rem 0.25rem;
+	text-align: center;
+}
+
+.web-option--scale input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+}
+
+/* Ohne :has() (ältere Browser) kein Kachel-Zustand: Fokus und Auswahl direkt an der Ziffer zeigen */
+@supports not selector(:has(*)) {
+	.web-option--scale input:focus-visible + span {
+		outline: 3px solid var(--ws-primary);
+		outline-offset: 2px;
+	}
+
+	.web-option--scale input:checked + span {
+		font-weight: 600;
+		text-decoration: underline;
+	}
+}
+
+/* Windows-Kontrastmodus: Hintergrund und Rahmenfarben werden überschrieben, die Auswahl braucht Systemfarben */
+@media (forced-colors: active) {
+	.web-option--scale:has(input:checked) {
+		background: Highlight;
+		color: HighlightText;
+		border-color: Highlight;
+	}
 }
 
 /* NPS (11 Werte) bleibt in einer Zeile, auch bei 320 px: kompaktere Felder, gleich breite Spalten */
@@ -317,11 +353,6 @@ legend.web-question__title {
 	min-width: 0;
 	padding-inline: 0;
 	border-width: 1px;
-}
-
-.web-scale--single-row .web-option--scale input {
-	width: 1rem;
-	height: 1rem;
 }
 
 .web-scale__labels {

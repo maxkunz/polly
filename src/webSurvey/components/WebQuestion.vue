@@ -7,7 +7,8 @@ import { t } from "../i18n";
 
 /**
  * Eine Frage der Umfrageseite als natives Formularelement (siehe `documentation/polly_web.md`):
- * rating/nps als Skala aus Radio-Buttons, choice und yes_no als Radio-Gruppe, comment als Textfeld.
+ * rating/nps als Skala aus Radio-Buttons (Radio nur visuell versteckt, Ziffer als Kachel; siehe `webSurvey.css`),
+ * choice und yes_no als Radio-Gruppe, comment als Textfeld.
  * Alle Texte der Umfrage werden nur als Text ausgegeben (kein `v-html`).
  */
 
