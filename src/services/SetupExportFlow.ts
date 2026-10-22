@@ -1,4 +1,5 @@
 import { useAppStore } from "@/stores/appStore";
+import { API_PREFIX } from "@/constants/apiConstants";
 
 type FlowTemplateKind = "bot" | "inbound";
 
@@ -60,7 +61,7 @@ export class BotFlowService {
 
 	async downloadYamlContent(url: string): Promise<string> {
 		const app = useAppStore();
-		const response = await fetch(`/api/archy-upload?url=${encodeURIComponent(url)}`, {
+		const response = await fetch(`${API_PREFIX}/archy-upload?url=${encodeURIComponent(url)}`, {
 			method: "GET",
 			headers: {
 				Authorization: `Bearer ${app.genesys.accessToken}`,

@@ -1,8 +1,8 @@
 import { i18n } from "@/i18n";
+import { DEFAULT_SURVEY_LANGUAGE } from "./flowTypes";
+import type { ConditionOperator, QuestionType, ScaleLabels, SurveyLanguage } from "./flowTypes";
 
-export type QuestionType = "yes_no" | "choice" | "rating" | "nps" | "comment";
-
-export type ConditionOperator = "equals" | "less_than" | "greater_than";
+// Grundtypen (QuestionType, ConditionOperator, ScaleLabels, SurveyLanguage) liegen im aliasfreien flowTypes.ts
 
 export interface ChoiceOptionLabel {
 	id: string;
@@ -14,12 +14,14 @@ export interface ChoiceOptions {
 	labels: ChoiceOptionLabel[];
 }
 
-export interface RatingOptions {
+export interface RatingOptions extends ScaleLabels {
 	min_value: number;
 	max_value: number;
 }
 
-export type QuestionOptions = ChoiceOptions | RatingOptions | Record<string, unknown>;
+export type NpsOptions = ScaleLabels;
+
+export type QuestionOptions = ChoiceOptions | RatingOptions | NpsOptions | Record<string, unknown>;
 
 export interface FollowUpCondition {
 	operator: ConditionOperator;
@@ -50,6 +52,12 @@ export interface Survey {
 	description?: string;
 	greeting_message?: string;
 	closing_message?: string;
+	/** Basis-URL der personalisierten Einladungslinks (Web-Kanal), optional mit Platzhalter {token}. */
+	base_url?: string;
+	/** Sprache der Web-Umfrageseite, Default "de". */
+	language?: SurveyLanguage;
+	/** Web-Design der Umfrageseite (ID aus den Einstellungen → Web-Designs); fehlt = Standard des Mandanten. */
+	web_theme_id?: string;
 	created_at?: string;
 	updated_at?: string;
 	version?: number;
@@ -262,10 +270,22 @@ export function createEmptySurvey(): Survey {
 		description: "",
 		greeting_message: "",
 		closing_message: "",
+		base_url: "",
+		language: DEFAULT_SURVEY_LANGUAGE,
 		created_at: new Date().toISOString(),
 		version: 0,
 		questions: []
 	};
+}
+
+/**
+ * Setzt die Web-Felder auf die Standardwerte wie bei createEmptySurvey (Feature Flag web_survey aus).
+ * Ändert die Umfrage direkt.
+ */
+export function resetWebSettings(survey: Survey): void {
+	survey.base_url = "";
+	survey.language = DEFAULT_SURVEY_LANGUAGE;
+	delete survey.web_theme_id;
 }
 
 export function cloneSurveyQuestion(source: SurveyQuestion): SurveyQuestion {
@@ -313,6 +333,9 @@ export function cloneSurvey(source: Survey): Survey {
 		description: source.description,
 		greeting_message: source.greeting_message,
 		closing_message: source.closing_message,
+		base_url: source.base_url,
+		language: source.language,
+		...(source.web_theme_id ? { web_theme_id: source.web_theme_id } : {}),
 		created_at: new Date().toISOString(),
 		version: 0,
 		questions: (source.questions || []).map(q => cloneSurveyQuestion(q))

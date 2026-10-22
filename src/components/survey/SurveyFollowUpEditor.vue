@@ -5,7 +5,8 @@ import Button from "primevue/button";
 import PromptTextarea from "@/components/ui/PromptTextarea.vue";
 import Select from "primevue/select";
 import { useConfirm } from "primevue/useconfirm";
-import type { FollowUpRule, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
+import type { FollowUpRule, SurveyQuestion } from "@/domain/survey/surveyTypes";
+import type { QuestionType } from "@/domain/survey/flowTypes";
 import { getFollowUpQuestionTypes } from "@/domain/survey/questionTypeCatalog";
 import { displayTechnicalName } from "@/domain/survey/surveyTypes";
 import { useQuestionTypeOptions } from "@/composables/useQuestionTypeOptions";
@@ -15,6 +16,7 @@ import FieldError from "@/components/ui/FieldError.vue";
 
 import FollowUpConditionEditor from "./FollowUpConditionEditor.vue";
 import RatingOptionsEditor from "./RatingOptionsEditor.vue";
+import ScaleLabelsEditor from "./ScaleLabelsEditor.vue";
 import ChoiceOptionsEditor from "./ChoiceOptionsEditor.vue";
 import QuestionTypeInfoHint from "./QuestionTypeInfoHint.vue";
 
@@ -43,6 +45,8 @@ const {
 	handleTypeChange,
 	ratingOptions,
 	choiceOptions,
+	scaleLabels,
+	setScaleLabel,
 	addChoiceOption,
 	removeChoiceOption
 } = useQuestionTypeOptions(toRef(() => props.followUp.question));
@@ -203,5 +207,15 @@ function confirmDelete() {
 		/>
 
 		<QuestionTypeInfoHint v-else :type="followUp.question.type" />
+
+		<ScaleLabelsEditor
+			v-if="followUp.question.type === 'rating' || followUp.question.type === 'nps'"
+			:questionId="followUp.question.id"
+			:minLabel="scaleLabels.min_label"
+			:maxLabel="scaleLabels.max_label"
+			:disabled="disabled"
+			@update:minLabel="setScaleLabel('min_label', $event)"
+			@update:maxLabel="setScaleLabel('max_label', $event)"
+		/>
 	</fieldset>
 </template>

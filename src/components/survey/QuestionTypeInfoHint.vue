@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import type { QuestionType } from "@/domain/survey/surveyTypes";
+import type { QuestionType } from "@/domain/survey/flowTypes";
 
 defineProps<{
 	type: QuestionType;

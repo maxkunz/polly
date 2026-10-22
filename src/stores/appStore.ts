@@ -6,6 +6,8 @@ import { readSurveyList, type SurveyListItem } from "@/services/surveyService";
 import { getGenesysRegion } from "@/services/genesys/region";
 import { enableGenesysRequestRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE, ROLE_CACHE_TTL_MINUTES } from "@/constants/permissionConstants";
+import { hasPollyRole } from "@/domain/permissions/roleCheck";
+import { isFeatureEnabled, type FeatureKey } from "@/domain/features/featureFlags";
 
 import { Domain } from "@/domain/Domain";
 
@@ -13,9 +15,7 @@ import { Domain } from "@/domain/Domain";
 export type CurrentUser = { id: string; name: string; email?: string; roles: string[] };
 
 function hasRole(user: CurrentUser | null, role: string, projectTag?: string): boolean {
-	const legacy = role.toLowerCase();
-	const wanted = (projectTag ? `${projectTag}_${role}` : role).toLowerCase();
-	return (user?.roles ?? []).some(r => r.toLowerCase() === wanted || r.toLowerCase() === legacy);
+	return hasPollyRole(user?.roles ?? [], role, projectTag);
 }
 
 // Laufender Rollen-Refresh, damit parallele Aufrufe nur einen API-Call auslösen
@@ -78,6 +78,10 @@ export const useAppStore = defineStore("app", {
 		canDeploy: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_DEPLOY, state.domain.meta.setup?.projectTag),
 		// Darf Umfrageergebnisse exportieren (CSV-Download im Report)
 		canExport: (state): boolean => hasRole(state.currentUser, POLLY_ROLE_REPORTING, state.domain.meta.setup?.projectTag),
+		// Feature Flag aus __meta aktiv (fehlend = aus)
+		hasFeature: (state) => (key: FeatureKey): boolean => isFeatureEnabled(state.domain.meta.features, key),
+		// Web-Umfragen (Einladungslinks, Web-Designs, Web-Felder im Editor)
+		webSurveyEnabled: (state): boolean => isFeatureEnabled(state.domain.meta.features, "web_survey"),
 	},
 	actions: {
 		// Liest die Rollen neu ein, wenn sie älter als ROLE_CACHE_TTL_MINUTES sind.

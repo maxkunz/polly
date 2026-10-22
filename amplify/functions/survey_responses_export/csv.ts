@@ -3,7 +3,11 @@
  * Format: siehe documentation/survey_responses_csv_export.md
  */
 
-export const CSV_SEPARATOR = ";";
+import { CSV_SEPARATOR, escapeCsvField, formatCsvText, neutralizeFormula } from "../../../src/utils/csv";
+
+// Escape und Formelschutz liegen in src/utils/csv.ts (auch für die CSV der Einladungslinks)
+export { CSV_SEPARATOR, escapeCsvField, neutralizeFormula };
+
 export const CSV_HEADER = [
   "responseId",
   "Survey Name",
@@ -13,7 +17,11 @@ export const CSV_HEADER = [
   "answeredAt",
   "value",
   "status",
+  "Channel",
 ].join(CSV_SEPARATOR);
+
+/** Kanal von Sitzungen ohne Feld `channel` (Architect Flow, auch alle Antworten vor dem Web-Kanal). */
+export const DEFAULT_CHANNEL = "flow";
 
 export interface ExportAnswer {
   type?: string;
@@ -26,23 +34,9 @@ export interface ExportSession {
   surveyName?: string;
   surveyVersion?: number;
   status?: string;
+  /** `web` (Web-Umfrage) oder fehlend (Architect Flow). */
+  channel?: string;
   answers?: Record<string, ExportAnswer>;
-}
-
-/**
- * Schützt vor Formel-Injection in Excel: Strings, die mit =, +, -, @, Tab oder CR beginnen,
- * bekommen ein Hochkomma vorangestellt.
- */
-export function neutralizeFormula(text: string): string {
-  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-}
-
-/** Quotet ein Feld nach RFC 4180, wenn es Trennzeichen, Anführungszeichen oder Zeilenumbrüche enthält. */
-export function escapeCsvField(text: string): string {
-  if (/[;"\r\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-  return text;
 }
 
 /** Formatiert den Antwortwert. boolean/number bleiben unverändert (kein Formel-Schutz für negative Zahlen). */
@@ -50,11 +44,6 @@ export function formatValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return escapeCsvField(String(value));
-  return escapeCsvField(neutralizeFormula(String(value)));
-}
-
-function formatText(value: unknown): string {
-  if (value === null || value === undefined) return "";
   return escapeCsvField(neutralizeFormula(String(value)));
 }
 
@@ -68,16 +57,17 @@ export function sessionToCsvRows(session: ExportSession): string[] {
 
   return answers.map(([questionName, answer]) =>
     [
-      formatText(session.responseId),
-      formatText(session.surveyName),
+      formatCsvText(session.responseId),
+      formatCsvText(session.surveyName),
       session.surveyVersion === undefined || session.surveyVersion === null
         ? ""
         : String(session.surveyVersion),
-      formatText(questionName),
-      formatText(answer.type),
-      formatText(answer.answeredAt),
+      formatCsvText(questionName),
+      formatCsvText(answer.type),
+      formatCsvText(answer.answeredAt),
       formatValue(answer.value),
-      formatText(session.status),
+      formatCsvText(session.status),
+      formatCsvText(session.channel || DEFAULT_CHANNEL),
     ].join(CSV_SEPARATOR),
   );
 }

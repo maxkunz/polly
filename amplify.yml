@@ -1,6 +1,9 @@
 version: 1
 backend:
   phases:
+    preBuild:
+      commands:
+        - git log -1 --oneline
     build:
       commands:
         - npm install --cache .npm --prefer-offline

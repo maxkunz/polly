@@ -31,6 +31,7 @@ const emit = defineEmits<{
 	(e: "save"): void;
 	(e: "deploy"): void;
 	(e: "report"): void;
+	(e: "invite"): void;
 	(e: "delete"): void;
 	(e: "clone"): void;
 }>();
@@ -99,6 +100,17 @@ const deployTooltip = computed(() => (app.canDeploy ? undefined : t("permissions
 					:disabled="isDirty || isSaving || isDeleting || !app.canDeploy"
 					:aria-label="t('surveyEditor.toolbar.deployAriaLabel')"
 					@click="emit('deploy')"
+				/>
+			</span>
+			<span v-if="!isNew && app.webSurveyEnabled" v-tooltip.top="deployTooltip">
+				<Button
+					size="small"
+					severity="info"
+					icon="pi pi-link"
+					:label="t('surveyEditor.toolbar.invite')"
+					:disabled="isDirty || isSaving || isDeleting || !app.canDeploy"
+					:aria-label="t('surveyEditor.toolbar.inviteAriaLabel')"
+					@click="emit('invite')"
 				/>
 			</span>
 			<Button

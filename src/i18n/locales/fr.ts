@@ -106,6 +106,8 @@ export const fr: MessageSchema = {
 			deployAriaLabel: "Vers la vue de déploiement",
 			report: "Rapport",
 			reportAriaLabel: "Vers la vue du rapport",
+			invite: "Liens d'invitation",
+			inviteAriaLabel: "Vers les liens d'invitation (web)",
 			save: "Enregistrer"
 		},
 		stickyBar: {
@@ -121,11 +123,23 @@ export const fr: MessageSchema = {
 			description: "Description",
 			greeting: "Message de bienvenue",
 			closing: "Message de fin",
+			baseUrl: "URL de base des liens d'invitation (web)",
+			baseUrlHint: "Facultatif. URL https absolue, p. ex. la page dans laquelle le sondage est intégré. {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Sans valeur, le lien pointe vers la page de sondage Polly.",
+			language: "Langue du sondage web",
+			webTheme: "Design du sondage web",
+			webThemeHint: "Police, tailles de texte et couleurs de la page du sondage. Gestion sous Paramètres → Designs web. Un changement prend effet après le déploiement en Prod.",
+			webThemeDefault: "Standard du client (design Polly)",
+			webThemeDefaultNamed: "Standard du client ({name})",
+			webThemeMissing: "Le design choisi a été supprimé. Le sondage utilise le design standard jusqu’à ce que vous en choisissiez un autre.",
+			webThemeMissingOption: "Design supprimé",
+			webThemeLoadingOption: "Design choisi (chargement …)",
+			webThemeUnavailableOption: "Design choisi (liste indisponible)",
 			placeholders: {
 				title: "p. ex. Satisfaction client",
 				description: "Description interne ou contexte de l'enquête...",
 				greeting: "Merci de prendre quelques instants...",
-				closing: "Merci pour vos précieux retours !"
+				closing: "Merci pour vos précieux retours !",
+				baseUrl: "https://www.exemple.fr/sondage/{placeholder}"
 			}
 		},
 		save: {
@@ -279,7 +293,12 @@ export const fr: MessageSchema = {
 		scaleLabel: "Configurer l'échelle d'évaluation ({min} à {max} max.) :",
 		min: "Valeur minimale ({min} à {max})",
 		max: "Valeur maximale ({min} à {max})",
-		previewLabel: "Aperçu de l'échelle :"
+		previewLabel: "Aperçu de l'échelle :",
+		minLabel: "Libellé de la valeur minimale (facultatif)",
+		maxLabel: "Libellé de la valeur maximale (facultatif)",
+		labelsHint: "Affiché uniquement aux extrémités de l'échelle dans les sondages web et non lu à voix haute.",
+		minLabelPlaceholder: "p. ex. très mauvais",
+		maxLabelPlaceholder: "p. ex. excellent"
 	},
 
 	choiceOptions: {
@@ -330,7 +349,12 @@ export const fr: MessageSchema = {
 		surveyNameRequired: "Le nom de l'enquête ne doit pas être vide.",
 		surveyMinQuestions: "Une enquête doit contenir au moins 1 question.",
 		surveyMaxQuestions: "Une enquête peut contenir au maximum {max} questions (questions de suivi comprises). Actuellement : {count}.",
-		ttsTextTooLong: "« {field} » est trop long ({length} sur {max} caractères maximum). Les textes lus par synthèse vocale ne doivent pas dépasser {max} caractères. Veuillez raccourcir le texte."
+		ttsTextTooLong: "« {field} » est trop long ({length} sur {max} caractères maximum). Les textes lus par synthèse vocale ne doivent pas dépasser {max} caractères. Veuillez raccourcir le texte.",
+		baseUrlInvalid: "L'URL de base doit être une URL https absolue valide, p. ex. https://www.exemple.fr/sondage/{placeholder}.",
+		baseUrlTokenCount: "L'URL de base ne peut contenir le paramètre {placeholder} qu'une seule fois.",
+		languageInvalid: "Veuillez choisir une langue valide.",
+		webThemeInvalid: "Veuillez choisir un design web valide.",
+		scaleLabelTooLong: "« {field} » est trop long ({max} caractères maximum)."
 	},
 
 	translator: {
@@ -369,6 +393,18 @@ export const fr: MessageSchema = {
 		unknownError: "Erreur inconnue lors du déploiement",
 		draftChanged: "Le brouillon a été modifié entre-temps (affiché : v{expected}, actuel : v{current}), p. ex. par un autre utilisateur. Rien n'a été déployé. La vue affiche maintenant l'état actuel – veuillez vérifier et déployer à nouveau.",
 		prodChanged: "Prod a été modifié entre-temps, p. ex. par le déploiement d'un autre utilisateur. Le Rollback n'a pas été effectué. La vue affiche maintenant l'état actuel – veuillez vérifier et relancer le Rollback si nécessaire.",
+		webPreview: "Aperçu web",
+		webPreviewAriaLabel: "Ouvrir la version Stage comme enquête web dans un nouvel onglet",
+		webPreviewHint: "L’aperçu web ouvre la version Stage comme enquête web dans un nouvel onglet. Le lien est valable {days} jours, les réponses ne sont pas enregistrées.",
+		webPreviewBlocked: "Le navigateur a bloqué la nouvelle fenêtre.",
+		webPreviewOpenLink: "Ouvrir l’aperçu web",
+		webPreviewErrors: {
+			missingToken: "Non connecté – veuillez recharger la page.",
+			missingRole: "Aucune autorisation – les droits de déploiement manquent.",
+			noStage: "Aucune version Stage n’est déployée pour cette enquête.",
+			throttled: "Trop de requêtes – veuillez réessayer dans un instant.",
+			generic: "Impossible d’ouvrir l’aperçu web"
+		},
 		payloadTooLarge: "Le volume total de texte de l'enquête est trop important ({length} sur {max} caractères maximum, données techniques comprises) ; elle ne peut donc pas être déployée. Veuillez raccourcir les textes les plus longs dans l'éditeur et enregistrer à nouveau l'enquête."
 	},
 
@@ -413,6 +449,37 @@ export const fr: MessageSchema = {
 			invalidRange: "Veuillez choisir une période valide (la date de début ne doit pas être postérieure à la date de fin).",
 			missingToken: "Aucun jeton d'accès Genesys disponible. Veuillez vous reconnecter.",
 			generic: "Erreur lors du chargement du rapport"
+		}
+	},
+
+	invitations: {
+		back: "Retour à l'éditeur",
+		backAriaLabel: "Retour à l'éditeur",
+		title: "Liens d'invitation",
+		prodVersion: "Prod v{version}",
+		intro: "Crée des liens personnalisés pour l'enquête web. Les liens pointent vers la version Prod actuelle ; un déploiement ou un rollback ultérieur s'applique automatiquement aux liens déjà envoyés.",
+		noProd: "L'enquête n'a pas encore de version Prod. Déployez d'abord en Prod, puis créez les liens d'invitation.",
+		count: "Nombre de liens",
+		countHint: "{min} à {max} liens par génération",
+		expiry: "Date d'expiration (facultative)",
+		expiryHint: "Valable jusqu'à 23:59:59 ce jour-là inclus (votre heure locale). Sans date, les liens n'expirent pas.",
+		multi: "Utilisable plusieurs fois",
+		multiHintOn: "Chaque lien peut être utilisé pour participer un nombre illimité de fois.",
+		multiHintOff: "Chaque lien permet exactement une participation.",
+		linkTarget: "Cible des liens",
+		linkTargetBaseUrl: "URL de base issue des paramètres enregistrés de l'enquête :",
+		linkTargetFallback: "Aucune URL de base définie – les liens pointent vers la page d'enquête Polly :",
+		generate: "Créer les liens et télécharger le CSV",
+		generateAriaLabel: "Créer les liens d'invitation et les télécharger en CSV",
+		notStoredHint: "Les liens ne sont pas enregistrés. Conservez le fichier CSV ; des liens perdus ne peuvent qu'être recréés.",
+		success: "{count} liens créés, le fichier CSV a été téléchargé.",
+		errors: {
+			missingToken: "Aucun jeton d'accès Genesys disponible. Veuillez vous reconnecter.",
+			missingRole: "Aucune autorisation – droits de déploiement manquants.",
+			noProd: "L'enquête n'a pas (plus) de version Prod. Veuillez recharger la vue.",
+			throttled: "Genesys est actuellement surchargé. Veuillez réessayer dans un instant.",
+			expiryInPast: "La date d'expiration est dans le passé.",
+			generic: "Erreur lors de la création des liens d'invitation"
 		}
 	},
 
@@ -465,7 +532,126 @@ export const fr: MessageSchema = {
 		sidebarExpand: "Développer la barre latérale"
 	},
 
+	webThemes: {
+		title: "Designs web",
+		intro: "Designs de la page publique du sondage (police, styles de texte, couleurs). Chaque sondage choisit son design dans l’éditeur ; sans choix, le design standard s’applique. Les modifications d’un design atteignent tous les sondages qui l’utilisent en 30 secondes au plus.",
+		list: {
+			loading: "Chargement des designs …",
+			empty: "Aucun design pour l’instant. Sans design, la page du sondage utilise le design Polly.",
+			default: "Standard",
+			edit: "Modifier",
+			view: "Afficher",
+			duplicate: "Dupliquer",
+			delete: "Supprimer",
+			create: "Nouveau design",
+			newName: "Nouveau design",
+			copyName: "{name} (copie)",
+			updated: "Modifié {date}",
+			updatedBy: "Modifié {date} par {user}",
+			limit: "Au maximum {max} designs par client."
+		},
+		editor: {
+			name: "Nom",
+			isDefault: "Design standard du client",
+			font: "Police",
+			fontHint: "Polices du système ; aucun fichier de police n’est chargé.",
+			textStyles: "Styles de texte",
+			textStylesHint: "Taille en pixels avec le réglage par défaut du navigateur. Le zoom et une police de base plus grande des visiteurs restent effectifs.",
+			role: "Type de texte",
+			size: "Taille",
+			weight: "Graisse",
+			lineHeight: "Interligne",
+			reset: "Rétablir la valeur standard",
+			resetAll: "Tout rétablir",
+			resetRole: "Rétablir {role}",
+			resetColor: "Rétablir {color}",
+			sizeOf: "Taille {role} en pixels, de {min} à {max}",
+			weightOf: "Graisse {role}",
+			lineHeightOf: "Interligne {role}",
+			colors: "Couleurs",
+			transparentBackground: "Fond transparent",
+			transparentHint: "Pour l’intégration par iframe : le fond de la page devient transparent, les cartes gardent leur couleur.",
+			preview: "Aperçu",
+			previewHint: "Sondage d’exemple avec tous les types de questions. Le type de texte en cours de modification y est mis en évidence.",
+			previewTitle: "Aperçu de la page du sondage",
+			save: "Enregistrer",
+			cancel: "Annuler"
+		},
+		roles: {
+			heading: "Titre",
+			subheading: "Sous-titre",
+			body: "Texte courant",
+			questionTitle: "Titre de question",
+			description: "Description",
+			option: "Options de réponse",
+			scaleLabel: "Libellés d’échelle",
+			hint: "Indications",
+			error: "Textes d’erreur",
+			button: "Bouton"
+		},
+		weights: {
+			w400: "Normal (400)",
+			w500: "Moyen (500)",
+			w600: "Demi-gras (600)",
+			w700: "Gras (700)"
+		},
+		fonts: {
+			system: "Police système",
+			sans: "Sans empattement (Helvetica, Arial)",
+			serif: "Avec empattement (Charter, Georgia)",
+			humanist: "Humaniste (Seravek, Calibri)",
+			rounded: "Arrondie"
+		},
+		colors: {
+			background: "Fond de page",
+			surface: "Surfaces (cartes)",
+			text: "Texte",
+			heading: "Titres",
+			textMuted: "Texte atténué",
+			primary: "Couleur d’accent",
+			onPrimary: "Texte sur couleur d’accent",
+			border: "Bordures",
+			error: "Erreurs"
+		},
+		contrast: {
+			warning: "Contraste avec {background} : {ratio}:1, au moins {minimum}:1 (WCAG AA).",
+			summary: "Avertissements de contraste : {count}. L’enregistrement est possible, mais l’accessibilité selon WCAG 2.2 AA n’est pas garantie avec ce design."
+		},
+		delete: {
+			header: "Supprimer le design",
+			message: "Supprimer vraiment le design « {name} » ?",
+			usedBy: "Il est utilisé par ces sondages, qui afficheront ensuite le design standard : {surveys}.",
+			unused: "Aucun sondage n’utilise ce design.",
+			usageUnknown: "Impossible de vérifier si des sondages utilisent ce design ; les sondages concernés afficheront le design standard.",
+			accept: "Supprimer",
+			reject: "Annuler"
+		},
+		toast: {
+			saved: "Design « {name} » enregistré",
+			saveFailed: "Le design n’a pas pu être enregistré",
+			deleted: "Design « {name} » supprimé",
+			deleteFailed: "Le design n’a pas pu être supprimé"
+		},
+		errors: {
+			missingToken: "Non connecté. Veuillez recharger l’application.",
+			missingRole: "Pas d’autorisation – droits de déploiement manquants.",
+			limitReached: "Le nombre maximal de designs est atteint.",
+			conflict: "Quelqu’un d’autre a modifié ou supprimé le design entre-temps. La liste a été rechargée et vos saisies sont conservées. Un nouvel enregistrement écrase la version actuelle.",
+			throttled: "Le service est surchargé. Veuillez réessayer dans un instant.",
+			generic: "Erreur des designs web"
+		}
+	},
+
+	features: {
+		web_survey: {
+			label: "Enquêtes web",
+			description: "Enquêtes via lien d'invitation dans le navigateur, y compris les designs web et les paramètres web dans l'éditeur."
+		}
+	},
 	settings: {
+		features: {
+			title: "Fonctionnalités activées"
+		},
 		setup: {
 			title: "Installation",
 			empty: "Aucune métadonnée d'installation disponible.",
@@ -551,6 +737,8 @@ export const fr: MessageSchema = {
 			mappingDataTable: "Data Table du mapping des Queues",
 			dataTableHint: "Noms complets des Data Tables. Si une table portant ce nom existe déjà, elle est reprise et n'est pas supprimée lors de la désinstallation.",
 			dataTableNamesCollide: "Les deux Data Tables doivent avoir des noms différents.",
+			features: "Fonctionnalités",
+			featuresHint: "La sélection est enregistrée dans la ligne __meta et ne peut être modifiée après l'installation que directement dans la Data Table.",
 			next: "Suivant"
 		},
 		step2: {
@@ -561,6 +749,8 @@ export const fr: MessageSchema = {
 			oauthClient: "Client OAuth",
 			division: "Division",
 			newDivision: "Nouvelle : {name}_division",
+			features: "Fonctionnalités",
+			noFeatures: "Aucune",
 			surveyDataTable: "Data Table des enquêtes",
 			mappingDataTable: "Data Table du mapping des Queues",
 			back: "Retour",

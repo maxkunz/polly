@@ -12,6 +12,7 @@ import FieldError from "@/components/ui/FieldError.vue";
 import QuestionCardHeader from "./QuestionCardHeader.vue";
 import QuestionBasicFields from "./QuestionBasicFields.vue";
 import RatingOptionsEditor from "./RatingOptionsEditor.vue";
+import ScaleLabelsEditor from "./ScaleLabelsEditor.vue";
 import ChoiceOptionsEditor from "./ChoiceOptionsEditor.vue";
 import QuestionTypeInfoHint from "./QuestionTypeInfoHint.vue";
 import SurveyFollowUpEditor from "./SurveyFollowUpEditor.vue";
@@ -44,6 +45,8 @@ const {
 	handleTypeChange,
 	ratingOptions,
 	choiceOptions,
+	scaleLabels,
+	setScaleLabel,
 	addChoiceOption,
 	removeChoiceOption
 } = useQuestionTypeOptions(toRef(() => props.question));
@@ -97,6 +100,16 @@ const showFollowUps = computed(() => props.question.type !== "comment" || (props
 				/>
 
 				<QuestionTypeInfoHint v-else :type="question.type" />
+
+				<ScaleLabelsEditor
+					v-if="question.type === 'rating' || question.type === 'nps'"
+					:questionId="question.id"
+					:minLabel="scaleLabels.min_label"
+					:maxLabel="scaleLabels.max_label"
+					:disabled="disabled"
+					@update:minLabel="setScaleLabel('min_label', $event)"
+					@update:maxLabel="setScaleLabel('max_label', $event)"
+				/>
 
 				<!-- Follow-Up Section -->
 				<!-- Fokussierbarer Bereich: Ziel für Fehler, die die Folgefragen insgesamt betreffen -->

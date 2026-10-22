@@ -1,0 +1,41 @@
+# Editor-Vorgaben für VS Code und Agenten. Sie bilden die bestehende Formatierung ab,
+# es wird kein Formatter erzwungen (siehe .vscode/settings.json: formatOnSave aus).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = tab
+indent_size = 4
+
+# Backend: 2 Spaces
+[amplify/**]
+indent_style = space
+indent_size = 2
+
+# Frontend, Tests und Konfiguration im Root: Tabs (Standard oben)
+
+# Skripte
+[*.py]
+indent_style = space
+indent_size = 4
+
+# Daten- und Textformate
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+indent_style = space
+indent_size = 2
+# Zwei Leerzeichen am Zeilenende sind in Markdown ein Zeilenumbruch
+trim_trailing_whitespace = false
+
+# Generiert oder von Werkzeugen verwaltet: nicht anfassen
+[{package-lock.json,amplify_outputs*.json}]
+indent_style = unset
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

@@ -6,6 +6,9 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { resolveTenantContext } from "../shared/tenant_auth";
+import { isSurveyBeingDeleted, updateSurveyAggregate } from "../shared/survey_results";
+import { checkSurveyExists } from "../shared/genesys_survey_check";
+import { isValidSurveyId } from "../shared/survey_id";
 
 type AnyApiGwEvent = any;
 type AnyResult = { statusCode: number; headers: Record<string, string>; body: string };
@@ -29,7 +32,6 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 
 const SURVEY_RESPONSES_TABLE_NAME = process.env.SURVEY_RESPONSES_TABLE_NAME ?? "";
 const SURVEY_AGGREGATES_TABLE_NAME = process.env.SURVEY_AGGREGATES_TABLE_NAME ?? "";
-const SURVEY_DELETION_JOBS_TABLE_NAME = process.env.SURVEY_DELETION_JOBS_TABLE_NAME ?? "";
 
 function jsonResponse(statusCode: number, body: unknown): AnyResult {
   return {
@@ -42,32 +44,6 @@ function jsonResponse(statusCode: number, body: unknown): AnyResult {
     },
     body: typeof body === "string" ? body : JSON.stringify(body),
   };
-}
-
-/**
- * Normalisiert den Wert für Aggregatszählungen (counts-Map).
- */
-function normalizeCountKey(value: any): string {
-  if (value === null || value === undefined) return "empty";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  return String(value).trim();
-}
-
-/**
- * Liegt für die Umfrage ein aktiver oder abgeschlossener Lösch-Job vor, werden keine neuen Antworten
- * mehr gespeichert (sonst entstünden nach dem Löschen wieder verwaiste Ergebnisse).
- * Abgebrochene/fehlgeschlagene Jobs sperren nicht.
- */
-async function isSurveyBeingDeleted(tenantId: string, surveyId: string): Promise<boolean> {
-  if (!SURVEY_DELETION_JOBS_TABLE_NAME) return false;
-  const result = await ddb.send(
-    new GetCommand({
-      TableName: SURVEY_DELETION_JOBS_TABLE_NAME,
-      Key: { tenantId, surveyId },
-    })
-  );
-  const status = result.Item?.status;
-  return status === "queued" || status === "running" || status === "done";
 }
 
 /**
@@ -176,100 +152,6 @@ async function upsertSurveyResponse(
 }
 
 /**
- * Aktualisiert das Aggregat-Item in SurveyAggregatesTable.
- */
-async function updateSurveyAggregate(
-  tenantId: string,
-  body: SubmitSurveyAnswerBody,
-  now: string
-) {
-  const {
-    surveyId,
-    surveyName = "",
-    questionName,
-    questionType,
-    value,
-  } = body;
-
-  if (!questionName || value === undefined) return;
-
-  const tenantSurveyId = `${tenantId}#${surveyId}`;
-  const isNumeric = typeof value === "number" && !isNaN(value);
-  const countKey = normalizeCountKey(value);
-  const isComment = questionType === "comment";
-
-  const executeAggregateUpdate = async (withNestedCount: boolean, withInitCount: boolean) => {
-    let updateExp = "SET #tenantId = :tenantId, #surveyId = :surveyId, #surveyName = :surveyName, #questionType = :qType, #updatedAt = :now";
-    let addExp = "ADD #totalResponses :one";
-
-    const expNames: Record<string, string> = {
-      "#tenantId": "tenantId",
-      "#surveyId": "surveyId",
-      "#surveyName": "surveyName",
-      "#questionType": "questionType",
-      "#updatedAt": "updatedAt",
-      "#totalResponses": "totalResponses",
-    };
-
-    const expValues: Record<string, any> = {
-      ":tenantId": tenantId,
-      ":surveyId": surveyId,
-      ":surveyName": surveyName,
-      ":qType": questionType ?? "unknown",
-      ":now": now,
-      ":one": 1,
-    };
-
-    if (isNumeric && (questionType === "rating" || questionType === "nps")) {
-      addExp += ", #sum :numValue";
-      expNames["#sum"] = "sum";
-      expValues[":numValue"] = value;
-    }
-
-    if (!isComment) {
-      if (withNestedCount) {
-        updateExp += ", #counts.#countKey = if_not_exists(#counts.#countKey, :zero) + :one";
-        expNames["#counts"] = "counts";
-        expNames["#countKey"] = countKey;
-        expValues[":zero"] = 0;
-      } else if (withInitCount) {
-        updateExp += ", #counts = :initCounts";
-        expNames["#counts"] = "counts";
-        expValues[":initCounts"] = { [countKey]: 1 };
-      }
-    }
-
-    const fullExp = `${updateExp} ${addExp}`.trim();
-
-    return await ddb.send(
-      new UpdateCommand({
-        TableName: SURVEY_AGGREGATES_TABLE_NAME,
-        Key: { tenantSurveyId, questionName },
-        UpdateExpression: fullExp,
-        ExpressionAttributeNames: expNames,
-        ExpressionAttributeValues: expValues,
-        ReturnValues: "ALL_NEW",
-      })
-    );
-  };
-
-  if (isComment) {
-    await executeAggregateUpdate(false, false);
-    return;
-  }
-
-  try {
-    await executeAggregateUpdate(true, false);
-  } catch (err: any) {
-    if (err.name === "ValidationException" || err.message?.includes("document path")) {
-      await executeAggregateUpdate(false, true);
-    } else {
-      console.warn("[survey_responses] aggregate update warning", err);
-    }
-  }
-}
-
-/**
  * POST /survey-responses
  */
 async function submitSurveyResponse(event: AnyApiGwEvent, tenantId: string): Promise<AnyResult> {
@@ -295,9 +177,33 @@ async function submitSurveyResponse(event: AnyApiGwEvent, tenantId: string): Pro
     return jsonResponse(400, { message: "questionName or isCompleted: true is required" });
   }
 
-  // Antworten zu gelöschten Umfragen ignorieren (200, damit der Flow nicht in den Fehlerpfad läuft)
+  if (!isValidSurveyId(surveyId)) {
+    return jsonResponse(400, { message: "surveyId must be a UUID" });
+  }
+
+  // Antworten zu gelöschten Umfragen ignorieren (200, damit der Flow nicht in den Fehlerpfad läuft).
+  // Vor der Existenzprüfung, denn nach dem Löschen fehlt die Zeile in der Data Table.
   if (await isSurveyBeingDeleted(tenantId, surveyId)) {
     return jsonResponse(200, { message: "Survey deleted, answer ignored", ignored: true, session: {} });
+  }
+
+  // Nur Umfragen aus der Data Table des Mandanten; ist das Ergebnis unklar, wird trotzdem gespeichert
+  const existence = await checkSurveyExists(tenantId, surveyId);
+  if (existence.status === "absent") {
+    return jsonResponse(404, { message: "Survey not found", code: "survey_not_found" });
+  }
+  if (existence.status === "error" && !existence.cached) {
+    if (existence.kind === "config") {
+      // Fester Text für einen CloudWatch-Alarm: die Prüfung ist für diesen Mandanten wirkungslos
+      console.error("[survey_responses] SURVEY_CHECK_CONFIG_ERROR", { tenantId, surveyId, reason: existence.reason });
+    } else {
+      console.warn("[survey_responses] survey existence check failed, accepting answer", {
+        tenantId,
+        surveyId,
+        reason: existence.reason,
+        throttled: existence.throttled ?? false,
+      });
+    }
   }
 
   const now = new Date().toISOString();
@@ -306,8 +212,13 @@ async function submitSurveyResponse(event: AnyApiGwEvent, tenantId: string): Pro
   const sessionResult = await upsertSurveyResponse(tenantId, body, now);
 
   // 2. Aggregat in SurveyAggregatesTable inkrementieren
+  // Ein Fehler hier macht die gespeicherte Antwort nicht ungültig, der Flow soll nicht in den Fehlerpfad laufen
   if (body.questionName && body.value !== undefined) {
-    await updateSurveyAggregate(tenantId, body, now);
+    try {
+      await updateSurveyAggregate(tenantId, body, now);
+    } catch (err) {
+      console.warn("[survey_responses] aggregate update failed", { tenantId, surveyId, error: err });
+    }
   }
 
   return jsonResponse(200, {

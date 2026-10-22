@@ -2,7 +2,8 @@
 import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import { useToast } from "primevue/usetoast";
-import type { SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
+import type { SurveyQuestion } from "@/domain/survey/surveyTypes";
+import type { QuestionType } from "@/domain/survey/flowTypes";
 import { SURVEY_MAX_QUESTIONS } from "@/constants/surveyConstants";
 import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";

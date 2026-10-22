@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import Tag from "primevue/tag";
-import type { FlowSurvey } from "@/services/surveyFlowTranslator";
+import type { FlowSurvey } from "@/domain/survey/flowTypes";
 import { currentLocaleTag } from "@/i18n";
 
 const props = withDefaults(

@@ -1,9 +1,67 @@
 import { fileURLToPath, URL } from "node:url";
 
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Connect, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { DEFAULT_GENESYS_REGION } from "./src/constants/genesysConstants";
+
+/**
+ * Content-Security-Policy der öffentlichen Umfrageseite (nur im Build; der Dev-Server braucht
+ * Inline-Styles und HMR). Erlaubt nur eigene Skripte/Styles und Aufrufe an den eigenen Origin
+ * (Backend über API_PREFIX). `frame-ancestors` wirkt nicht per <meta>; die Seite darf ohnehin
+ * eingebettet werden (siehe documentation/polly_web.md).
+ */
+const WEB_SURVEY_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ");
+
+/**
+ * Umfrageseite (survey.html, src/webSurvey/):
+ * - Dev/Preview: `/s/<jwt>` wird wie die Amplify-Rewrite-Regel auf survey.html umgeschrieben.
+ * - Build: CSP direkt nach dem charset-Meta von survey.html, vor allen Skripten und Styles.
+ */
+function webSurveyPage(): Plugin {
+  const rewriteTokenPath: Connect.NextHandleFunction = (req, _res, next) => {
+    if (req.url?.startsWith("/s/")) {
+      const query = req.url.indexOf("?");
+      req.url = `/survey.html${query >= 0 ? req.url.slice(query) : ""}`;
+    }
+    next();
+  };
+
+  return {
+    name: "polly-web-survey-page",
+    configureServer(server) {
+      server.middlewares.use(rewriteTokenPath);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(rewriteTokenPath);
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(html, ctx) {
+        if (ctx.server || !ctx.path.endsWith("/survey.html")) return html;
+        // Ohne Treffer ginge die öffentliche Seite ohne CSP raus: dann lieber den Build abbrechen
+        const charsetMeta = /<meta\s+charset=["']?utf-8["']?\s*\/?>/i;
+        if (!charsetMeta.test(html)) {
+          throw new Error("[polly-web-survey-page] survey.html: <meta charset=\"UTF-8\"> fehlt, CSP kann nicht eingefügt werden");
+        }
+        return html.replace(
+          charsetMeta,
+          (charset) => `${charset}\n    <meta http-equiv="Content-Security-Policy" content="${WEB_SURVEY_CSP}" />`
+        );
+      },
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -12,7 +70,7 @@ export default defineConfig(({ mode }) => {
   const genesysRegion = env.GENESYS_REGION?.trim() || DEFAULT_GENESYS_REGION;
 
   return {
-    plugins: [vue(), tailwindcss()],
+    plugins: [vue(), tailwindcss(), webSurveyPage()],
     define: {
       __GENESYS_REGION__: JSON.stringify(genesysRegion),
     },
@@ -23,17 +81,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
-        "/api/survey-responses": {
-          target: "https://main.d1a6p4nkkob4i7.amplifyapp.com",
+        // Muss vor "/api" stehen: Vite prüft per Präfix, "/api" würde sonst auch "/api_websurveys" treffen.
+        "/api_websurveys": {
+          target: "https://feature-websurveys.d1a6p4nkkob4i7.amplifyapp.com",
           changeOrigin: true,
           secure: true,
         },
         "/api": {
-          //target: process.env.AWS_BRANCH ?? "",   // holt url aus env (funktioniert nur in aws?)
-          target: "https://v9u2ed8v37.execute-api.eu-central-1.amazonaws.com/",
+          target: "https://main.d1a6p4nkkob4i7.amplifyapp.com",
           changeOrigin: true,
           secure: true,
-          rewrite: (path) => path.replace(/^\/api/, ""),
         },
         "/genesys-downloads": {
           target: `https://api-downloads.${genesysRegion}`,
@@ -57,6 +114,15 @@ export default defineConfig(({ mode }) => {
               proxyRes.headers["access-control-allow-methods"] = "GET, OPTIONS";
             });
           },
+        },
+      },
+    },
+    build: {
+      rollupOptions: {
+        // Genesys-App und öffentliche Umfrageseite (/s/<jwt> → survey.html per Amplify-Rewrite)
+        input: {
+          main: fileURLToPath(new URL("./index.html", import.meta.url)),
+          survey: fileURLToPath(new URL("./survey.html", import.meta.url)),
         },
       },
     },

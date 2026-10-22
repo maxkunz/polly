@@ -5,6 +5,8 @@ import Button from "primevue/button";
 import Message from "primevue/message";
 import type { Survey } from "@/domain/survey/surveyTypes";
 import { useSurveyDeployment } from "@/composables/useSurveyDeployment";
+import { useWebPreview } from "@/composables/useWebPreview";
+import { PREVIEW_TOKEN_TTL_DAYS } from "@/domain/survey/invitationLinks";
 import SurveyDeploymentStatus from "./SurveyDeploymentStatus.vue";
 import SurveyQueueMappingForm from "./SurveyQueueMappingForm.vue";
 import { useAppStore } from "@/stores/appStore";
@@ -56,6 +58,13 @@ const {
 	surveyId: props.surveyId,
 	existingRow
 });
+
+const {
+	isOpening: isOpeningWebPreview,
+	errorMessage: webPreviewError,
+	blockedUrl: webPreviewBlockedUrl,
+	openWebPreview
+} = useWebPreview(props.surveyId);
 
 // Version des aktuell geladenen Drafts (nach einem Deploy-Fehler ggf. neuer als beim Öffnen)
 const draftVersion = computed(() => readFieldVersion(existingRow.value?.Draft) ?? props.survey.version ?? 1);
@@ -130,6 +139,19 @@ const payloadTooLargeText = computed(() => {
 					@click="deployToStage"
 				/>
 			</span>
+			<span v-if="app.webSurveyEnabled" v-tooltip.top="deployTooltip">
+				<Button
+					icon="pi pi-external-link"
+					:label="t('deployment.webPreview')"
+					severity="secondary"
+					variant="outlined"
+					:loading="isOpeningWebPreview"
+					:disabled="isDeploying || isOpeningWebPreview || !stageSnapshot || !app.canDeploy"
+					:aria-label="t('deployment.webPreviewAriaLabel')"
+					aria-describedby="deploy-web-preview-hint"
+					@click="openWebPreview"
+				/>
+			</span>
 			<span v-tooltip.top="deployTooltip">
 				<Button
 					icon="pi pi-cloud-upload"
@@ -155,6 +177,21 @@ const payloadTooLargeText = computed(() => {
 				/>
 			</span>
 		</div>
+
+		<template v-if="app.webSurveyEnabled">
+			<p id="deploy-web-preview-hint" class="text-sm text-[var(--p-text-muted-color)]">
+				{{ t("deployment.webPreviewHint", { days: PREVIEW_TOKEN_TTL_DAYS }) }}
+			</p>
+			<Message v-if="webPreviewError" severity="error" :closable="false">
+				{{ webPreviewError }}
+			</Message>
+			<Message v-if="webPreviewBlockedUrl" severity="warn" :closable="false">
+				{{ t("deployment.webPreviewBlocked") }}
+				<a :href="webPreviewBlockedUrl" target="_blank" rel="noopener noreferrer" class="underline break-all">
+					{{ t("deployment.webPreviewOpenLink") }}
+				</a>
+			</Message>
+		</template>
 
 		<Message v-if="isDraftInProd" severity="info" :closable="false">
 			{{ t("deployment.alreadyInProd", { version: draftVersion }) }}

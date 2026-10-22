@@ -8,11 +8,13 @@ import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oa
 import { makeJobForFlow, flowFetch } from "@/services/genesys/botFlow";
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
+import { API_PREFIX } from "@/constants/apiConstants";
 import { getErrorMessage } from "@/services/genesys/retry";
 import { POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING } from "@/constants/permissionConstants";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 import inboundFlowTemplate from "@/templates/genesys/inboundFlowStructure.yaml?raw";
+import { normalizeFeatures, type FeatureFlags } from "@/domain/features/featureFlags";
 
 type FlowSetupResource = {
   id: string;
@@ -71,6 +73,7 @@ export async function runFullProvisioning(
   oauthFrontendId: string,
   divisionId: string,
   divisionName: string,
+  features: FeatureFlags,
   onProgress: (msg: string) => void
 ): Promise<{
   integrationUrl: string;
@@ -137,6 +140,9 @@ export async function runFullProvisioning(
     botFlow: { id: "", name: names.botFlow },
     inboundFlow: { id: "", name: names.inboundFlow },
   } satisfies SetupMeta;
+  // Feature Flags werden nur hier gesetzt, danach nur noch direkt in der Data Table
+  const selectedFeatures = normalizeFeatures(features);
+  app.domain.meta.features = selectedFeatures;
   const setupState = app.domain.meta.setup as SetupMeta;
 
   try {
@@ -183,7 +189,7 @@ export async function runFullProvisioning(
     setupState.dataTable.id = datatableId;
 
     await addDataTableRow(datatableId, buildEmptySurveyRow("__lock"));
-    await addDataTableRow(datatableId, buildMetaRow({ appTitle: projectTag, setup: null }));
+    await addDataTableRow(datatableId, buildMetaRow({ appTitle: projectTag, setup: null, features: selectedFeatures }));
     await addDataTableRow(datatableId, {
       ...buildEmptySurveyRow("survey_list"),
       Draft: "[]",
@@ -236,7 +242,7 @@ export async function runFullProvisioning(
     onProgress(`Backend OAuth client created (${backendClient.id})`);
 
     onProgress("Starting backend onboarding...");
-    const startResponse = await fetch(`${appOrigin}/api/onboarding/start`, {
+    const startResponse = await fetch(`${appOrigin}${API_PREFIX}/onboarding/start`, {
       method: "POST",
       headers: setupApiHeaders,
       body: JSON.stringify({
@@ -273,7 +279,7 @@ export async function runFullProvisioning(
 
     onProgress(`Creating data action ${names.dataAction}...`);
     const dataActionTemplate = JSON.parse(
-      applyDomainDatActPlaceholder(JSON.stringify(surveyResponseActionJson), appOrigin)
+      applyDomainDatActPlaceholder(JSON.stringify(surveyResponseActionJson), appOrigin, API_PREFIX)
     );
     const dataAction = await createDataAction({
       name: names.dataAction,
@@ -286,7 +292,7 @@ export async function runFullProvisioning(
     onProgress(`Data action created (${dataAction.id})`);
 
     onProgress("Completing backend onboarding...");
-    const completeResponse = await fetch(`${appOrigin}/api/onboarding/complete`, {
+    const completeResponse = await fetch(`${appOrigin}${API_PREFIX}/onboarding/complete`, {
       method: "POST",
       headers: setupApiHeaders,
       body: JSON.stringify({
@@ -295,6 +301,7 @@ export async function runFullProvisioning(
         genesysClientId: backendClient.id,
         genesysClientSecret: backendClient.secret,
         allowedDataTableIds: [datatableId, mappingDataTableId],
+        surveyDataTableId: datatableId,
       }),
     });
 
@@ -361,7 +368,7 @@ export async function runFullProvisioning(
     setupState.status = "installed";
     setupState.installedAt = new Date().toISOString();
 
-    await updateDataTableRow(datatableId, "__meta", buildMetaRow({ appTitle: projectTag, setup: setupState }));
+    await updateDataTableRow(datatableId, "__meta", buildMetaRow({ appTitle: projectTag, setup: setupState, features: selectedFeatures }));
     onProgress("Setup metadata stored in __meta.");
     onProgress("Installation complete.");
 
@@ -408,7 +415,7 @@ export async function importFlow(
 
   onProgress(`Uploading ${flowName}...`);
   flowState.uploadAttempted = true;
-  const response = await fetch(`${appOrigin}/api/archy-upload`, {
+  const response = await fetch(`${appOrigin}${API_PREFIX}/archy-upload`, {
     method: "POST",
     headers: authHeaders,
     body: JSON.stringify({

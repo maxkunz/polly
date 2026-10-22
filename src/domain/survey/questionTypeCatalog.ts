@@ -1,5 +1,5 @@
 import { i18n } from "@/i18n";
-import type { QuestionType, ConditionOperator } from "./surveyTypes";
+import type { QuestionType, ConditionOperator } from "./flowTypes";
 
 export interface QuestionTypeMeta {
 	label: string;

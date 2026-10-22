@@ -1,10 +1,15 @@
+import { CONDITION_OPERATOR_ORDER } from "@/domain/survey/flowTypes";
 import type {
 	ConditionOperator,
-	FollowUpRule,
-	QuestionType,
-	Survey,
-	SurveyQuestion
-} from "@/domain/survey/surveyTypes";
+	FlowCondition,
+	FlowQuestion,
+	FlowQuestionBase,
+	FlowRatingQuestion,
+	FlowSurvey,
+	FlowYesNoQuestion,
+	ScaleLabels
+} from "@/domain/survey/flowTypes";
+import type { FollowUpRule, Survey, SurveyQuestion } from "@/domain/survey/surveyTypes";
 import { isChoiceOptions, isRatingOptions } from "@/domain/survey/surveyTypes";
 import { i18n } from "@/i18n";
 
@@ -29,83 +34,8 @@ export class SurveyFlowTranslationError extends Error {
 	}
 }
 
-export interface FlowCondition {
-	operator: ConditionOperator;
-	value: number;
-	next_question_id: string | null;
-}
-
-interface FlowQuestionBase {
-	id: string;
-	name: string;
-	type: QuestionType;
-	prompt: string;
-	description: string;
-	reprompt: string;
-	mandatory: boolean;
-	default_next_question_id: string | null;
-}
-
-export interface FlowCommentQuestion extends FlowQuestionBase {
-	type: "comment";
-}
-
-export interface FlowYesNoQuestion extends FlowQuestionBase {
-	type: "yes_no";
-	options: {
-		yes_next_question_id: string | null;
-		no_next_question_id: string | null;
-	};
-}
-
-export interface FlowChoiceQuestion extends FlowQuestionBase {
-	type: "choice";
-	labels: string[];
-	/** Pro Option ein String mit durch "; " getrennten Synonymen, leerer String ohne Synonyme. */
-	synonyms: string[];
-	next_question_ids: (string | null)[];
-}
-
-export interface FlowRatingQuestion extends FlowQuestionBase {
-	type: "rating";
-	options: {
-		values: number[];
-		min_value: number;
-		max_value: number;
-	};
-	conditional_next_question: FlowCondition[];
-}
-
-export interface FlowNpsQuestion extends FlowQuestionBase {
-	type: "nps";
-	conditional_next_question: FlowCondition[];
-}
-
-export type FlowQuestion =
-	| FlowCommentQuestion
-	| FlowYesNoQuestion
-	| FlowChoiceQuestion
-	| FlowRatingQuestion
-	| FlowNpsQuestion;
-
-export interface FlowSurvey {
-	id: string;
-	name: string;
-	title: string;
-	description: string;
-	greeting_prompt: string;
-	closing_prompt: string;
-	created_at?: string;
-	updated_at?: string;
-	start_question_id: string | null;
-	version?: number;
-	type: "Flow";
-	questions: FlowQuestion[];
-}
-
 const SYNONYM_SEPARATOR = "; ";
 
-const CONDITIONAL_OPERATOR_ORDER: ConditionOperator[] = ["equals", "less_than", "greater_than"];
 
 const CONDITIONAL_PLACEHOLDER_VALUE: Record<ConditionOperator, number> = {
 	equals: -1,
@@ -254,7 +184,16 @@ function buildRatingOptions(question: SurveyQuestion): FlowRatingQuestion["optio
 		values.push(value);
 	}
 
-	return { values, min_value, max_value };
+	return { values, min_value, max_value, ...buildScaleLabels(question.options) };
+}
+
+/** Min/Max-Labels für das Flow-JSON: nur gesetzte (nicht leere) Labels werden übernommen. */
+function buildScaleLabels(options: unknown): ScaleLabels {
+	const { min_label, max_label } = (options ?? {}) as ScaleLabels;
+	return {
+		...(min_label?.trim() ? { min_label } : {}),
+		...(max_label?.trim() ? { max_label } : {})
+	};
 }
 
 function buildConditionalNextQuestion(
@@ -289,7 +228,7 @@ function buildConditionalNextQuestion(
 		});
 	}
 
-	return CONDITIONAL_OPERATOR_ORDER.map(operator => {
+	return CONDITION_OPERATOR_ORDER.map(operator => {
 		const existing = byOperator.get(operator);
 		if (existing) {
 			return existing;
@@ -349,7 +288,9 @@ function flattenQuestion(
 		}
 		case "nps": {
 			const conditional_next_question = buildConditionalNextQuestion(question, followUps);
-			out.push({ ...base, type: "nps", conditional_next_question });
+			const labels = buildScaleLabels(question.options);
+			const options = Object.keys(labels).length > 0 ? { options: labels } : {};
+			out.push({ ...base, type: "nps", ...options, conditional_next_question });
 			break;
 		}
 		default: {
@@ -390,6 +331,9 @@ export function translateSurveyObject(survey: Survey): FlowSurvey {
 		description: survey.description ?? "",
 		greeting_prompt: survey.greeting_message ?? "",
 		closing_prompt: survey.closing_message ?? "",
+		...(survey.language ? { language: survey.language } : {}),
+		// Nur für die Lambda web_survey (Wahl des Designs); Architect ignoriert das Feld
+		...(survey.web_theme_id ? { web_theme_id: survey.web_theme_id } : {}),
 		created_at: survey.created_at,
 		updated_at: survey.updated_at,
 		start_question_id: mainQuestions[0].id,

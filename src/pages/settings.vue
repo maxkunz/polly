@@ -9,6 +9,7 @@ import Select from "primevue/select";
 import { useToast } from "primevue/usetoast";
 
 import PageHeader from "@/components/layout/PageHeader.vue";
+import WebThemesCard from "@/components/webTheme/WebThemesCard.vue";
 import { useAppStore } from "@/stores/appStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
@@ -16,6 +17,7 @@ import { setLocale, isDevOnlyLocale, SUPPORTED_LOCALES, type SupportedLocale } f
 import { startBotFlowUpdate, startInboundFlowUpdate } from "@/services/SetupExportFlow";
 import { updateInstalledBotFlow } from "@/services/SetupUpdate";
 import { getErrorMessage } from "@/services/genesys/retry";
+import { enabledFeatures } from "@/domain/features/featureFlags";
 
 const app = useAppStore();
 const router = useRouter();
@@ -44,6 +46,8 @@ const selectedLocale = computed<SupportedLocale>({
 });
 
 const setup = computed(() => app.domain.meta.setup ?? null);
+// Nur aktive Flags anzeigen; geändert werden sie nur direkt in der Data Table (__meta)
+const activeFeatures = computed(() => enabledFeatures(app.domain.meta.features));
 const isExporting = ref(false);
 const isUpdating = ref(false);
 
@@ -178,6 +182,8 @@ function startUninstall() {
 				</template>
 			</Card>
 
+			<WebThemesCard v-if="setup && app.webSurveyEnabled" />
+
 			<Card>
 				<template #title>{{ t("settings.setup.title") }}</template>
 				<template #content>
@@ -197,6 +203,25 @@ function startUninstall() {
 								</div>
 								<div class="text-sm break-all">{{ row.value }}</div>
 							</div>
+						</div>
+
+						<div v-if="activeFeatures.length">
+							<div class="text-xs uppercase tracking-wide text-[var(--p-text-muted-color)] mb-2">
+								{{ t("settings.features.title") }}
+							</div>
+							<ul class="space-y-2">
+								<li
+									v-for="key in activeFeatures"
+									:key="key"
+									class="flex items-start gap-2 text-sm"
+								>
+									<i class="pi pi-check-circle text-green-600 mt-0.5" aria-hidden="true" />
+									<div>
+										<div class="font-medium">{{ t(`features.${key}.label`) }}</div>
+										<div class="text-[var(--p-text-muted-color)]">{{ t(`features.${key}.description`) }}</div>
+									</div>
+								</li>
+							</ul>
 						</div>
 
 						<div v-if="app.devView" class="flex flex-wrap items-center justify-between gap-4">

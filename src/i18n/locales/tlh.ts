@@ -107,6 +107,8 @@ export const tlh: MessageSchema = {
 			deployAriaLabel: "ngeHmeH leghmeH yIjaH",
 			report: "ja'",
 			reportAriaLabel: "ja' leghmeH yIjaH",
+			invite: "rItlh mu'mey",
+			inviteAriaLabel: "rItlh mu'mey leghmeH yIjaH",
 			save: "yIpol"
 		},
 		stickyBar: {
@@ -122,11 +124,23 @@ export const tlh: MessageSchema = {
 			description: "Delmey",
 			greeting: "nuqneH QIn",
 			closing: "Qapla' QIn",
+			baseUrl: "Web QIn ra'ghom URL (Web)",
+			baseUrlHint: "ghItlh. https URL, {placeholder} 'ej ?token=…. URL vItlhutlh: Polly QIn ra'ghom.",
+			language: "Web QIn Hol",
+			webTheme: "Web QIn HablI'",
+			webThemeHint: "ngutlh, tIn, rItlh. SeHmey → Web HablI'mey. Prod vIngeHDI' Qap.",
+			webThemeDefault: "motlh HablI' (Polly)",
+			webThemeDefaultNamed: "motlh HablI' ({name})",
+			webThemeMissing: "HablI' Qaw'lu'. motlh HablI' lo'.",
+			webThemeMissingOption: "HablI' Qaw'lu'bogh",
+			webThemeLoadingOption: "HablI' wIvlu'bogh (lI'lu' …)",
+			webThemeUnavailableOption: "HablI' wIvlu'bogh (tetlh tu'lu'be')",
 			placeholders: {
 				title: "mu'mey: ghotpu' belmoH",
 				description: "yu'ghItlh Del qoD...",
 				greeting: "poH Danobmo' qatlho'...",
-				closing: "QIn lo'laH Danobmo' qatlho'!"
+				closing: "QIn lo'laH Danobmo' qatlho'!",
+				baseUrl: "https://www.example.com/survey/{placeholder}"
 			}
 		},
 		save: {
@@ -280,7 +294,12 @@ export const tlh: MessageSchema = {
 		scaleLabel: "noHmeH juv yISeH ({min} vo' {max} law'qu'):",
 		min: "mI' mach ({min} vo' {max})",
 		max: "mI' tIn ({min} vo' {max})",
-		previewLabel: "juv leghpa':"
+		previewLabel: "juv leghpa':",
+		minLabel: "Du'wI' Dop (ghItlh)",
+		maxLabel: "Du'wI' Dop law' (ghItlh)",
+		labelsHint: "Web QIn neH. ghoSbe' jIme'.",
+		minLabelPlaceholder: "tlhoy chu'",
+		maxLabelPlaceholder: "Qapla'"
 	},
 
 	choiceOptions: {
@@ -331,7 +350,12 @@ export const tlh: MessageSchema = {
 		surveyNameRequired: "yu'ghItlh pong chImlaHbe'.",
 		surveyMinQuestions: "yu meq 1 yu' rav ghajnIS.",
 		surveyMaxQuestions: "yu'ghItlh {max} yu' law'qu' ghajlaH (tlha' yu'mey tu'lu'). DaH: {count}.",
-		ttsTextTooLong: "„{field}“ tIq law'qu' ({length} / {max} ngutlh law'qu'). TTS ghItlh {max} ngutlh law'qu' ghajlaH. ghItlh yIHabmoH."
+		ttsTextTooLong: "„{field}“ tIq law'qu' ({length} / {max} ngutlh law'qu'). TTS ghItlh {max} ngutlh law'qu' ghajlaH. ghItlh yIHabmoH.",
+		baseUrlInvalid: "URL https vaj. {placeholder}.",
+		baseUrlTokenCount: "{placeholder} wa'logh neH.",
+		languageInvalid: "Hol Dayaj.",
+		webThemeInvalid: "HablI' lI' yIwIv.",
+		scaleLabelTooLong: "„{field}“ tIq law'qu' ({max} ngutlh law')."
 	},
 
 	translator: {
@@ -370,6 +394,18 @@ export const tlh: MessageSchema = {
 		unknownError: "ngeHlu'DI' Qagh Sovbe'lu'bogh",
 		draftChanged: "Draft choHlu'pu' (leghlu'bogh: v{expected}, DaH: v{current}), latlh lo'wI' choHpu' DichDaq. pagh ngeHlu'pu'. DaH Dotlh 'anglu' – yIlegh 'ej yIngeHqa'.",
 		prodChanged: "Prod choHlu'pu', latlh lo'wI' ngeHpu' DichDaq. Rollback ta'lu'be'. DaH Dotlh 'anglu' – yIlegh 'ej Rollback yIta'qa' DaneHchugh.",
+		webPreview: "Qo'noS Hotlh",
+		webPreviewAriaLabel: "Stage yu'ghItlh Qo'noS Hotlh chu' Daq yIpoSmoH",
+		webPreviewHint: "Qo'noS Hotlh Stage yu'ghItlh poSmoH. {days} jaj Qap rar, jangmey polbe'lu'.",
+		webPreviewBlocked: "Qorwagh chu' bot Qo'noS jIH.",
+		webPreviewOpenLink: "Qo'noS Hotlh yIpoSmoH",
+		webPreviewErrors: {
+			missingToken: "yI'elbe' – nav yIchu'qa'.",
+			missingRole: "chaw' tu'be'lu' – ngeH chaw' Daghajbe'.",
+			noStage: "yu'ghItlh vam Stage ngeHbe'lu'.",
+			throttled: "tlhob law'qu' – loQ yIloS 'ej yInIDqa'.",
+			generic: "Qo'noS Hotlh poSmoHlaHbe'lu'"
+		},
 		payloadTooLarge: "yu'ghItlh ghItlh Hoch tIn law'qu' ({length} / {max} ngutlh law'qu', De'wI' De' tu'lu'); ngeHlaHbe'lu'. choHwI' Daq ghItlhmey tIn yIHabmoH 'ej yu'ghItlh yIpolqa'."
 	},
 
@@ -414,6 +450,37 @@ export const tlh: MessageSchema = {
 			invalidRange: "poH lugh yIwIv (vo' paw' tlha'laHbe').",
 			missingToken: "Genesys 'elmeH ngoq tu'lu'be'. yI'elqa'.",
 			generic: "ja' lI'lu'DI' Qagh"
+		}
+	},
+
+	invitations: {
+		back: "choHwI' yIchegh",
+		backAriaLabel: "choHwI' yIchegh",
+		title: "rItlh mu'mey",
+		prodVersion: "Prod v{version}",
+		intro: "Daq Sep rItlh mu'mey chenmoH. Prod Sep DaH lo'.",
+		noProd: "Prod Sep tu'be'lu'. wa'DIch Prod yIngeH.",
+		count: "rItlh mu'mey mI'",
+		countHint: "{min} - {max} rItlh mu'mey",
+		expiry: "Qaw'meH jaj (DuH)",
+		expiryHint: "jaj pIq 23:59:59 ruch. jaj tu'be'lu'chugh, not Qaw'.",
+		multi: "law' lo'laH",
+		multiHintOn: "rItlh mu' law' lo'laH.",
+		multiHintOff: "rItlh mu' wa'logh lo'laH.",
+		linkTarget: "rItlh mu'mey ngoQ",
+		linkTargetBaseUrl: "Daq lurDech:",
+		linkTargetFallback: "Daq lurDech tu'be'lu' – Polly Daq lo':",
+		generate: "rItlh mu'mey yIchenmoH 'ej CSV yIlI'",
+		generateAriaLabel: "rItlh mu'mey yIchenmoH 'ej CSV yIlI'",
+		notStoredHint: "rItlh mu'mey pollu'be'. CSV yIpol.",
+		success: "{count} rItlh mu'mey chenmoHlu'. CSV lI'lu'.",
+		errors: {
+			missingToken: "Genesys ngoq tu'be'lu'. yI'el.",
+			missingRole: "chaw' tu'be'lu' – ngeHmeH chaw' tu'be'lu'.",
+			noProd: "Prod Sep tu'be'lu'. yIchu'qa'.",
+			throttled: "Genesys Qu' law'. tugh yInIDqa'.",
+			expiryInPast: "Qaw'meH jaj ret.",
+			generic: "rItlh mu'mey chenmoHmeH Qagh"
 		}
 	},
 
@@ -466,7 +533,126 @@ export const tlh: MessageSchema = {
 		sidebarExpand: "retlh nav yI'ang"
 	},
 
+	webThemes: {
+		title: "Web HablI'mey",
+		intro: "QIn ra'ghom HablI'mey (ngutlh, tIn, rItlh). Hoch QIn HablI' wIv. wIvbe'chugh motlh HablI' lo'. 30 lup Qap.",
+		list: {
+			loading: "HablI'mey lI'lu' …",
+			empty: "HablI' tu'lu'be'. Polly HablI' lo'.",
+			default: "motlh",
+			edit: "choH",
+			view: "legh",
+			duplicate: "cha'logh",
+			delete: "Qaw'",
+			create: "HablI' chu'",
+			newName: "HablI' chu'",
+			copyName: "{name} (cha'logh)",
+			updated: "choHlu' {date}",
+			updatedBy: "{user} choH {date}",
+			limit: "{max} HablI'mey neH."
+		},
+		editor: {
+			name: "pong",
+			isDefault: "motlh HablI'",
+			font: "ngutlh",
+			fontHint: "pat ngutlh neH.",
+			textStyles: "ngutlh mIw",
+			textStylesHint: "pixel tIn.",
+			role: "ngutlh Segh",
+			size: "tIn",
+			weight: "ngI'",
+			lineHeight: "tlhegh 'aD",
+			reset: "motlh",
+			resetAll: "Hoch motlh",
+			resetRole: "{role} motlh",
+			resetColor: "{color} motlh",
+			sizeOf: "{role} tIn, {min} {max}",
+			weightOf: "{role} ngI'",
+			lineHeightOf: "{role} tlhegh 'aD",
+			colors: "rItlh",
+			transparentBackground: "Hegh botlh leghlaHbe'",
+			transparentHint: "iframe: botlh leghlaHbe'.",
+			preview: "legh",
+			previewHint: "QIn ghantoH. ngutlh Segh DawoHlu'.",
+			previewTitle: "QIn ra'ghom legh",
+			save: "choq",
+			cancel: "mev"
+		},
+		roles: {
+			heading: "nIqHom",
+			subheading: "nIqHom mach",
+			body: "ghItlh",
+			questionTitle: "ghel per",
+			description: "Delmey",
+			option: "jang",
+			scaleLabel: "juv per",
+			hint: "ghuH",
+			error: "Qagh",
+			button: "leQ"
+		},
+		weights: {
+			w400: "motlh (400)",
+			w500: "ngI' (500)",
+			w600: "ngI'qu' (600)",
+			w700: "ngI'qu'qu' (700)"
+		},
+		fonts: {
+			system: "pat ngutlh",
+			sans: "DuH Hutlh",
+			serif: "DuH ghaj",
+			humanist: "ghot ngutlh",
+			rounded: "ngoS"
+		},
+		colors: {
+			background: "botlh",
+			surface: "Hal",
+			text: "ghItlh",
+			heading: "nIqHom",
+			textMuted: "ghItlh QIb",
+			primary: "rItlh Daq",
+			onPrimary: "rItlh Daq ghItlh",
+			border: "veH",
+			error: "Qagh"
+		},
+		contrast: {
+			warning: "{background} rItlh: {ratio}:1, {minimum}:1 (WCAG AA).",
+			summary: "rItlh ghuH: {count}. choqlaH, WCAG 2.2 AA lI'be'."
+		},
+		delete: {
+			header: "HablI' Qaw'",
+			message: "HablI' „{name}“ Qaw'?",
+			usedBy: "QIn lo': {surveys}.",
+			unused: "QIn lo'be'.",
+			usageUnknown: "lo' Sovbe'.",
+			accept: "Qaw'",
+			reject: "mev"
+		},
+		toast: {
+			saved: "HablI' „{name}“ choqlu'",
+			saveFailed: "HablI' choqlaHbe'",
+			deleted: "HablI' „{name}“ Qaw'lu'",
+			deleteFailed: "HablI' Qaw'laHbe'"
+		},
+		errors: {
+			missingToken: "'el'be'. ghun yIlI'.",
+			missingRole: "Hu'tegh – deploy DIch Hutlh.",
+			limitReached: "HablI'mey law' tlhoy.",
+			conflict: "latlh ghot HablI' choH pagh Qaw'. tetlh lI'qa'lu'. choqqa'chugh, chu' Dach.",
+			throttled: "Qu' law'. yInIDqa'.",
+			generic: "HablI' Qagh"
+		}
+	},
+
+	features: {
+		web_survey: {
+			label: "Web QIn",
+			description: "Web QIn: rI'meH rarwI' 'ej Web HaSta mIw."
+		}
+	},
 	settings: {
+		features: {
+			title: "laH chu'lu'pu'bogh"
+		},
 		setup: {
 			title: "jommeH",
 			empty: "jommeH De' tu'lu'be'.",
@@ -552,6 +738,8 @@ export const tlh: MessageSchema = {
 			mappingDataTable: "tlhegh nobmeH Data Table",
 			dataTableHint: "Data Tables pongmey naQ. pong vam ghajbogh Data Table tu'lu'chugh, lo'lu' 'ej jomHa'lu'DI' Qaw'lu'be'.",
 			dataTableNamesCollide: "cha' Data Tables pongmey pIm poQlu'.",
+			features: "laH",
+			featuresHint: "__meta tlheghDaq wIvlu'pu'bogh pollu'. jom pIq Data TableDaq neH choHlu'laH.",
 			next: "veb"
 		},
 		step2: {
@@ -562,6 +750,8 @@ export const tlh: MessageSchema = {
 			oauthClient: "OAuth De'wI'",
 			division: "Sep",
 			newDivision: "chu': {name}_division",
+			features: "laH",
+			noFeatures: "pagh",
 			surveyDataTable: "yu'ghItlh Data Table",
 			mappingDataTable: "tlhegh nobmeH Data Table",
 			back: "yIchegh",

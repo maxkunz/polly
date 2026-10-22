@@ -1,0 +1,10 @@
+{
+  // Einrückung, Zeilenende und Dateiende kommen aus .editorconfig; die Formatierung bleibt Handarbeit,
+  // damit bestehender Code nicht umformatiert wird.
+  "editor.formatOnSave": false,
+  "editor.formatOnPaste": false,
+  "editor.formatOnType": false,
+  "editor.codeActionsOnSave": {},
+  "editor.detectIndentation": false,
+  "files.trimFinalNewlines": false
+}

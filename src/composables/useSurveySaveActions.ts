@@ -2,7 +2,7 @@ import { ref, nextTick, type Ref } from "vue";
 import { useToast } from "primevue/usetoast";
 import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
-import type { Survey } from "@/domain/survey/surveyTypes";
+import { resetWebSettings, type Survey } from "@/domain/survey/surveyTypes";
 import {
 	saveSurveyDetail,
 	fetchSurveyDetail,
@@ -152,6 +152,9 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			}
 			return null;
 		}
+
+		// Ohne Feature Flag web_survey sind die Web-Felder ausgeblendet: Standardwerte speichern
+		if (!app.webSurveyEnabled) resetWebSettings(options.draftSurvey.value);
 
 		isSaving.value = true;
 		try {

@@ -1,11 +1,8 @@
-import type {
-	Survey,
-	SurveyQuestion,
-	RatingOptions,
-	ChoiceOptions,
-	ConditionOperator
-} from "./surveyTypes";
+import type { Survey, SurveyQuestion, RatingOptions, ChoiceOptions } from "./surveyTypes";
 import { countAllQuestions, isRatingOptions, isChoiceOptions } from "./surveyTypes";
+import { SURVEY_LANGUAGES } from "./flowTypes";
+import { isWebThemeId } from "../webTheme/webTheme";
+import type { ConditionOperator } from "./flowTypes";
 import { surveyFieldIds, questionFieldIds } from "./surveyFieldIds";
 import { i18n, currentLocaleTag } from "@/i18n";
 import {
@@ -14,7 +11,9 @@ import {
 	CHOICE_MIN_OPTIONS,
 	CHOICE_MAX_OPTIONS,
 	RATING_SCALE_MIN,
-	RATING_SCALE_MAX
+	RATING_SCALE_MAX,
+	SCALE_LABEL_MAX_CHARS,
+	BASE_URL_TOKEN_PLACEHOLDER
 } from "@/constants/surveyConstants";
 
 export interface ValidationError {
@@ -114,6 +113,23 @@ export function findDuplicateFollowUpValues(
 	return duplicates;
 }
 
+/**
+ * Prüft die Basis-URL der Einladungslinks: leer ist erlaubt, sonst eine absolute https://-URL
+ * mit höchstens einem Platzhalter {token}. Liefert den Fehlerschlüssel unter `validation.*`.
+ */
+export function baseUrlError(baseUrl: string | null | undefined): "baseUrlTokenCount" | "baseUrlInvalid" | null {
+	const value = baseUrl?.trim();
+	if (!value) return null;
+	if (value.split(BASE_URL_TOKEN_PLACEHOLDER).length - 1 > 1) return "baseUrlTokenCount";
+	if (/\s/.test(value)) return "baseUrlInvalid";
+	try {
+		const url = new URL(value.replace(BASE_URL_TOKEN_PLACEHOLDER, "token"));
+		return url.protocol === "https:" && url.hostname ? null : "baseUrlInvalid";
+	} catch {
+		return "baseUrlInvalid";
+	}
+}
+
 /** true, wenn ein per TTS gesprochener Text das Genesys-Limit pro TTS-Anfrage überschreitet. */
 export function isTtsTextTooLong(text: string | null | undefined): boolean {
 	return (text?.length ?? 0) > TTS_TEXT_MAX_CHARS;
@@ -196,6 +212,25 @@ export function validateQuestion(
 			questionId: question.id,
 			fieldId: ids.name(question.id)
 		});
+	}
+
+	if (question.type === "rating" || question.type === "nps") {
+		// Min/Max-Labels werden nur im Web angezeigt (kein TTS), daher nur die Länge begrenzen
+		const labels = (question.options ?? {}) as { min_label?: unknown; max_label?: unknown };
+		const labelFields = [
+			{ key: "min_label", value: labels.min_label, labelKey: "ratingOptions.minLabel", fieldId: ids.minLabel(question.id) },
+			{ key: "max_label", value: labels.max_label, labelKey: "ratingOptions.maxLabel", fieldId: ids.maxLabel(question.id) }
+		];
+		for (const { key, value, labelKey, fieldId } of labelFields) {
+			if (typeof value === "string" && value.length > SCALE_LABEL_MAX_CHARS) {
+				errors.push({
+					field: `${qField}.options.${key}`,
+					message: t("validation.scaleLabelTooLong", { field: t(labelKey), max: SCALE_LABEL_MAX_CHARS }),
+					questionId: question.id,
+					fieldId
+				});
+			}
+		}
 	}
 
 	if (question.type === "rating") {
@@ -355,7 +390,12 @@ export function validateQuestion(
 	return errors;
 }
 
-export function validateSurvey(survey: Survey): ValidationError[] {
+export interface ValidateSurveyOptions {
+	/** Feature Flag web_survey; ohne Flag sind die Web-Felder ausgeblendet und werden nicht geprüft */
+	webSurvey?: boolean;
+}
+
+export function validateSurvey(survey: Survey, { webSurvey = true }: ValidateSurveyOptions = {}): ValidationError[] {
 	const { t } = i18n.global;
 	const errors: ValidationError[] = [];
 
@@ -381,6 +421,33 @@ export function validateSurvey(survey: Survey): ValidationError[] {
 		ttsTooLongError(survey.closing_message, "survey.closing_message", "surveyEditor.meta.closing", surveyFieldIds.closing)
 	]) {
 		if (error) errors.push(error);
+	}
+
+	if (webSurvey) {
+		const baseUrlKey = baseUrlError(survey.base_url);
+		if (baseUrlKey) {
+			errors.push({
+				field: "survey.base_url",
+				message: t(`validation.${baseUrlKey}`, { placeholder: BASE_URL_TOKEN_PLACEHOLDER }),
+				fieldId: surveyFieldIds.baseUrl
+			});
+		}
+
+		if (survey.language !== undefined && !(SURVEY_LANGUAGES as readonly string[]).includes(survey.language)) {
+			errors.push({
+				field: "survey.language",
+				message: t("validation.languageInvalid"),
+				fieldId: surveyFieldIds.language
+			});
+		}
+
+		if (survey.web_theme_id !== undefined && !isWebThemeId(survey.web_theme_id)) {
+			errors.push({
+				field: "survey.web_theme_id",
+				message: t("validation.webThemeInvalid"),
+				fieldId: surveyFieldIds.webTheme
+			});
+		}
 	}
 
 	const totalQuestions = countAllQuestions(survey.questions || []);

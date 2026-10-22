@@ -1,10 +1,13 @@
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
+import { API_PREFIX } from "@/constants/apiConstants";
 
 export class PollyApiError extends Error {
 	constructor(
 		message: string,
-		public readonly status: number
+		public readonly status: number,
+		/** Fehlercode aus dem Body (`code`), falls das Backend einen liefert, z. B. `limit_reached`. */
+		public readonly code?: string
 	) {
 		super(message);
 		this.name = "PollyApiError";
@@ -19,14 +22,14 @@ export class MissingTokenError extends Error {
 }
 
 /**
- * fetch gegen das eigene Backend (/api) mit Genesys-Bearer und Region.
+ * fetch gegen das eigene Backend (API_PREFIX, Default /api) mit Genesys-Bearer und Region.
  * Wirft PollyApiError bei Status >= 400.
  */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
 	const { accessToken, region } = useAppStore().genesys;
 	if (!accessToken) throw new MissingTokenError();
 
-	const response = await fetch(`/api${path}`, {
+	const response = await fetch(`${API_PREFIX}${path}`, {
 		...init,
 		headers: {
 			...(init.headers ?? {}),
@@ -40,13 +43,15 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
 	if (!response.ok) {
 		let message = `HTTP ${response.status}`;
+		let code: string | undefined;
 		try {
 			const body = await response.json();
 			if (body?.message) message = String(body.message);
+			if (typeof body?.code === "string") code = body.code;
 		} catch {
 			// Antwort ohne JSON-Body
 		}
-		throw new PollyApiError(message, response.status);
+		throw new PollyApiError(message, response.status, code);
 	}
 	return response;
 }

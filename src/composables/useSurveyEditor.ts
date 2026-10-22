@@ -1,5 +1,6 @@
 import { ref, computed, nextTick } from "vue";
-import type { Survey, SurveyQuestion, QuestionType } from "@/domain/survey/surveyTypes";
+import type { Survey, SurveyQuestion } from "@/domain/survey/surveyTypes";
+import type { QuestionType } from "@/domain/survey/flowTypes";
 import {
 	createEmptyQuestion,
 	createEmptyFollowUp,
@@ -7,8 +8,10 @@ import {
 } from "@/domain/survey/surveyTypes";
 import { validateSurvey, type ValidationError } from "@/domain/survey/surveyValidator";
 import { SURVEY_MAX_QUESTIONS } from "@/constants/surveyConstants";
+import { useAppStore } from "@/stores/appStore";
 
 export function useSurveyEditor(initialData?: Survey | null) {
+	const app = useAppStore();
 	const survey = ref<Survey | null>(
 		initialData ? JSON.parse(JSON.stringify(initialData)) : null
 	);
@@ -78,7 +81,7 @@ export function useSurveyEditor(initialData?: Survey | null) {
 
 	const validationErrors = computed<ValidationError[]>(() => {
 		if (!survey.value) return [];
-		return validateSurvey(survey.value);
+		return validateSurvey(survey.value, { webSurvey: app.webSurveyEnabled });
 	});
 
 	const isValid = computed(() => {

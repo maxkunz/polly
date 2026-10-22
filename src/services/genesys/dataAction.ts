@@ -109,14 +109,14 @@ export async function deleteDataAction(actionId: string) {
 
 
 
-// Add Domain 
+// Add Domain und API-Präfix (siehe constants/apiConstants.ts)
 
 export function applyDomainDatActPlaceholder(
   jsonTemplate: string,
-  domainName: string
+  domainName: string,
+  apiPrefix: string
 ) {
-  return jsonTemplate.replace(
-    "{{DOMAIN_NAME}}",
-    domainName
-  );
+  return jsonTemplate
+    .replace("{{DOMAIN_NAME}}", domainName)
+    .replace("{{API_PREFIX}}", apiPrefix);
 }

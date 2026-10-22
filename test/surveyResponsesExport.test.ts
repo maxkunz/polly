@@ -22,8 +22,8 @@ function test(name: string, fn: () => void): void {
 	}
 }
 
-test("Header entspricht der Spezifikation plus status", () => {
-	assert.equal(CSV_HEADER, "responseId;Survey Name;Survey-Version;QuestionId;Type;answeredAt;value;status");
+test("Header entspricht der Spezifikation plus status und Channel", () => {
+	assert.equal(CSV_HEADER, "responseId;Survey Name;Survey-Version;QuestionId;Type;answeredAt;value;status;Channel");
 });
 
 test("escapeCsvField quotet Trennzeichen, Anführungszeichen und Zeilenumbrüche", () => {
@@ -63,8 +63,18 @@ test("sessionToCsvRows sortiert nach answeredAt und liefert pro Antwort eine Zei
 		}
 	});
 	assert.deepEqual(rows, [
-		"conv-1;kunde_1234;3;nps_a;nps;2026-01-01T10:00:01.000Z;9;completed",
-		'conv-1;kunde_1234;3;comment_b;comment;2026-01-01T10:00:02.000Z;"gut; danke";completed'
+		"conv-1;kunde_1234;3;nps_a;nps;2026-01-01T10:00:01.000Z;9;completed;flow",
+		'conv-1;kunde_1234;3;comment_b;comment;2026-01-01T10:00:02.000Z;"gut; danke";completed;flow'
+	]);
+});
+
+test("Channel: web aus der Sitzung, ohne Feld flow", () => {
+	const answers = { q: { type: "yes_no", value: true, answeredAt: "2026-01-01T10:00:00.000Z" } };
+	assert.deepEqual(sessionToCsvRows({ responseId: "r-web", status: "completed", channel: "web", answers }), [
+		"r-web;;;q;yes_no;2026-01-01T10:00:00.000Z;true;completed;web"
+	]);
+	assert.deepEqual(sessionToCsvRows({ responseId: "r-flow", status: "partial", answers }), [
+		"r-flow;;;q;yes_no;2026-01-01T10:00:00.000Z;true;partial;flow"
 	]);
 });
 

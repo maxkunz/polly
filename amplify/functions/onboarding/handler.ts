@@ -160,6 +160,8 @@ type CompleteBody = {
   genesysClientId: string;
   genesysClientSecret: string;
   allowedDataTableIds?: string[];
+  /** Data Table mit den Umfragen (Web-Kanal liest dort `survey_<id>`); fehlt sie, gilt `allowedDataTableIds[0]`. */
+  surveyDataTableId?: string;
 };
 
 type ApproveBody = {
@@ -341,6 +343,14 @@ async function completeRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     return json(400, { message: "Unsupported genesysRegion" });
   }
   const genesysRegion = normalizeGenesysRegion(body.genesysRegion);
+  if (body.surveyDataTableId !== undefined && (typeof body.surveyDataTableId !== "string" || !body.surveyDataTableId.trim())) {
+    return json(400, { message: "surveyDataTableId must be a non-empty string" });
+  }
+  const surveyDataTableId = body.surveyDataTableId?.trim() ?? null;
+  // Die Umfrage-Tabelle gehört immer zu den erlaubten Tabellen (Prüfung vor dem Löschen von Ergebnissen)
+  const allowedDataTableIds = Array.from(
+    new Set([...(surveyDataTableId ? [surveyDataTableId] : []), ...(body.allowedDataTableIds ?? [])])
+  );
 
   const now = new Date().toISOString();
 
@@ -423,12 +433,13 @@ async function completeRoute(event: AnyApiGwEvent): Promise<AnyResult> {
       TableName: TENANTS_TABLE_NAME,
       Key: { backendClientId: body.backendClientId },
       UpdateExpression:
-        "SET genesysRegion = :r, genesysClientId = :cid, genesysSecretArn = :arn, allowedDataTableIds = :dt, updatedAt = :u",
+        "SET genesysRegion = :r, genesysClientId = :cid, genesysSecretArn = :arn, allowedDataTableIds = :dt, surveyDataTableId = :sdt, updatedAt = :u",
       ExpressionAttributeValues: {
         ":r": genesysRegion,
         ":cid": body.genesysClientId,
         ":arn": secretArn!,
-        ":dt": body.allowedDataTableIds ?? [],
+        ":dt": allowedDataTableIds,
+        ":sdt": surveyDataTableId,
         ":u": now,
       },
     })

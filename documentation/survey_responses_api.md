@@ -20,6 +20,8 @@ Das System nutzt zwei DynamoDB-Tabellen:
    - **Sort Key (SK):** `questionName` (unveränderlicher Bezeichner der Frage)
    - Ermöglicht O(1)-Abfragen von aggregierten Kennzahlen (Durchschnittswerte, Häufigkeitsverteilung) ohne Scan über alle Einzelsessions.
 
+Der Web-Kanal schreibt in dieselben beiden Tabellen und hat zusätzlich die Tabelle `InvitationTokens` für benutzte Einmal-Einladungen, siehe [polly_web.md](polly_web.md).
+
 ### 1.2 Session-Lifecycle & Status
 Ein Anrufer kann eine Umfrage jederzeit abbrechen (Auflegen). Daher wird jede Antwort inkrementell per Upsert gespeichert:
 
@@ -63,6 +65,8 @@ Jeder Request muss authentifiziert sein. Die Tenant-Zuordnung (`tenantId`) erfol
 https://<amplify-api-domain>/api
 ```
 
+`/api` ist das Default-Präfix. Amplify Hosting leitet es per Rewrite-Regel (Konsole, gilt app-weit) auf das API Gateway der Umgebung weiter. Laufen mehrere Branches in einer Amplify-App, bekommt jeder Branch ein eigenes Präfix über die Branch-Umgebungsvariable `VITE_API_PREFIX` (z. B. `/api_websurveys`) und eine eigene Rewrite-Regel `/api_websurveys/<*>` → API Gateway des Branches. Das Präfix wirkt beim Build: Frontend-Aufrufe, Onboarding und die URL der Data Action, die das Setup anlegt (`<domain><präfix>/survey-responses`).
+
 ---
 
 ## 3. Fragetypen & Wertebereiche
@@ -76,6 +80,8 @@ Das Feld `questionName` ist der unveränderliche technische Bezeichner der Frage
 | `rating` | `number` (Ganzzahl, z. B. 0–5 oder 0–8) | `4` | `counts["4"]`, `sum`, `totalResponses` |
 | `choice` | `string` (Label der gewählten Option) | `"Dashboard-Analysen"` | `counts["Dashboard-Analysen"]`, `totalResponses` |
 | `comment` | `string` (transkribierter Text) | `"Sehr freundlich"` | Nur `totalResponses` (keine Häufigkeitsverteilung) |
+
+> **Kanal (`channel`) und `tokenId`:** Sitzungen aus dem Architect Flow (`POST /survey-responses`) haben kein Feld `channel` (gelesen als `flow`). Sitzungen der Web-Umfrage (`POST /web-survey/submit`, siehe [polly_web.md](polly_web.md)) werden direkt mit `status: "completed"`, `channel: "web"` und `tokenId` (= `token_id` der Einladung) gespeichert; `responseId` ist dort eine zufällige UUID. `channel` erscheint im CSV-Export als letzte Spalte `Channel`.
 
 > Bei `choice` kennt das flow-optimierte JSON (siehe @survey_translator_for_flow.md) keine Options-IDs mehr, sondern nur noch die Labels der Auswahlmöglichkeiten - der Flow kann daher nur das Label als `value` senden, keine ID.
 
@@ -175,6 +181,33 @@ Content-Type: application/json
   }
 }
 ```
+
+#### Prüfung der Umfrage
+
+Antworten werden nur zu Umfragen des eigenen Mandanten gespeichert. Die Reihenfolge der Prüfungen:
+
+1. `surveyId` muss eine UUID sein, sonst `400`.
+2. Läuft für die Umfrage ein Lösch-Job, kommt `200 { "ignored": true }` zurück und es wird nichts gespeichert. Der Flow läuft so nicht in den Fehlerpfad.
+3. Die Zeile `survey_<id>` muss in der Umfrage-Data-Table des Mandanten existieren. Geprüft wird nur die Zeile, nicht der Prod-Stand, weil der Flow über die Test-Rufnummer `Stage` abspielt. Fehlt die Zeile, kommt `404` und es wird nichts gespeichert.
+
+Das Backend liest die Zeile mit den Client Credentials des Mandanten und merkt sich das Ergebnis pro Lambda-Instanz, um das Genesys-Rate-Limit zu schonen: Umfrage vorhanden 30 min, nicht vorhanden 5 min, Prüfung fehlgeschlagen 60 s. Eine gerade gelöschte Umfrage kann daher noch bis zu 30 min Antworten annehmen; dagegen schützt der Lösch-Job aus Schritt 2.
+
+Ist das Ergebnis unklar, wird die Antwort **trotzdem gespeichert** (fail-open), damit keine echten Antworten aus laufenden Anrufen verloren gehen:
+* Vorübergehende Fehler (Genesys 429/5xx, Timeout, Netzwerk) werden als Warnung geloggt.
+* Konfigurationsfehler (Credentials oder `surveyDataTableId` fehlen im Mandanteneintrag, Token-Abruf abgelehnt, 401/403 auf die Zeile) werden als Fehler mit dem festen Text `SURVEY_CHECK_CONFIG_ERROR` geloggt. In diesem Zustand ist die Prüfung für den Mandanten wirkungslos. Empfehlung: in CloudWatch einen Metric Filter auf `SURVEY_CHECK_CONFIG_ERROR` in der Log-Gruppe der Lambda `survey_responses` mit Alarm einrichten.
+
+Ein Fehler wird pro Instanz nur einmal je Cache-Dauer geloggt.
+
+#### Fehlerantworten
+
+| Status | Body | Ursache |
+|---|---|---|
+| `400` | `{ "message": "Invalid JSON body" }` | Body ist kein JSON. |
+| `400` | `{ "message": "conversationId and surveyId are required" }` | Pflichtfeld fehlt. |
+| `400` | `{ "message": "questionName or isCompleted: true is required" }` | Weder Antwort noch Abschluss. |
+| `400` | `{ "message": "surveyId must be a UUID" }` | `surveyId` ist keine UUID. |
+| `401` | `{ "message": "…" }` | Token fehlt oder ist ungültig, Mandant unbekannt oder nicht freigegeben. |
+| `404` | `{ "message": "Survey not found", "code": "survey_not_found" }` | Umfrage existiert nicht in der Data Table des Mandanten. |
 
 ---
 
@@ -390,7 +423,7 @@ Der Cursor ist an Mandant und Umfrage gebunden; ein fremder oder manipulierter C
 Die Werte sind Teil-Aggregate und müssen über alle Teilabrufe addiert werden.
 
 ### 4.6 DELETE `/survey-responses` und GET `/survey-responses/delete-status`
-Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable` und `SurveyAggregatesTable` (Lambda `survey_responses_delete`). Das Löschen läuft **asynchron** über eine SQS-Queue; der Aufruf liefert sofort `202 Accepted`. Das Frontend ruft den Endpunkt automatisch auf, nachdem eine Umfrage aus der Data Table entfernt wurde.
+Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable` und `SurveyAggregatesTable` sowie die benutzten Einmal-Einladungen aus `InvitationTokens` (GSI `byTenantSurvey`, Lambda `survey_responses_delete`). Das Löschen läuft **asynchron** über eine SQS-Queue; der Aufruf liefert sofort `202 Accepted`. Das Frontend ruft den Endpunkt automatisch auf, nachdem eine Umfrage aus der Data Table entfernt wurde.
 
 #### DELETE – Query Parameters
 | Parameter | Typ | Pflicht | Beschreibung |
@@ -407,7 +440,7 @@ Löscht alle Ergebnisse einer **gelöschten** Umfrage aus `SurveyResponsesTable`
 | `502` | Nicht zweifelsfrei prüfbar (z. B. kein Zugriff auf die Data Table, Genesys-Fehler). Es wird nichts gelöscht. |
 
 #### GET `/survey-responses/delete-status?surveyId=...`
-Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `requestedAt`, `updatedAt`, `deletedResponses`, `deletedAggregates`, `skipped`, `message`. `404`, wenn kein Job existiert.
+Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `requestedAt`, `updatedAt`, `deletedResponses`, `deletedAggregates`, `deletedTokens` (benutzte Einmal-Einladungen des Web-Kanals), `skipped`, `message`. `404`, wenn kein Job existiert.
 
 #### Ablauf und Sicherheitsregeln (Ergebnisse existierender Umfragen werden nie gelöscht)
 1. `surveyId` muss eine UUID sein; der Mandant stammt ausschließlich aus dem Token.
@@ -416,7 +449,7 @@ Liefert den Job: `status` (`queued`, `running`, `done`, `aborted`, `failed`), `r
 4. **Erneute Prüfung im Worker** mit den Backend-Credentials des Mandanten unmittelbar vor dem Löschen. Existiert die Umfrage dann doch, wird der Job `aborted`. Ist die Data Table für die Backend-Rolle nicht lesbar, wird nach 3 Versuchen `failed`; gelöscht wird in beiden Fällen nichts.
 5. Gelöscht wird pro Item mit Bedingung (`tenantId` und `surveyId` müssen passen). Items, bei denen `surveyId` inzwischen auf eine andere Umfrage zeigt (gleiche Conversation, zweite Umfrage), werden übersprungen (`skipped`).
 6. Der Worker läuft in Seiten à 100 Items, setzt bei knapper Laufzeit in einer neuen Nachricht fort und beendet den Job erst nach einem Durchlauf ohne Löschungen (`done`). Nach 3 Fehlversuchen landet die Nachricht in der Dead-Letter-Queue.
-7. **Tombstone:** Solange der Job `queued`, `running` oder `done` ist, beantwortet `POST /survey-responses` Antworten zu dieser Umfrage mit `200` und `{ "ignored": true }`, ohne zu speichern. Bei `aborted`/`failed` wird nicht gesperrt.
+7. **Tombstone:** Solange der Job `queued`, `running` oder `done` ist, beantwortet `POST /survey-responses` Antworten zu dieser Umfrage mit `200` und `{ "ignored": true }`, ohne zu speichern. Der Web-Kanal meldet die Umfrage dann als nicht verfügbar (`unavailable`), `POST /invitations` lehnt mit `409` ab. Bei `aborted`/`failed` wird nicht gesperrt.
 8. **Aufbewahrung:** Jobs mit Status `done` erhalten das Attribut `expiresAt` (Unix-Sekunden, 7 Tage nach Abschluss) und werden per DynamoDB-TTL entfernt (TTL löscht verzögert, meist innerhalb von 48 h nach Ablauf). Danach liefert `delete-status` `404` und der Tombstone entfällt. `aborted`/`failed`-Jobs bleiben zur Analyse erhalten.
 
 ---

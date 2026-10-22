@@ -1,10 +1,6 @@
 import { computed, unref, type MaybeRef } from "vue";
-import type {
-	SurveyQuestion,
-	QuestionType,
-	RatingOptions,
-	ChoiceOptions
-} from "@/domain/survey/surveyTypes";
+import type { SurveyQuestion, RatingOptions, ChoiceOptions } from "@/domain/survey/surveyTypes";
+import type { QuestionType, ScaleLabels } from "@/domain/survey/flowTypes";
 import {
 	isRatingOptions,
 	isChoiceOptions,
@@ -28,9 +24,30 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 			if (!isChoiceOptions(q.options)) {
 				q.options = createDefaultChoiceOptions();
 			}
+		} else if (newType === "nps") {
+			// NPS hat feste Werte, in options stehen höchstens die Min/Max-Labels
+			q.options = {};
 		} else {
 			q.options = undefined;
 		}
+	}
+
+	/** Min/Max-Labels von rating und nps (leer, wenn nicht gesetzt). */
+	const scaleLabels = computed<Required<ScaleLabels>>(() => {
+		const options = (getQuestion().options ?? {}) as ScaleLabels;
+		return { min_label: options.min_label ?? "", max_label: options.max_label ?? "" };
+	});
+
+	/** Setzt ein Label; ein leeres Label wird entfernt, damit es nicht ins Flow-JSON gelangt. */
+	function setScaleLabel(key: keyof ScaleLabels, value: string) {
+		const q = getQuestion();
+		const options = (q.options && typeof q.options === "object" ? q.options : {}) as ScaleLabels;
+		if (value) {
+			options[key] = value;
+		} else {
+			delete options[key];
+		}
+		q.options = options;
 	}
 
 	const ratingOptions = computed<RatingOptions>({
@@ -77,6 +94,8 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 		handleTypeChange,
 		ratingOptions,
 		choiceOptions,
+		scaleLabels,
+		setScaleLabel,
 		addChoiceOption,
 		removeChoiceOption
 	};

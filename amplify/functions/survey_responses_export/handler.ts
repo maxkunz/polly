@@ -114,6 +114,7 @@ async function* iterateSessions(
     "#surveyName": "surveyName",
     "#surveyVersion": "surveyVersion",
     "#status": "status",
+    "#channel": "channel",
     "#answers": "answers",
   };
   const values: Record<string, any> = {
@@ -135,6 +136,7 @@ async function* iterateSessions(
     "#surveyName",
     "#surveyVersion",
     "#status",
+    "#channel",
     "#answers",
   ];
 

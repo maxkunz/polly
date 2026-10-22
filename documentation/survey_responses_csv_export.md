@@ -52,7 +52,7 @@ Tag wäre ein Monatsreport um ein Vielfaches größer. Der Export läuft deshalb
 ### CSV Format
 
 ```
-responseId;Survey Name;Survey-Version;QuestionId;Type;answeredAt;value;status
+responseId;Survey Name;Survey-Version;QuestionId;Type;answeredAt;value;status;Channel
 ```
 
 | Spalte | Quelle |
@@ -65,6 +65,7 @@ responseId;Survey Name;Survey-Version;QuestionId;Type;answeredAt;value;status
 | `answeredAt` | Zeitpunkt der Antwort, ISO-8601 in UTC |
 | `value` | Antwortwert (`yes_no`: `true`/`false`, `nps`/`rating`: Zahl, `choice`: Label, `comment`: Text) |
 | `status` | Sitzungsstatus: `partial`, `completed`, `timed_out` (Ergänzung zur ursprünglichen Spezifikation, zum Filtern in Excel) |
+| `Channel` | Kanal der Sitzung: `web` (Web-Umfrage) oder `flow` (Architect Flow). Bestehende Antworten ohne Feld `channel` erscheinen als `flow`. Immer die letzte Spalte. |
 
 Regeln:
 

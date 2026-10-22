@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { FollowUpRule, QuestionOptions, Survey, SurveyQuestion } from "../src/domain/survey/surveyTypes";
+import { resetWebSettings } from "../src/domain/survey/surveyTypes";
 import { validateSurvey } from "../src/domain/survey/surveyValidator";
 import { questionFieldIds, surveyFieldIds } from "../src/domain/survey/surveyFieldIds";
 
@@ -123,6 +124,69 @@ test("Folgefragen mit eigenen Folgefragen verweisen auf den Folgefragenbereich d
 	];
 	// Nur der Tiefenfehler – die verschachtelte Frage (leerer Titel) wird nicht weiter geprüft
 	assert.deepEqual(fieldIdsOf(s), [questionFieldIds.followUps(Q)]);
+});
+
+function fieldsOf(s: Survey): string[] {
+	return validateSurvey(s).map(e => e.field);
+}
+
+test("Basis-URL: leer und gültige https-URLs sind erlaubt", () => {
+	for (const baseUrl of [undefined, "", "  ", "https://example.com", "https://example.com/{token}", "https://example.com/umfrage?x=1", "https://example.com/?t={token}"]) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: baseUrl }), [], String(baseUrl));
+	}
+});
+
+test("Basis-URL: http, relative URLs, Leerzeichen und mehrere Platzhalter verweisen auf das Feld", () => {
+	for (const baseUrl of ["http://example.com", "example.com", "/s/{token}", "https://exa mple.com", "https://", "javascript:alert(1)", "https://example.com/{token}/{token}"]) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: baseUrl }), [surveyFieldIds.baseUrl], baseUrl);
+	}
+});
+
+test("Sprache: nur de, en, fr; fehlend ist erlaubt", () => {
+	for (const language of [undefined, "de", "en", "fr"] as const) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), language }), [], String(language));
+	}
+	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), language: "xx" as never }), [surveyFieldIds.language]);
+});
+
+test("Web-Design: nur UUID; fehlend ist erlaubt", () => {
+	assert.deepEqual(fieldIdsOf(survey([question({})])), []);
+	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), web_theme_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }), []);
+	for (const value of ["", "default", "../x", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaa"]) {
+		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), web_theme_id: value }), [surveyFieldIds.webTheme], value);
+	}
+});
+
+test("Min/Max-Labels bei rating und nps sind auf 100 Zeichen begrenzt", () => {
+	const ok = "a".repeat(100);
+	const tooLong = "a".repeat(101);
+	assert.deepEqual(fieldIdsOf(survey([question({ type: "nps", options: { min_label: ok, max_label: ok } })])), []);
+	assert.deepEqual(
+		fieldIdsOf(survey([question({ type: "nps", options: { min_label: tooLong, max_label: tooLong } })])),
+		[questionFieldIds.minLabel(Q), questionFieldIds.maxLabel(Q)]
+	);
+	assert.deepEqual(
+		fieldsOf(survey([question({ type: "rating", options: { min_value: 1, max_value: 5, max_label: tooLong } })])),
+		[`${Q}.options.max_label`]
+	);
+	assert.deepEqual(
+		fieldIdsOf(survey([question({ type: "rating", options: { min_value: 1, max_value: 5, max_label: tooLong } })])),
+		[questionFieldIds.maxLabel(Q)]
+	);
+});
+
+test("Ohne Feature Flag web_survey werden die Web-Felder nicht geprüft", () => {
+	const s = { ...survey([question({})]), base_url: "http://x", language: "xx" as never, web_theme_id: "default" };
+	assert.deepEqual(validateSurvey(s, { webSurvey: false }).map(e => e.fieldId), []);
+	assert.deepEqual(validateSurvey(s).map(e => e.fieldId), [surveyFieldIds.baseUrl, surveyFieldIds.language, surveyFieldIds.webTheme]);
+});
+
+test("resetWebSettings setzt die Standardwerte einer neuen Umfrage", () => {
+	const s: Survey = { ...survey([question({})]), base_url: "https://example.com/{token}", language: "fr", web_theme_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" };
+	resetWebSettings(s);
+	assert.equal(s.base_url, "");
+	assert.equal(s.language, "de");
+	assert.equal("web_theme_id" in s, false);
 });
 
 console.log(`\n${passed} Tests bestanden`);

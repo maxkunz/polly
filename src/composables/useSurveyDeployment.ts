@@ -5,7 +5,7 @@ import { useAppStore } from "@/stores/appStore";
 import { deploySurvey, rollbackSurvey, fetchSurveyDetail } from "@/services/surveyService";
 import { readFieldVersion } from "@/domain/survey/surveyRow";
 import { measureFlowPayload, type FlowPayloadSize } from "@/services/flowPayloadBudget";
-import type { FlowSurvey } from "@/services/surveyFlowTranslator";
+import type { FlowSurvey } from "@/domain/survey/flowTypes";
 
 export interface UseSurveyDeploymentOptions {
 	surveyId: string;

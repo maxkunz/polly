@@ -107,6 +107,8 @@ export const la: MessageSchema = {
 			deployAriaLabel: "Ad aspectum publicationis",
 			report: "Relatio",
 			reportAriaLabel: "Ad aspectum relationis",
+			invite: "Nexus invitationis",
+			inviteAriaLabel: "Ad nexus invitationis (interretiales)",
 			save: "Serva"
 		},
 		stickyBar: {
@@ -122,11 +124,23 @@ export const la: MessageSchema = {
 			description: "Descriptio",
 			greeting: "Nuntius salutationis",
 			closing: "Nuntius valedictionis",
+			baseUrl: "URL basis pro nexibus invitationis (interretialis)",
+			baseUrlHint: "Optionale. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Sine ea nexus ad paginam Polly ducit.",
+			language: "Lingua quaestionis interretialis",
+			webTheme: "Forma quaestionis interretialis",
+			webThemeHint: "Litterae, magnitudines et colores paginae. Cura sub Optiones → Formae interretiales. Mutatio post Prod valet.",
+			webThemeDefault: "Forma communis (Polly)",
+			webThemeDefaultNamed: "Forma communis ({name})",
+			webThemeMissing: "Forma electa deleta est. Quaestio formam communem adhibet.",
+			webThemeMissingOption: "Forma deleta",
+			webThemeLoadingOption: "Forma electa (oneratur …)",
+			webThemeUnavailableOption: "Forma electa (index non praesto)",
 			placeholders: {
 				title: "e. g. Satisfactio clientium",
 				description: "Descriptio interna vel contextus percontationis...",
 				greeting: "Gratias agimus quod breve tempus nobis das...",
-				closing: "Gratias tibi pro tam pretioso consilio!"
+				closing: "Gratias tibi pro tam pretioso consilio!",
+				baseUrl: "https://www.exemplum.de/quaestio/{placeholder}"
 			}
 		},
 		save: {
@@ -280,7 +294,12 @@ export const la: MessageSchema = {
 		scaleLabel: "Scalam aestimationis conforma ({min} usque ad max. {max}):",
 		min: "Valor minimus ({min} usque ad {max})",
 		max: "Valor maximus ({min} usque ad {max})",
-		previewLabel: "Praevisio scalae:"
+		previewLabel: "Praevisio scalae:",
+		minLabel: "Titulus valoris minimi (optionalis)",
+		maxLabel: "Titulus valoris maximi (optionalis)",
+		labelsHint: "Tantum in quaestionibus interretialibus ad fines scalae ostenditur, non recitatur.",
+		minLabelPlaceholder: "e. g. pessimum",
+		maxLabelPlaceholder: "e. g. optimum"
 	},
 
 	choiceOptions: {
@@ -331,7 +350,12 @@ export const la: MessageSchema = {
 		surveyNameRequired: "Nomen percontationis vacuum esse non potest.",
 		surveyMinQuestions: "Percontatio saltem 1 quaestionem continere debet.",
 		surveyMaxQuestions: "Percontatio maxime {max} quaestiones continere potest (cum consecutivis). Nunc: {count}.",
-		ttsTextTooLong: "„{field}“ nimis longum est ({length} ex maximo {max} litteris). Textus voce synthetica recitati maxime {max} litteras longi esse possunt. Quaeso, textum contrahe."
+		ttsTextTooLong: "„{field}“ nimis longum est ({length} ex maximo {max} litteris). Textus voce synthetica recitati maxime {max} litteras longi esse possunt. Quaeso, textum contrahe.",
+		baseUrlInvalid: "URL basis debet esse URL https absoluta et valida, e. g. https://www.exemplum.de/quaestio/{placeholder}.",
+		baseUrlTokenCount: "URL basis signum {placeholder} semel tantum continere potest.",
+		languageInvalid: "Linguam validam elige.",
+		webThemeInvalid: "Formam validam elige.",
+		scaleLabelTooLong: "„{field}“ nimis longum est (maximum {max} litterae)."
 	},
 
 	translator: {
@@ -370,6 +394,18 @@ export const la: MessageSchema = {
 		unknownError: "Error ignotus in publicatione",
 		draftChanged: "Exemplar interim mutatum est (ostensum: v{expected}, nunc: v{current}), e. g. ab alio usore. Nihil publicatum est. Aspectus nunc statum hodiernum ostendit – quaeso, inspice et iterum publica.",
 		prodChanged: "Prod interim mutatum est, e. g. publicatione alterius usoris. Reversio peracta non est. Aspectus nunc statum hodiernum ostendit – quaeso, inspice et reversionem, si opus est, iterum perage.",
+		webPreview: "Praevisio interretialis",
+		webPreviewAriaLabel: "Versionem Stage ut percontationem interretialem in nova tabula aperi",
+		webPreviewHint: "Praevisio versionem Stage ut percontationem interretialem in nova tabula aperit. Nexus {days} dies valet, responsa non servantur.",
+		webPreviewBlocked: "Navigatrum novam fenestram impedivit.",
+		webPreviewOpenLink: "Praevisionem aperi",
+		webPreviewErrors: {
+			missingToken: "Non inscriptus – quaeso paginam renova.",
+			missingRole: "Nulla licentia – iura publicandi desunt.",
+			noStage: "Huic percontationi nulla versio Stage publicata est.",
+			throttled: "Nimiae petitiones – quaeso mox iterum conare.",
+			generic: "Praevisio aperiri non potuit"
+		},
 		payloadTooLarge: "Summa textuum percontationis nimia est ({length} ex maximo {max} litteris cum datis technicis), itaque publicari non potest. Quaeso, textus longiores in editore contrahe et percontationem iterum serva."
 	},
 
@@ -414,6 +450,37 @@ export const la: MessageSchema = {
 			invalidRange: "Quaeso, tempus validum elige (Ab non post Usque ad esse potest).",
 			missingToken: "Nullum signum accessus Genesys adest. Quaeso, iterum ingredere.",
 			generic: "Error in relatione legenda"
+		}
+	},
+
+	invitations: {
+		back: "Ad editorem redi",
+		backAriaLabel: "Ad editorem redi",
+		title: "Nexus invitationis",
+		prodVersion: "Prod v{version}",
+		intro: "Nexus proprios pro quaestionario interretiali creat. Nexus ad statum Prod praesentem spectant.",
+		noProd: "Quaestionarium nondum statum Prod habet. Primum in Prod emitte.",
+		count: "Numerus nexuum",
+		countHint: "{min} ad {max} nexus singulis vicibus",
+		expiry: "Dies exitus (optio)",
+		expiryHint: "Valet usque ad 23:59:59 illius diei (tempore tuo). Sine die nexus numquam exeunt.",
+		multi: "Saepius utendus",
+		multiHintOn: "Quisque nexus quotiens libet adhiberi potest.",
+		multiHintOff: "Quisque nexus semel tantum adhiberi potest.",
+		linkTarget: "Meta nexuum",
+		linkTargetBaseUrl: "URL fundamentalis ex optionibus servatis:",
+		linkTargetFallback: "Nulla URL fundamentalis – nexus ad paginam Polly spectant:",
+		generate: "Nexus crea et CSV depone",
+		generateAriaLabel: "Nexus invitationis crea et ut CSV depone",
+		notStoredHint: "Nexus non servantur. Plicam CSV custodi.",
+		success: "{count} nexus creati, plica CSV deposita est.",
+		errors: {
+			missingToken: "Nulla tessera accessus Genesys. Iterum inscribe.",
+			missingRole: "Nulla potestas – iura emittendi desunt.",
+			noProd: "Quaestionarium statum Prod (iam) non habet. Aspectum renova.",
+			throttled: "Genesys nunc occupatus est. Mox iterum tempta.",
+			expiryInPast: "Dies exitus praeteriit.",
+			generic: "Error in nexibus invitationis creandis"
 		}
 	},
 
@@ -466,7 +533,126 @@ export const la: MessageSchema = {
 		sidebarExpand: "Latus explica"
 	},
 
+	webThemes: {
+		title: "Formae interretiales",
+		intro: "Formae paginae publicae (litterae, stili, colores). Quaeque quaestio formam suam eligit; sine electione forma communis valet. Mutationes intra triginta secunda valent.",
+		list: {
+			loading: "Formae onerantur …",
+			empty: "Nullae formae adhuc. Sine forma pagina formam Polly adhibet.",
+			default: "Communis",
+			edit: "Muta",
+			view: "Inspice",
+			duplicate: "Duplica",
+			delete: "Dele",
+			create: "Nova forma",
+			newName: "Nova forma",
+			copyName: "{name} (exemplar)",
+			updated: "Mutata {date}",
+			updatedBy: "Mutata {date} ab {user}",
+			limit: "Non plus quam {max} formae."
+		},
+		editor: {
+			name: "Nomen",
+			isDefault: "Forma communis",
+			font: "Litterae",
+			fontHint: "Litterae systematis; nulla documenta litterarum onerantur.",
+			textStyles: "Stili textus",
+			textStylesHint: "Magnitudo in punctis imaginis. Amplificatio legentium valet.",
+			role: "Genus textus",
+			size: "Magnitudo",
+			weight: "Pondus",
+			lineHeight: "Altitudo versus",
+			reset: "Restitue",
+			resetAll: "Omnia restitue",
+			resetRole: "{role} restitue",
+			resetColor: "{color} restitue",
+			sizeOf: "Magnitudo {role}, {min} ad {max}",
+			weightOf: "Pondus {role}",
+			lineHeightOf: "Altitudo versus {role}",
+			colors: "Colores",
+			transparentBackground: "Fundus pellucidus",
+			transparentHint: "Ad inserendum per iframe: fundus paginae pellucidus fit.",
+			preview: "Prospectus",
+			previewHint: "Quaestio exemplaris cum omnibus generibus. Genus textus hic notatur.",
+			previewTitle: "Prospectus paginae",
+			save: "Serva",
+			cancel: "Omitte"
+		},
+		roles: {
+			heading: "Titulus",
+			subheading: "Subtitulus",
+			body: "Textus",
+			questionTitle: "Titulus quaestionis",
+			description: "Descriptio",
+			option: "Responsa",
+			scaleLabel: "Tituli scalae",
+			hint: "Indicia",
+			error: "Errores",
+			button: "Puga"
+		},
+		weights: {
+			w400: "Normale (400)",
+			w500: "Medium (500)",
+			w600: "Semigrave (600)",
+			w700: "Grave (700)"
+		},
+		fonts: {
+			system: "Litterae systematis",
+			sans: "Sine apicibus",
+			serif: "Cum apicibus",
+			humanist: "Humanisticae",
+			rounded: "Rotundae"
+		},
+		colors: {
+			background: "Fundus paginae",
+			surface: "Superficies",
+			text: "Textus",
+			heading: "Tituli",
+			textMuted: "Textus remissus",
+			primary: "Color insignis",
+			onPrimary: "Textus in colore insigni",
+			border: "Margines",
+			error: "Errores"
+		},
+		contrast: {
+			warning: "Discrimen ad {background}: {ratio}:1, saltem {minimum}:1 (WCAG AA).",
+			summary: "Monita discriminis: {count}. Servare licet, sed WCAG 2.2 AA non praestatur."
+		},
+		delete: {
+			header: "Formam dele",
+			message: "Formam „{name}“ vere delere?",
+			usedBy: "Hae quaestiones eam adhibent: {surveys}.",
+			unused: "Nulla quaestio hanc formam adhibet.",
+			usageUnknown: "Usus probari non potuit.",
+			accept: "Dele",
+			reject: "Omitte"
+		},
+		toast: {
+			saved: "Forma „{name}“ servata",
+			saveFailed: "Forma servari non potuit",
+			deleted: "Forma „{name}“ deleta",
+			deleteFailed: "Forma deleri non potuit"
+		},
+		errors: {
+			missingToken: "Non inscriptus. Applicationem renova.",
+			missingRole: "Sine iure – iura deploy desunt.",
+			limitReached: "Numerus maximus formarum attactus est.",
+			conflict: "Alius formam interim mutavit aut delevit. Index renovatus est, tua servata sunt. Iterum servare statum novum superscribit.",
+			throttled: "Ministerium occupatum est. Mox iterum tempta.",
+			generic: "Error formarum"
+		}
+	},
+
+	features: {
+		web_survey: {
+			label: "Quaestiones interretiales",
+			description: "Quaestiones per nexum invitationis in navigatro, cum formis interretialibus et optionibus in editore."
+		}
+	},
 	settings: {
+		features: {
+			title: "Facultates activae"
+		},
 		setup: {
 			title: "Institutio",
 			empty: "Nulla metadata institutionis praesto sunt.",
@@ -552,6 +738,8 @@ export const la: MessageSchema = {
 			mappingDataTable: "Data Table assignationis agminum",
 			dataTableHint: "Nomina plena Data Tables. Si tabula eodem nomine iam exstat, assumitur et deinstituendo non delebitur.",
 			dataTableNamesCollide: "Duae Data Tables nomina diversa requirunt.",
+			features: "Facultates",
+			featuresHint: "Electio in linea __meta servatur et post installationem tantum in Data Table mutari potest.",
 			next: "Proximum"
 		},
 		step2: {
@@ -562,6 +750,8 @@ export const la: MessageSchema = {
 			oauthClient: "Client OAuth",
 			division: "Divisio",
 			newDivision: "Nova: {name}_division",
+			features: "Facultates",
+			noFeatures: "Nullae",
 			surveyDataTable: "Data Table percontationum",
 			mappingDataTable: "Data Table assignationis agminum",
 			back: "Redi",

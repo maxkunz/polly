@@ -73,7 +73,7 @@ export function moduleRegistry() {
 			page: true,
 			dashboardColumn: 3,
 			routeModule: false,
-			preserveQueryKeys: ["deploy", "report"],
+			preserveQueryKeys: ["deploy", "report", "invite"],
 			isActive: () => true,
 			getChildren: () =>
 				(useAppStore().surveys ?? []).map((survey: any, index: number) => {

@@ -104,6 +104,8 @@ export const de = {
 			deployAriaLabel: "Zur Deployment-Ansicht",
 			report: "Report",
 			reportAriaLabel: "Zur Report-Ansicht",
+			invite: "Einladungslinks",
+			inviteAriaLabel: "Zur Ansicht Einladungslinks (Web)",
 			save: "Speichern"
 		},
 		stickyBar: {
@@ -119,11 +121,23 @@ export const de = {
 			description: "Beschreibung",
 			greeting: "Begrüßungsnachricht",
 			closing: "Verabschiedungsnachricht",
+			baseUrl: "Basis-URL für Einladungslinks (Web)",
+			baseUrlHint: "Optional. Absolute https-URL, z. B. die Seite, in die die Umfrage eingebettet ist. Mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Ohne Angabe zeigt der Link auf die Polly-Umfrageseite.",
+			language: "Sprache der Web-Umfrage",
+			webTheme: "Design der Web-Umfrage",
+			webThemeHint: "Schrift, Textgrößen und Farben der Umfrageseite. Pflege unter Einstellungen → Web-Designs. Ein Wechsel wirkt nach dem Deploy nach Prod.",
+			webThemeDefault: "Standard des Mandanten (Polly-Design)",
+			webThemeDefaultNamed: "Standard des Mandanten ({name})",
+			webThemeMissing: "Das gewählte Design wurde gelöscht. Die Umfrage nutzt das Standard-Design, bis Sie ein anderes wählen.",
+			webThemeMissingOption: "Gelöschtes Design",
+			webThemeLoadingOption: "Gewähltes Design (wird geladen …)",
+			webThemeUnavailableOption: "Gewähltes Design (Liste nicht abrufbar)",
 			placeholders: {
 				title: "z. B. Kundenzufriedenheit",
 				description: "Interne Beschreibung oder Kontext zur Umfrage...",
 				greeting: "Vielen Dank, dass Sie sich kurz Zeit nehmen...",
-				closing: "Vielen Dank für Ihr wertvolles Feedback!"
+				closing: "Vielen Dank für Ihr wertvolles Feedback!",
+				baseUrl: "https://www.beispiel.de/umfrage/{placeholder}"
 			}
 		},
 		save: {
@@ -277,7 +291,12 @@ export const de = {
 		scaleLabel: "Bewertungsskala konfigurieren ({min} bis max. {max}):",
 		min: "Minimalwert ({min} bis {max})",
 		max: "Maximalwert ({min} bis {max})",
-		previewLabel: "Vorschau der Skala:"
+		previewLabel: "Vorschau der Skala:",
+		minLabel: "Label für den Minimalwert (optional)",
+		maxLabel: "Label für den Maximalwert (optional)",
+		labelsHint: "Wird nur in Web-Umfragen an den Enden der Skala angezeigt und nicht vorgelesen.",
+		minLabelPlaceholder: "z. B. sehr schlecht",
+		maxLabelPlaceholder: "z. B. ausgezeichnet"
 	},
 
 	choiceOptions: {
@@ -328,7 +347,12 @@ export const de = {
 		surveyNameRequired: "Der Name der Umfrage darf nicht leer sein.",
 		surveyMinQuestions: "Eine Umfrage muss mindestens 1 Frage enthalten.",
 		surveyMaxQuestions: "Eine Umfrage darf maximal {max} Fragen enthalten (inkl. Folgefragen). Aktuell: {count}.",
-		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text."
+		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text.",
+		baseUrlInvalid: "Die Basis-URL muss eine gültige, absolute https-URL sein, z. B. https://www.beispiel.de/umfrage/{placeholder}.",
+		baseUrlTokenCount: "Die Basis-URL darf den Platzhalter {placeholder} höchstens einmal enthalten.",
+		languageInvalid: "Bitte eine gültige Sprache wählen.",
+		webThemeInvalid: "Bitte ein gültiges Web-Design wählen.",
+		scaleLabelTooLong: "„{field}“ ist zu lang (maximal {max} Zeichen)."
 	},
 
 	translator: {
@@ -367,6 +391,18 @@ export const de = {
 		unknownError: "Unbekannter Fehler beim Deployment",
 		draftChanged: "Der Entwurf wurde zwischenzeitlich geändert (angezeigt: v{expected}, aktuell: v{current}), z. B. von einem anderen Nutzer. Es wurde nichts deployt. Die Ansicht zeigt jetzt den aktuellen Stand – bitte prüfen und erneut deployen.",
 		prodChanged: "Prod wurde zwischenzeitlich geändert, z. B. durch ein Deployment eines anderen Nutzers. Der Rollback wurde nicht ausgeführt. Die Ansicht zeigt jetzt den aktuellen Stand – bitte prüfen und den Rollback ggf. erneut ausführen.",
+		webPreview: "Webvorschau",
+		webPreviewAriaLabel: "Stage-Stand als Web-Umfrage in neuem Tab öffnen",
+		webPreviewHint: "Webvorschau öffnet den Stage-Stand als Web-Umfrage in einem neuen Tab. Der Link gilt {days} Tage, Antworten werden nicht gespeichert.",
+		webPreviewBlocked: "Der Browser hat das neue Fenster blockiert.",
+		webPreviewOpenLink: "Webvorschau öffnen",
+		webPreviewErrors: {
+			missingToken: "Nicht angemeldet – bitte die Seite neu laden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			noStage: "Für diese Umfrage ist kein Stage-Stand deployt.",
+			throttled: "Zu viele Anfragen – bitte in einem Moment erneut versuchen.",
+			generic: "Webvorschau konnte nicht geöffnet werden"
+		},
 		payloadTooLarge: "Die Gesamttextmenge der Umfrage ist zu groß ({length} von maximal {max} Zeichen inkl. technischer Daten), daher kann sie nicht deployt werden. Bitte kürzen Sie längere Texte im Editor und speichern Sie die Umfrage erneut."
 	},
 
@@ -411,6 +447,37 @@ export const de = {
 			invalidRange: "Bitte einen gültigen Zeitraum wählen (Von darf nicht nach Bis liegen).",
 			missingToken: "Kein Genesys-Zugriffstoken vorhanden. Bitte neu anmelden.",
 			generic: "Fehler beim Laden des Reports"
+		}
+	},
+
+	invitations: {
+		back: "Zurück zum Editor",
+		backAriaLabel: "Zurück zum Editor",
+		title: "Einladungslinks",
+		prodVersion: "Prod v{version}",
+		intro: "Erzeugt personalisierte Links für die Web-Umfrage. Die Links zeigen auf den aktuellen Prod-Stand; ein späteres Deploy oder Rollback wirkt automatisch auch auf bereits verschickte Links.",
+		noProd: "Die Umfrage hat noch keinen Prod-Stand. Bitte zuerst nach Prod deployen, dann können Einladungslinks erzeugt werden.",
+		count: "Anzahl Links",
+		countHint: "{min} bis {max} Links pro Erzeugung",
+		expiry: "Ablaufdatum (optional)",
+		expiryHint: "Gültig bis einschließlich 23:59:59 dieses Tages (Ihre Ortszeit). Ohne Datum laufen die Links nicht ab.",
+		multi: "Mehrfach nutzbar",
+		multiHintOn: "Jeder Link kann beliebig oft zur Teilnahme verwendet werden.",
+		multiHintOff: "Jeder Link erlaubt genau eine Teilnahme.",
+		linkTarget: "Ziel der Links",
+		linkTargetBaseUrl: "Basis-URL aus den gespeicherten Umfrageeinstellungen:",
+		linkTargetFallback: "Keine Basis-URL hinterlegt – die Links zeigen auf die Polly-Umfrageseite:",
+		generate: "Links erzeugen und CSV herunterladen",
+		generateAriaLabel: "Einladungslinks erzeugen und als CSV herunterladen",
+		notStoredHint: "Die Links werden nicht gespeichert. Bewahren Sie die CSV-Datei auf; verlorene Links können nur neu erzeugt werden.",
+		success: "{count} Links erzeugt, die CSV-Datei wurde heruntergeladen.",
+		errors: {
+			missingToken: "Kein Genesys-Zugriffstoken vorhanden. Bitte neu anmelden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			noProd: "Die Umfrage hat keinen Prod-Stand (mehr). Bitte Ansicht neu laden.",
+			throttled: "Genesys ist gerade ausgelastet. Bitte in einem Moment erneut versuchen.",
+			expiryInPast: "Das Ablaufdatum liegt in der Vergangenheit.",
+			generic: "Fehler beim Erzeugen der Einladungslinks"
 		}
 	},
 
@@ -463,7 +530,126 @@ export const de = {
 		sidebarExpand: "Seitenleiste ausklappen"
 	},
 
+	webThemes: {
+		title: "Web-Designs",
+		intro: "Designs der öffentlichen Umfrageseite (Schrift, Textstile, Farben). Jede Umfrage wählt im Editor ihr Design, ohne Auswahl gilt das Standard-Design. Änderungen an einem Design wirken nach höchstens 30 Sekunden auf allen Umfragen, die es nutzen.",
+		list: {
+			loading: "Designs werden geladen …",
+			empty: "Noch keine Designs. Ohne Design erscheint die Umfrageseite im Polly-Design.",
+			default: "Standard",
+			edit: "Bearbeiten",
+			view: "Ansehen",
+			duplicate: "Duplizieren",
+			delete: "Löschen",
+			create: "Neues Design",
+			newName: "Neues Design",
+			copyName: "{name} (Kopie)",
+			updated: "Geändert {date}",
+			updatedBy: "Geändert {date} von {user}",
+			limit: "Höchstens {max} Designs pro Mandant."
+		},
+		editor: {
+			name: "Name",
+			isDefault: "Standard-Design des Mandanten",
+			font: "Schrift",
+			fontHint: "Schriften des Systems; es werden keine Schriftdateien geladen.",
+			textStyles: "Textstile",
+			textStylesHint: "Größe in Pixeln bei Standardeinstellung des Browsers. Zoom und größere Grundschrift der Besucher wirken weiter.",
+			role: "Textart",
+			size: "Größe",
+			weight: "Stärke",
+			lineHeight: "Zeilenhöhe",
+			reset: "Auf Standard zurücksetzen",
+			resetAll: "Alle auf Standard",
+			resetRole: "{role} auf Standard zurücksetzen",
+			resetColor: "{color} auf Standard zurücksetzen",
+			sizeOf: "Größe {role} in Pixeln, {min} bis {max}",
+			weightOf: "Stärke {role}",
+			lineHeightOf: "Zeilenhöhe {role}",
+			colors: "Farben",
+			transparentBackground: "Hintergrund transparent",
+			transparentHint: "Für die Einbettung per iframe: Der Seitenhintergrund wird durchsichtig, die Karten behalten ihre Flächenfarbe.",
+			preview: "Vorschau",
+			previewHint: "Beispielumfrage mit allen Fragetypen. Beim Bearbeiten einer Textart wird sie hier markiert.",
+			previewTitle: "Vorschau der Umfrageseite",
+			save: "Speichern",
+			cancel: "Abbrechen"
+		},
+		roles: {
+			heading: "Überschrift",
+			subheading: "Überschrift 2",
+			body: "Fließtext",
+			questionTitle: "Fragetitel",
+			description: "Beschreibung",
+			option: "Antwortoptionen",
+			scaleLabel: "Skalen-Labels",
+			hint: "Hinweise",
+			error: "Fehlertexte",
+			button: "Button"
+		},
+		weights: {
+			w400: "Normal (400)",
+			w500: "Mittel (500)",
+			w600: "Halbfett (600)",
+			w700: "Fett (700)"
+		},
+		fonts: {
+			system: "Systemschrift",
+			sans: "Serifenlos (Helvetica, Arial)",
+			serif: "Serifenschrift (Charter, Georgia)",
+			humanist: "Humanistisch (Seravek, Calibri)",
+			rounded: "Abgerundet"
+		},
+		colors: {
+			background: "Seitenhintergrund",
+			surface: "Flächen (Karten)",
+			text: "Text",
+			heading: "Überschriften",
+			textMuted: "Gedämpfter Text",
+			primary: "Akzentfarbe",
+			onPrimary: "Text auf Akzentfarbe",
+			border: "Rahmen",
+			error: "Fehler"
+		},
+		contrast: {
+			warning: "Kontrast zu {background}: {ratio}:1, mindestens {minimum}:1 (WCAG AA).",
+			summary: "Kontrastwarnungen: {count}. Speichern ist möglich, die Barrierefreiheit nach WCAG 2.2 AA ist mit diesem Design aber nicht zugesichert."
+		},
+		delete: {
+			header: "Design löschen",
+			message: "Design „{name}“ wirklich löschen?",
+			usedBy: "Es wird von diesen Umfragen genutzt, die danach das Standard-Design zeigen: {surveys}.",
+			unused: "Keine Umfrage nutzt dieses Design.",
+			usageUnknown: "Ob Umfragen das Design nutzen, konnte nicht geprüft werden; betroffene Umfragen zeigen danach das Standard-Design.",
+			accept: "Löschen",
+			reject: "Abbrechen"
+		},
+		toast: {
+			saved: "Design „{name}“ gespeichert",
+			saveFailed: "Design konnte nicht gespeichert werden",
+			deleted: "Design „{name}“ gelöscht",
+			deleteFailed: "Design konnte nicht gelöscht werden"
+		},
+		errors: {
+			missingToken: "Nicht angemeldet. Bitte die App neu laden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			limitReached: "Die Höchstzahl an Designs ist erreicht.",
+			conflict: "Das Design wurde zwischenzeitlich von jemand anderem geändert oder gelöscht. Die Liste ist neu geladen, Ihre Eingaben sind erhalten. Erneutes Speichern überschreibt den aktuellen Stand.",
+			throttled: "Der Dienst ist gerade ausgelastet. Bitte gleich erneut versuchen.",
+			generic: "Fehler bei den Web-Designs"
+		}
+	},
+
+	features: {
+		web_survey: {
+			label: "Web-Umfragen",
+			description: "Umfragen per Einladungslink im Browser, inkl. Web-Designs und Web-Einstellungen im Editor."
+		}
+	},
 	settings: {
+		features: {
+			title: "Aktivierte Funktionen"
+		},
 		setup: {
 			title: "Setup",
 			empty: "Keine Setup-Metadaten verfügbar.",
@@ -549,6 +735,8 @@ export const de = {
 			mappingDataTable: "Data Table Queue-Mapping",
 			dataTableHint: "Vollständige Namen der Data Tables. Existiert bereits eine Tabelle mit diesem Namen, wird sie übernommen und beim Deinstallieren nicht gelöscht.",
 			dataTableNamesCollide: "Die beiden Data Tables brauchen unterschiedliche Namen.",
+			features: "Funktionen",
+			featuresHint: "Die Auswahl wird in der __meta-Zeile gespeichert und kann nach der Installation nur noch direkt in der Data Table geändert werden.",
 			next: "Weiter"
 		},
 		step2: {
@@ -559,6 +747,8 @@ export const de = {
 			oauthClient: "OAuth-Client",
 			division: "Division",
 			newDivision: "Neu: {name}_division",
+			features: "Funktionen",
+			noFeatures: "Keine",
 			surveyDataTable: "Data Table Umfragen",
 			mappingDataTable: "Data Table Queue-Mapping",
 			back: "Zurück",
