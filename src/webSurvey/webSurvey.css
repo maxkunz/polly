@@ -251,6 +251,7 @@ legend.web-question__title {
 		border-color: var(--ws-primary);
 		outline: 3px solid var(--ws-primary);
 		outline-offset: 2px;
+		z-index: 1;
 	}
 }
 
@@ -274,6 +275,7 @@ legend.web-question__title {
 	.web-option:has(input:focus-visible) {
 		outline: 3px solid var(--ws-primary);
 		outline-offset: 2px;
+		z-index: 1;
 	}
 
 	.web-option input:focus-visible {
