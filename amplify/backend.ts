@@ -17,6 +17,7 @@ import { onboarding } from "./functions/onboarding/resource";
 import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
+import { reportingApi } from "./functions/reporting_api/resource";
 import { surveyResponsesDelete } from "./functions/survey_responses_delete/resource";
 import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 import { invitations } from "./functions/invitations/resource";
@@ -68,6 +69,7 @@ const backend = defineBackend({
   invitations,
   webSurvey,
   webThemes,
+  reportingApi,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -216,11 +218,16 @@ const tenantSecretsArn = stack.formatArn({
   arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
 });
 
-function attachTenantAuth(fn: lambda.Function) {
+// Nur Cognito-Prüfung und Mandanteneintrag, ohne Zugriff auf die Genesys-Secrets (Kunden-API über resolveApiClient)
+function attachApiClientAuth(fn: lambda.Function) {
   tenantsTable.grantReadData(fn);
   fn.addEnvironment("TENANTS_TABLE_NAME", tenantsTable.tableName);
   fn.addEnvironment("USER_POOL_ID", backend.auth.resources.userPool.userPoolId);
   fn.addEnvironment("COGNITO_ISSUER", tenantAuthIssuer);
+}
+
+function attachTenantAuth(fn: lambda.Function) {
+  attachApiClientAuth(fn);
   fn.addEnvironment("SECRETS_PREFIX", tenantSecretsPrefix);
   if (genesysRegion) {
     fn.addEnvironment("GENESYS_REGION", genesysRegion);
@@ -584,6 +591,26 @@ const webSurveyRoutes = [
   }),
 ];
 
+// Kunden-API (/ext/v1), Anmeldung über resolveApiClient (Cognito Client Credentials + ApiClientsTable)
+const reportingApiLambda = backend.reportingApi.resources.lambda as lambda.Function;
+
+surveyResponsesTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("SURVEY_RESPONSES_TABLE_NAME", surveyResponsesTable.tableName);
+apiClientsTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+attachApiClientAuth(reportingApiLambda);
+
+const reportingApiInteg = new integrations.HttpLambdaIntegration("ReportingApiInteg", reportingApiLambda);
+
+const reportingApiRoutes = httpApi.addRoutes({
+  path: "/ext/v1/reporting/data",
+  methods: [apigw.HttpMethod.GET],
+  integration: reportingApiInteg,
+});
+
+// Drosselung der Kunden-API pro Route
+const REPORTING_API_THROTTLE = { rateLimit: 20, burstLimit: 40 };
+
 // Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
 const defaultStage = httpApi.defaultStage;
 if (defaultStage) {
@@ -597,9 +624,13 @@ if (defaultStage) {
       ThrottlingRateLimit: WEB_SURVEY_SUBMIT_THROTTLE.rateLimit,
       ThrottlingBurstLimit: WEB_SURVEY_SUBMIT_THROTTLE.burstLimit,
     },
+    "GET /ext/v1/reporting/data": {
+      ThrottlingRateLimit: REPORTING_API_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: REPORTING_API_THROTTLE.burstLimit,
+    },
   };
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
-  defaultStage.node.addDependency(...webSurveyRoutes);
+  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes);
 }
 
 // Pflege der Web-Designs (lesen: jeder App-Nutzer, schreiben: Genesys-User mit polly_deploy)

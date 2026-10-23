@@ -17,13 +17,23 @@ export interface SessionQueryParams {
   exclusiveStartKey?: Record<string, any>;
 }
 
+/** Abbruch von `iterateSessions`, weil `canContinue` vor der nächsten Seite `false` lieferte. */
+export class SessionReadAbortedError extends Error {
+  constructor() {
+    super("Session read aborted");
+    this.name = "SessionReadAbortedError";
+  }
+}
+
 /**
  * Liefert die Sessions im Zeitraum aufsteigend nach Session-Start (GSI byTenantSurvey).
- * Blättert intern über LastEvaluatedKey.
+ * Blättert intern über LastEvaluatedKey. `canContinue` wird vor jeder Seite geprüft, auch wenn der
+ * Versionsfilter ganze Seiten leert (dann läuft die Schleife des Aufrufers nicht).
  */
 export async function* iterateSessions(
   tenantId: string,
   params: SessionQueryParams,
+  canContinue?: () => boolean,
 ): AsyncGenerator<{ session: ExportSession; key: Record<string, any> }> {
   const names: Record<string, string> = {
     "#tenantId": "tenantId",
@@ -64,6 +74,7 @@ export async function* iterateSessions(
 
   let startKey = params.exclusiveStartKey;
   do {
+    if (canContinue && !canContinue()) throw new SessionReadAbortedError();
     const result = await ddb.send(
       new QueryCommand({
         TableName: SURVEY_RESPONSES_TABLE_NAME,

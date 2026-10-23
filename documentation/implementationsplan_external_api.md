@@ -26,11 +26,11 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [x] `CLAUDE.md`: Kunden-API, `ApiClientsTable`, Verweis auf diesen Plan und die neue Testdatei.
   - Testbar nach dem Deploy: Client per Admin-Route anlegen, Token an der `tokenUrl` holen. Der Client wird von bestehenden Routen wie `/survey-responses/aggregates` abgelehnt.
 
-- [ ] **M3 API 1: Reporting `GET /ext/v1/reporting/data`** (siehe „API 1“)
-  - [ ] `amplify/functions/reporting_api/`: `resource.ts`, `pagination.ts`, `v1.ts` und `handler.ts` mit Routing-Tabelle.
-  - [ ] `backend.ts`: Lambda, Rechte, Route und Drosselung.
-  - [ ] Tests: Parameter, Seiten, feste Feldliste von `toV1Record`, `sessionToAnswerRecords`.
-  - [ ] Doku: Abschnitt API 1 in `polly_customer_api.md`, Verweis in `survey_responses_api.md`.
+- [x] **M3 API 1: Reporting `GET /ext/v1/reporting/data`** (siehe „API 1“) (erledigt 2026-10-23)
+  - [x] `amplify/functions/reporting_api/`: `resource.ts`, `pagination.ts`, `v1.ts` und `handler.ts` mit Routing-Tabelle.
+  - [x] `backend.ts`: Lambda, Rechte, Route und Drosselung.
+  - [x] Tests: Parameter, Seiten, feste Feldliste von `toV1Record`, `sessionToAnswerRecords`.
+  - [x] Doku: Abschnitt API 1 in `polly_customer_api.md`, Verweis in `survey_responses_api.md`.
   - Testbar nach dem Deploy: `/data` liefert dieselben Antworten wie der CSV-Export derselben Umfrage und desselben Zeitraums. Fehlerfälle 400/401/403.
 
 - [ ] **M4 API 2: Einladungen `POST /ext/v1/invitations`** (siehe „API 2“)
@@ -73,7 +73,15 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Test „Routing-Tabelle, unbekannte Routen ergeben 404“ kommt mit M3, weil es in M2 noch keinen `/ext`-Handler gibt.
 
 ### M3
-- noch keine
+- Neuer Fehlercode `invalid_request` (400) für ungültige Parameter, `range_too_large` (413) bei mehr als `MAX_SESSIONS` = 10.000 Sitzungen im Zeitraum. Beide stehen in `polly_customer_api.md`.
+- `compareAnswerRecords` (Sortierung) liegt in `shared/answer_records.ts` statt in `reporting_api`, weil sie zum internen Modell gehört.
+- `paginate` liefert `{ items, pageInfo }`; die Felder des `pagination`-Objekts legt `buildV1DataResponse` in `v1.ts` fest.
+- `page` und `limit` werden strikt geprüft (positive Ganzzahl, sonst 400); nur `limit` über 1000 wird begrenzt. Leere Werte zählen als nicht angegeben.
+- Der Test „Routing-Tabelle, unbekannte Routen ergeben 404“ aus M2 ist jetzt für den Reporting-Handler enthalten (dazu ein Test für 401 ohne Token).
+- Datumsprüfung: Die geparste Zeit wird zurück formatiert und muss dem Text entsprechen, weil `Date.parse` unmögliche Daten weiterrollt (31.02. → 03.03., `24:00:00` → nächster Tag).
+- Die Reporting-Lambda bekommt über `attachApiClientAuth` nur Tenants-Tabelle und Cognito-Werte, keinen Zugriff auf die Genesys-Secrets der Mandanten (`attachTenantAuth` baut darauf auf).
+- Neuer Fehlercode `page_too_large` (413), außerdem `range_too_large` bei erschöpftem Zeitbudget.
+- Nicht per Test geprüft: der Abfrageteil mit DynamoDB (`iterateSessions`), das ist unverändert aus dem CSV-Export.
 
 ### M4
 - noch keine
@@ -185,10 +193,16 @@ Grundlage sind `requireAdmin` (Header `x-admin-token`) und der vorhandene Cognit
 **Fehler:**
 - `400` bei ungültigen Parametern oder Zeitraum
 - `401` und `403` siehe oben
-- `413`, wenn der Zeitraum mehr als `MAX_SESSIONS` Sitzungen enthält
+- `413 range_too_large`, wenn der Zeitraum mehr als `MAX_SESSIONS` Sitzungen enthält oder das Zeitbudget der Lambda (Rest unter 6 s) vorher erschöpft ist. Das Budget wird vor jeder DynamoDB-Seite geprüft (`canContinue` in `iterateSessions`), weil der Versionsfilter als `FilterExpression` läuft und ganze Seiten leeren kann.
+- `413 page_too_large`, wenn der JSON-Body größer als `MAX_RESPONSE_BYTES` (5 MB, Limit der Lambda-Antwort 6 MB) wäre
 - `500` bei internem Fehler
 
 **Umsetzung:** Jeder Aufruf liest alle Sitzungen des Zeitraums (max. 24 h, eine Umfrage), wandelt sie in Datensätze um, sortiert sie und schneidet die Seite heraus. `to` wird als `to − 1 ms` in `BETWEEN` übergeben, weil `surveyStartedAt` Millisekunden-ISO enthält.
+
+**Bekannte Grenzen (bewusst für v1):**
+- Jede Seite liest und sortiert den ganzen Zeitraum neu; das Abrufen aller Seiten kostet Seiten × Zeitraum. Abhilfe in einer späteren Version: Cursor auf Sitzungsgrenzen statt `page`.
+- Die Drosselung gilt pro Route für alle Mandanten zusammen; ein Kunde kann die anderen mit 429 ausbremsen. Eine Drosselung pro Client bräuchte eine eigene Zählung (die HttpApi kennt keine Usage Plans).
+- Die Sortierung vergleicht Code Units (`compareAnswerRecords`), keine Collation.
 
 **Hinweis für die Kunden-Doku:** Nur Zeiträume abfragen, die mindestens 1 h zurückliegen. Offene Sitzungen bekommen noch Antworten, und `timed_out` wird erst nach ca. 45 min gesetzt. Bei laufenden Zeiträumen können sich sonst die Seiten verschieben.
 

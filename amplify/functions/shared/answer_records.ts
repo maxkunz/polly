@@ -65,3 +65,21 @@ export function sessionToAnswerRecords(session: ExportSession): AnswerRecord[] {
     sessionStartedAt: session.startedAt,
   }));
 }
+
+/**
+ * Feste Reihenfolge über Sitzungen hinweg (Seitenaufteilung der Kunden-API): der GSI garantiert bei gleichem
+ * Schlüssel keine Reihenfolge, deshalb im Speicher nach Sitzungsstart, responseId, answeredAt, questionId.
+ */
+export function compareAnswerRecords(a: AnswerRecord, b: AnswerRecord): number {
+  return (
+    compareCodeUnits(a.sessionStartedAt ?? "", b.sessionStartedAt ?? "") ||
+    compareCodeUnits(a.responseId, b.responseId) ||
+    compareCodeUnits(a.answeredAt ?? "", b.answeredAt ?? "") ||
+    compareCodeUnits(a.questionId, b.questionId)
+  );
+}
+
+// Ohne Collation (localeCompare): schneller bei vielen Datensätzen und unabhängig von der ICU-Version
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}

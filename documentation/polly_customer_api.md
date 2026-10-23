@@ -4,7 +4,7 @@ Mit der Kunden-API rufen Sie Daten aus Polly maschinell ab, ohne Genesys-Login:
 
 | API | Zweck | Scope | Stand |
 |---|---|---|---|
-| Reporting | Antworten der Umfragen abrufen (dieselben Daten wie der CSV-Export der App) | `polly-api/reporting.read` | folgt |
+| Reporting | Antworten der Umfragen abrufen (dieselben Daten wie der CSV-Export der App) | `polly-api/reporting.read` | verfügbar |
 | Einladungen | Einladungslinks für Web-Umfragen erzeugen | `polly-api/invitations.write` | folgt |
 | Umfragedetails | Fragetexte, Optionen und Skalen der veröffentlichten Umfragen lesen | `polly-api/surveys.read` | folgt |
 
@@ -98,7 +98,85 @@ Die Version steht im Pfad (`/ext/v1/…`).
 
 ## 5. API 1: Reporting
 
-Folgt.
+Liefert die Antworten einer Umfrage in einem Zeitraum, dieselben Daten wie der CSV-Export der App. Ein Datensatz entspricht einer Antwort (einer CSV-Zeile).
+
+- **Scope:** `polly-api/reporting.read`
+- **`[API_URL]`:** `https://<app-domain>/api/ext/v1/reporting`
+
+### 5.1 `GET [API_URL]/data`
+
+| Parameter | Pflicht | Format / Standard | Hinweis |
+|---|---|---|---|
+| `surveyId` | ja | UUID der Umfrage | Es gibt keine Abfrage über alle Umfragen. |
+| `from` | ja | `YYYY-MM-DDTHH:mm:ss` (UTC, ohne `Z`) | Inklusiv, bezogen auf den Start der Sitzung. |
+| `to` | ja | wie `from` | Exklusiv, muss nach `from` liegen. `to − from` darf höchstens 24 Stunden betragen. |
+| `version` | nein | Ganzzahl | Nur Antworten dieser Umfrageversion. |
+| `page` | nein | positive Ganzzahl, Standard `1` | |
+| `limit` | nein | positive Ganzzahl, Standard und Maximum `1000` | Größere Werte werden auf 1000 begrenzt. |
+
+```bash
+curl "[API_URL]/data?surveyId=123e4567-e89b-12d3-a456-426614174000&from=2026-10-01T00:00:00&to=2026-10-02T00:00:00&page=1&limit=500" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+**Antwort `200`:**
+
+```json
+{
+  "data": [
+    {
+      "responseId": "2f1c9a6e-…",
+      "conversationId": "2f1c9a6e-…",
+      "surveyId": "123e4567-e89b-12d3-a456-426614174000",
+      "surveyName": "Kundenzufriedenheit_123e4567",
+      "surveyVersion": 3,
+      "questionId": "Zufriedenheit_9a8b7c6d",
+      "questionType": "rating",
+      "answeredAt": "2026-10-01T10:00:20.000Z",
+      "value": 9,
+      "status": "completed",
+      "channel": "flow",
+      "sessionStartedAt": "2026-10-01T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 500,
+    "total": 1,
+    "totalPages": 1,
+    "hasPreviousPage": false,
+    "hasNextPage": false
+  }
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `responseId` | Kennung der Sitzung. |
+| `conversationId` | Bei `channel` = `flow` die Conversation-ID (gleich `responseId`), bei `web` `null`. |
+| `surveyId`, `surveyName`, `surveyVersion` | Umfrage und ihre Version. |
+| `questionId` | Technischer Name der Frage. Er ist derselbe wie `questionId` in den Umfragedetails. |
+| `questionType` | `rating`, `nps`, `choice`, `yes_no` oder `comment`. |
+| `answeredAt` | Zeitpunkt der Antwort (ISO 8601, UTC). |
+| `value` | Antwort mit ihrem Typ: Zahl (`rating`, `nps`), Boolean (`yes_no`) oder Text (`choice`, `comment`). Ohne Formelschutz wie im CSV. |
+| `status` | Status der Sitzung, z. B. `partial`, `completed`, `timed_out`. |
+| `channel` | `flow` (Telefon/Architect) oder `web`. |
+| `sessionStartedAt` | Start der Sitzung (ISO 8601, UTC). |
+
+Die Datensätze sind nach `sessionStartedAt`, `responseId`, `answeredAt` und `questionId` sortiert. Eine `page` hinter der letzten Seite liefert `200` mit leerem `data`.
+
+**Antwortcodes:**
+
+| HTTP | `error` | Bedeutung |
+|---|---|---|
+| `200` | | Erfolg, auch bei leerem Ergebnis. |
+| `400` | `invalid_request` | Ungültiger oder fehlender Parameter (`message` nennt ihn), ungültiger Zeitraum. |
+| `401`, `403` | | siehe Abschnitt 3 |
+| `413` | `range_too_large` | Der Zeitraum enthält zu viele Sitzungen (über 10.000) oder konnte nicht rechtzeitig gelesen werden. Kürzeren Zeitraum wählen. |
+| `413` | `page_too_large` | Die Seite wäre größer als 5 MB (z. B. viele lange Freitexte). Kleineres `limit` wählen. |
+| `500` | `internal_error` | siehe Abschnitt 3 |
+
+**Hinweis:** Fragen Sie nur Zeiträume ab, die **mindestens eine Stunde zurückliegen**. Offene Sitzungen bekommen noch Antworten, und der Status `timed_out` wird erst nach etwa 45 Minuten gesetzt. Bei laufenden Zeiträumen können sich sonst die Seiten verschieben. Rufen Sie alle Seiten eines Zeitraums nacheinander ab, bis `hasNextPage` `false` ist.
 
 ## 6. API 2: Einladungen
 

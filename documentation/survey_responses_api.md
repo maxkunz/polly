@@ -2,6 +2,8 @@
 
 Diese API dient der Erfassung und Auswertung von Umfrageergebnissen (Survey Responses). Sie wird primär aus **Genesys Cloud Inbound/Outbound Flows** während eines laufenden Telefonats aufgerufen, kann aber auch von Frontend- und Reporting-Systemen (z. B. Admin-Dashboard) abgefragt werden.
 
+> Für Kunden gibt es zusätzlich die Reporting-Route `GET /ext/v1/reporting/data` mit Anmeldung per Client Credentials, siehe [polly_customer_api.md](polly_customer_api.md#5-api-1-reporting). Sie nutzt dieselben Sitzungsdaten wie der CSV-Export.
+
 ---
 
 ## 1. Architektur & Konzepte
