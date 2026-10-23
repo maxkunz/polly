@@ -27,6 +27,8 @@ Der Branchname wird für die Ressourcennamen bereinigt (Kleinbuchstaben, Sonderz
 
 Für Repos in einer GitHub-Organisation muss die GitHub App „AWS Amplify“ für das Repo freigegeben sein. Das ist bei einer bestehenden Amplify-App bereits der Fall, sonst muss ein Owner der Organisation sie freigeben.
 
+**Vor dem nächsten Schritt den Backend-Deploy des Branches abwarten.** Das API Gateway entsteht erst durch diesen Deploy, nicht durch das Onboarding. Das Onboarding ist selbst ein Aufruf an dieses Gateway.
+
 ## 2. API Gateway des Branches ermitteln
 
 Die HTTP API heißt `app-api-<appId>-<branch>`, z. B. `app-api-d1a6p4nkkob4i7-feature-websurveys`. Die URL findet man so:
@@ -110,7 +112,7 @@ Alle angelegten Ressourcen stehen danach in `meta.setup` der `__meta`-Zeile. Der
 
 ## 6. Mandant freigeben
 
-Das Backend nimmt Anfragen eines Mandanten erst an, wenn sein Eintrag in der Tenants-Tabelle den Status `APPROVED` hat. Nach dem Setup steht er auf `PENDING`.
+Das Backend nimmt Anfragen eines Mandanten erst an, wenn sein Eintrag in der Tenants-Tabelle den Status `APPROVED` hat. Sobald das Backend den ersten Frontend Request erhält steht er auf `PENDING`.
 
 **Variante A: direkt in DynamoDB**
 DynamoDB Console → Tabelle `TenantsTable` des neuen Stacks (Name enthält den Stack des Branches) → den neuen Eintrag öffnen → `status` auf `APPROVED` setzen.
@@ -143,6 +145,7 @@ curl -X POST "https://<branch>.<appId>.amplifyapp.com/api_websurveys/onboarding/
 | Aufrufe gehen auf `/api` statt auf das Branch-Präfix | Override für `VITE_API_PREFIX` fehlt oder Branch nach dem Setzen nicht neu gebaut |
 | `Tenant not approved` bzw. 401/403 nach dem Setup | Mandant steht noch auf `PENDING` (Schritt 6) |
 | Antworten landen im Backend von `main` | Data Action wurde vor dem Präfix angelegt und zeigt noch auf `/api/survey-responses`. In Genesys anpassen oder Setup neu ausführen |
+| Mandant (`PENDING`) steht in der Tenants-Tabelle von `main` statt im Branch | Setup lief gegen `/api`: Build ohne `VITE_API_PREFIX`-Override oder Branch nach dem Setzen nicht neu gebaut. Eintrag und Secret in `main` von Hand löschen, Branch neu bauen, Setup wiederholen |
 
 ## Lokal entwickeln
 
