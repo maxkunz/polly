@@ -9,11 +9,11 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
 
 ## Fortschritt
 
-- [ ] **M1 Gemeinsame Bausteine herauslösen (ohne Verhaltensänderung)**
-  - [ ] `amplify/functions/shared/answer_records.ts` mit `ExportSession`/`ExportAnswer`, `DEFAULT_CHANNEL` und `sessionToAnswerRecords`. `survey_responses_export/csv.ts` baut seine Zeilen daraus und exportiert die Typen erneut.
-  - [ ] `amplify/functions/shared/survey_sessions.ts` mit `iterateSessions`, aus dem Export-Handler verschoben. Liest zusätzlich `surveyId` und `startedAt`.
-  - [ ] `verifyCognitoJwt` und `loadTenantByTenantId` aus `tenant_auth.ts` exportieren.
-  - [ ] `test/surveyResponsesExport.test.ts` ist unverändert grün, die CSV-Ausgabe hat sich nicht geändert.
+- [x] **M1 Gemeinsame Bausteine herauslösen (ohne Verhaltensänderung)** (erledigt 2026-10-23)
+  - [x] `amplify/functions/shared/answer_records.ts` mit `ExportSession`/`ExportAnswer`, `DEFAULT_CHANNEL` und `sessionToAnswerRecords`. `survey_responses_export/csv.ts` baut seine Zeilen daraus und exportiert die Typen erneut.
+  - [x] `amplify/functions/shared/survey_sessions.ts` mit `iterateSessions`, aus dem Export-Handler verschoben. Liest zusätzlich `surveyId` und `startedAt`.
+  - [x] `verifyCognitoJwt` und `loadTenantByTenantId` aus `tenant_auth.ts` exportieren.
+  - [x] `test/surveyResponsesExport.test.ts` ist unverändert grün, die CSV-Ausgabe hat sich nicht geändert.
   - Kein Deploy nötig.
 
 - [ ] **M2 Basis: API-Clients, Scopes, Anmeldung, Admin-Routen** (siehe „Gemeinsame Basis“)
@@ -60,7 +60,8 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
 Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und warum. Außerdem was nach dem Meilenstein neu testbar ist, falls das vom Plan abweicht.
 
 ### M1
-- noch keine
+- `ExportSession` hat zusätzlich `surveyId` und `startedAt`; `sessionToAnswerRecords` liefert schon den vollständigen `AnswerRecord` (inkl. `conversationId` = `responseId` bei Kanal `flow`, sonst `null`), damit M3 nichts mehr umbauen muss.
+- `iterateSessions` nimmt den Typ `SessionQueryParams` (in `survey_sessions.ts`); `PAGE_SIZE` ist dort eigene Konstante, der Export-Handler behält seine für die Vorschau.
 
 ### M2
 - noch keine

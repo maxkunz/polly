@@ -4,6 +4,12 @@
  */
 
 import { CSV_SEPARATOR, escapeCsvField, formatCsvText, neutralizeFormula } from "../../../src/utils/csv";
+import {
+  DEFAULT_CHANNEL,
+  sessionToAnswerRecords,
+  type ExportAnswer,
+  type ExportSession,
+} from "../shared/answer_records";
 
 // Escape und Formelschutz liegen in src/utils/csv.ts (auch für die CSV der Einladungslinks)
 export { CSV_SEPARATOR, escapeCsvField, neutralizeFormula };
@@ -20,24 +26,9 @@ export const CSV_HEADER = [
   "Channel",
 ].join(CSV_SEPARATOR);
 
-/** Kanal von Sitzungen ohne Feld `channel` (Architect Flow, auch alle Antworten vor dem Web-Kanal). */
-export const DEFAULT_CHANNEL = "flow";
-
-export interface ExportAnswer {
-  type?: string;
-  value?: unknown;
-  answeredAt?: string;
-}
-
-export interface ExportSession {
-  responseId: string;
-  surveyName?: string;
-  surveyVersion?: number;
-  status?: string;
-  /** `web` (Web-Umfrage) oder fehlend (Architect Flow). */
-  channel?: string;
-  answers?: Record<string, ExportAnswer>;
-}
+// Typen und Standardkanal liegen in shared/answer_records.ts (auch für die Kunden-API)
+export { DEFAULT_CHANNEL };
+export type { ExportAnswer, ExportSession };
 
 /** Formatiert den Antwortwert. boolean/number bleiben unverändert (kein Formel-Schutz für negative Zahlen). */
 export function formatValue(value: unknown): string {
@@ -49,25 +40,19 @@ export function formatValue(value: unknown): string {
 
 /** Eine Session ergibt eine CSV-Zeile pro Antwort, aufsteigend nach answeredAt. Ohne Antworten: keine Zeilen. */
 export function sessionToCsvRows(session: ExportSession): string[] {
-  const answers = Object.entries(session.answers ?? {});
-  answers.sort(([keyA, a], [keyB, b]) => {
-    const byTime = (a.answeredAt ?? "").localeCompare(b.answeredAt ?? "");
-    return byTime !== 0 ? byTime : keyA.localeCompare(keyB);
-  });
-
-  return answers.map(([questionName, answer]) =>
+  return sessionToAnswerRecords(session).map((record) =>
     [
-      formatCsvText(session.responseId),
-      formatCsvText(session.surveyName),
-      session.surveyVersion === undefined || session.surveyVersion === null
+      formatCsvText(record.responseId),
+      formatCsvText(record.surveyName),
+      record.surveyVersion === undefined || record.surveyVersion === null
         ? ""
-        : String(session.surveyVersion),
-      formatCsvText(questionName),
-      formatCsvText(answer.type),
-      formatCsvText(answer.answeredAt),
-      formatValue(answer.value),
-      formatCsvText(session.status),
-      formatCsvText(session.channel || DEFAULT_CHANNEL),
+        : String(record.surveyVersion),
+      formatCsvText(record.questionId),
+      formatCsvText(record.questionType),
+      formatCsvText(record.answeredAt),
+      formatValue(record.value),
+      formatCsvText(record.status),
+      formatCsvText(record.channel),
     ].join(CSV_SEPARATOR),
   );
 }

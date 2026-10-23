@@ -113,7 +113,7 @@ function getClientIdFromClaims(claims: Record<string, any>): string {
   return "";
 }
 
-async function verifyCognitoJwt(token: string): Promise<{ claims?: Record<string, any>; error?: string }> {
+export async function verifyCognitoJwt(token: string): Promise<{ claims?: Record<string, any>; error?: string }> {
   const issuer = getIssuer();
   if (!issuer) return { error: "COGNITO_ISSUER or USER_POOL_ID/AWS_REGION not configured" };
 
@@ -174,7 +174,7 @@ async function loadTenantByBackendClientId(backendClientId: string) {
   return res.Item as Record<string, any> | undefined;
 }
 
-async function loadTenantByTenantId(tenantId: string) {
+export async function loadTenantByTenantId(tenantId: string) {
   let lastEvaluatedKey: Record<string, any> | undefined;
   do {
     const res = await ddb.send(new QueryCommand({
