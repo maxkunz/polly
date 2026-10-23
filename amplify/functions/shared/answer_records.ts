@@ -80,6 +80,6 @@ export function compareAnswerRecords(a: AnswerRecord, b: AnswerRecord): number {
 }
 
 // Ohne Collation (localeCompare): schneller bei vielen Datensätzen und unabhängig von der ICU-Version
-function compareCodeUnits(a: string, b: string): number {
+export function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }

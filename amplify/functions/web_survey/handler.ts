@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
-import type { WebTheme, WebThemeTokens } from "../../../src/domain/webTheme/webTheme";
+import type { WebThemeTokens } from "../../../src/domain/webTheme/webTheme";
 import { pruneFlowAnswers, validateFlowAnswers } from "../../../src/domain/survey/flowNavigation";
 import type { WebSurveySubmitStatus } from "../../../src/domain/survey/webSurveyTypes";
 import { loadFlowSurvey, type ProdSurveyResult } from "../shared/genesys_survey_check";
@@ -11,8 +11,8 @@ import { verifyInvitation, type InvitationClaims } from "../shared/invitation_to
 import { updateSurveyAggregate } from "../shared/survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "../shared/tenant_auth";
 import { buildStoredAnswers, surveyVersionOf, toWebSurvey } from "../shared/web_survey_format";
-import { pickTheme, toWebTheme } from "../shared/web_themes";
-import { queryWebThemeItems } from "../shared/web_themes_table";
+import { pickTheme } from "../shared/web_themes";
+import { loadTenantThemesCached } from "../shared/web_themes_table";
 import { normalizeToken, parseSubmitRequest, readRequestBody } from "./request";
 
 /**
@@ -37,7 +37,6 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 const INVITATION_TOKENS_TABLE_NAME = process.env.INVITATION_TOKENS_TABLE_NAME ?? "";
 const SURVEY_RESPONSES_TABLE_NAME = process.env.SURVEY_RESPONSES_TABLE_NAME ?? "";
 const SURVEY_AGGREGATES_TABLE_NAME = process.env.SURVEY_AGGREGATES_TABLE_NAME ?? "";
-const WEB_THEMES_TABLE_NAME = process.env.WEB_THEMES_TABLE_NAME ?? "";
 
 /** Aufbewahrung benutzter Einmal-Tokens (DynamoDB-TTL `ttl`). */
 const USED_TOKEN_RETENTION_SECONDS = 180 * 24 * 60 * 60;
@@ -72,36 +71,6 @@ async function loadCredentialsCached(tenantId: string): Promise<TenantCredential
     tenantCache.delete(tenantId);
   }
   return credentials;
-}
-
-/**
- * Cache der Designs pro Mandant (eine Query auf PK `tenantId`, höchstens 50 Designs, wenige KB).
- * Auch eine leere Liste wird gemerkt. Änderungen an einem Design wirken so nach höchstens 30 s.
- */
-const THEME_CACHE_TTL_MS = 30 * 1000;
-const THEME_CACHE_MAX_ENTRIES = 500;
-
-const themeCache = new Map<string, { expiresAt: number; themes: WebTheme[] }>();
-
-/**
- * Designs des Mandanten (gecacht). Fehler sind nicht fatal: Die Seite erscheint dann im eingebauten Design.
- * Läuft per `Promise.all` parallel zum Laden des Prod-Stands, weil nur `tenantId` gebraucht wird.
- */
-async function loadTenantThemesCached(tenantId: string, fresh = false): Promise<WebTheme[]> {
-  if (!WEB_THEMES_TABLE_NAME) return [];
-  const cached = themeCache.get(tenantId);
-  if (!fresh && cached && cached.expiresAt > Date.now()) return cached.themes;
-
-  try {
-    const items = await queryWebThemeItems(WEB_THEMES_TABLE_NAME, tenantId);
-    const themes = items.map(toWebTheme).filter((theme): theme is WebTheme => theme !== null);
-    if (themeCache.size >= THEME_CACHE_MAX_ENTRIES) themeCache.clear();
-    themeCache.set(tenantId, { themes, expiresAt: Date.now() + THEME_CACHE_TTL_MS });
-    return themes;
-  } catch (err) {
-    console.error("[web_survey] cannot load themes", { tenantId, error: String((err as Error)?.message ?? err) });
-    return [];
-  }
 }
 
 /** `{ preview: true }` nur bei Webvorschau-Links (Stage-Stand, nichts wird gespeichert). */

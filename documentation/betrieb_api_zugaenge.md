@@ -2,7 +2,7 @@
 
 Diese Anleitung beschreibt, wie das Betriebsteam Zugänge zur Kunden-API (`/ext/v1/…`) anlegt, übergibt, sperrt und erneuert. Was der Kunde mit dem Zugang machen kann, steht in der Kundenspezifikation [polly_customer_api.md](polly_customer_api.md).
 
-> **Stand:** Entwurf. Die Verwaltung der Zugänge und die Anmeldung stehen. Die APIs selbst (Reporting, Einladungen, Umfragedetails) kommen in den nächsten Schritten dazu, siehe [implementationsplan_external_api.md](implementationsplan_external_api.md).
+> **Stand:** Entwurf. Die Verwaltung der Zugänge und die Anmeldung stehen. Die APIs selbst (Reporting, Einladungen, Umfragedetails) stehen, der Ende-zu-Ende-Test folgt, siehe [implementationsplan_external_api.md](implementationsplan_external_api.md).
 
 Ein Zugang (API-Client) ist ein Cognito-Client mit Client Credentials im User Pool der Umgebung und ein Eintrag in der DynamoDB-Tabelle `ApiClientsTable`. Der Eintrag ordnet den Client einem Mandanten zu. Jeder Aufruf der Kunden-API prüft:
 

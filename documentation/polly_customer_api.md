@@ -5,8 +5,8 @@ Mit der Kunden-API rufen Sie Daten aus Polly maschinell ab, ohne Genesys-Login:
 | API | Zweck | Scope | Stand |
 |---|---|---|---|
 | Reporting | Antworten der Umfragen abrufen (dieselben Daten wie der CSV-Export der App) | `polly-api/reporting.read` | verfügbar |
-| Einladungen | Einladungslinks für Web-Umfragen erzeugen | `polly-api/invitations.write` | folgt |
-| Umfragedetails | Fragetexte, Optionen und Skalen der veröffentlichten Umfragen lesen | `polly-api/surveys.read` | folgt |
+| Einladungen | Einladungslinks für Web-Umfragen erzeugen | `polly-api/invitations.write` | verfügbar |
+| Umfragedetails | Fragetexte, Optionen und Skalen der veröffentlichten Umfragen lesen | `polly-api/surveys.read` | verfügbar |
 
 Alle Anfragen und Antworten sind JSON in UTF-8. Zeitangaben sind UTC.
 
@@ -245,7 +245,140 @@ Die Tokens werden bei Polly nicht gespeichert. Ein Link mit `is_multi: false` wi
 
 ## 7. API 3: Umfragedetails
 
-Folgt.
+Liefert Fragetexte, Optionen und Skalen der **veröffentlichten** Umfragen (Prod-Stand). Damit lassen sich die Antworten aus dem Reporting auswerten und die Umfragen z. B. in einem CMS darstellen.
+
+- **Scope:** `polly-api/surveys.read`
+- **`[API_URL]`:** `https://<app-domain>/api/ext/v1`
+
+### 7.1 `GET [API_URL]/surveys`
+
+Liste aller Umfragen, die einen Prod-Stand haben. Umfragen ohne Prod-Stand, gelöschte und solche, deren Löschung läuft, fehlen. Sortiert nach Titel, dann nach `surveyId`.
+
+```bash
+curl "[API_URL]/surveys" -H "Authorization: Bearer <access_token>"
+```
+
+**Antwort `200`:**
+
+```json
+{
+  "surveys": [
+    {
+      "surveyId": "123e4567-e89b-12d3-a456-426614174000",
+      "name": "kundenzufriedenheit_123e4567",
+      "title": "Kundenzufriedenheit",
+      "description": "Kurze Umfrage nach dem Kontakt",
+      "version": 3,
+      "updatedAt": "2026-10-01T09:30:00.000Z",
+      "language": "de"
+    }
+  ]
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `surveyId` | UUID der Umfrage, dieselbe wie `surveyId` im Reporting. |
+| `name` | Technischer Name der Umfrage (ändert sich nie). |
+| `title`, `description` | Titel und Beschreibung. |
+| `version` | Version des Prod-Stands. Ältere Stände ohne Versionsnummer haben `0`. |
+| `updatedAt` | Zeitpunkt der letzten Änderung (UTC) oder `null`. |
+| `language` | Sprache der Web-Umfrageseite: `de`, `en` oder `fr`. |
+
+### 7.2 `GET [API_URL]/surveys/{surveyId}`
+
+Eine Umfrage mit allen Fragen.
+
+```bash
+curl "[API_URL]/surveys/123e4567-e89b-12d3-a456-426614174000" -H "Authorization: Bearer <access_token>"
+```
+
+**Antwort `200`** (gekürzt):
+
+```json
+{
+  "surveyId": "123e4567-e89b-12d3-a456-426614174000",
+  "name": "kundenzufriedenheit_123e4567",
+  "title": "Kundenzufriedenheit",
+  "description": "Kurze Umfrage nach dem Kontakt",
+  "version": 3,
+  "updatedAt": "2026-10-01T09:30:00.000Z",
+  "language": "de",
+  "greeting": "Willkommen",
+  "closing": "Vielen Dank",
+  "startQuestionId": "0c1b7195-1c3a-4856-b2f1-89733e9404b0",
+  "baseUrl": null,
+  "webTheme": null,
+  "questions": [
+    {
+      "id": "0c1b7195-1c3a-4856-b2f1-89733e9404b0",
+      "questionId": "zufriedenheit_0c1b7195",
+      "type": "rating",
+      "text": "Wie zufrieden sind Sie?",
+      "description": "",
+      "reprompt": "Bitte nennen Sie eine Zahl von 1 bis 5.",
+      "mandatory": true,
+      "defaultNextQuestionId": null,
+      "scale": { "min": 1, "max": 5, "values": [1, 2, 3, 4, 5], "minLabel": "gar nicht", "maxLabel": "sehr" },
+      "conditions": [
+        { "operator": "less_than", "value": 3, "nextQuestionId": "85a238d2-78da-4ad5-9291-277394544779" }
+      ]
+    }
+  ]
+}
+```
+
+**Felder der Umfrage** (zusätzlich zu denen der Liste):
+
+| Feld | Beschreibung |
+|---|---|
+| `greeting`, `closing` | Begrüßung und Verabschiedung (am Telefon gesprochen). |
+| `startQuestionId` | `id` der ersten Frage, `null` nur, wenn der Prod-Stand keine Startfrage enthält. Umfragen ohne Fragen liefert die API nicht (nicht in der Liste, Details `404`). |
+| `baseUrl` | Basis-URL der Umfrageseite des Kunden, die in Polly gepflegt ist (Web-Kanal), sonst `null`. |
+| `webTheme` | Design der Web-Umfrageseite (Farben, Schrift) oder `null`, wenn kein Design gewählt oder hinterlegt ist. Die Struktur steht in `schemaVersion`; Sie müssen unbekannte Felder ignorieren. |
+| `questions` | Fragen in der Reihenfolge der Umfrage. |
+
+**Felder jeder Frage:**
+
+| Feld | Beschreibung |
+|---|---|
+| `id` | UUID der Frage. Folgefragen verweisen darauf. |
+| `questionId` | Technischer Name der Frage, **derselbe Schlüssel wie `questionId` im Reporting**. Darüber ordnen Sie Antworten den Fragen zu. |
+| `type` | `yes_no`, `choice`, `rating`, `nps` oder `comment`. |
+| `text` | Fragetext. |
+| `description` | Zusatztext, leer wenn keiner gepflegt ist. |
+| `reprompt` | Text für eine Nachfrage bei unverständlicher Antwort am Telefon, leer wenn keiner gepflegt ist. |
+| `mandatory` | `true`, wenn die Frage beantwortet werden muss. |
+| `defaultNextQuestionId` | Folgefrage, wenn keine der Bedingungen zutrifft, sonst `null` (Ende der Umfrage). |
+
+**Je nach Typ zusätzlich:**
+
+| Typ | Felder |
+|---|---|
+| `yes_no` | `yesNextQuestionId`, `noNextQuestionId` (jeweils `id` oder `null`) |
+| `choice` | `options`: Liste von `{ label, synonyms, nextQuestionId }`. `synonyms` ist eine Liste von Wörtern, die am Telefon wie das Label zählen (leer, wenn es keine gibt). |
+| `rating` | `scale`: `{ min, max, values, minLabel, maxLabel }` (`values` sind die wählbaren Zahlen, die Labels sind `null` ohne Pflege) und `conditions` |
+| `nps` | `scale`: `{ min: 0, max: 10, minLabel, maxLabel }` und `conditions` |
+| `comment` | keine |
+
+`conditions` ist die Liste der Verzweigungen bei `rating` und `nps`: `{ operator, value, nextQuestionId }` mit `operator` `equals`, `less_than` oder `greater_than`. Sie werden in dieser Reihenfolge geprüft; trifft keine zu, gilt `defaultNextQuestionId`. `nextQuestionId` kann `null` sein; dann geht es ebenfalls mit `defaultNextQuestionId` weiter. Für Architect intern ergänzte, unerfüllbare Platzhalter-Bedingungen liefert die API nicht.
+
+**Antwortcodes (beide Routen):**
+
+| HTTP | `error` | Bedeutung |
+|---|---|---|
+| `200` | | Erfolg. |
+| `400` | `invalid_request` | `surveyId` ist keine UUID. |
+| `401`, `403` | | siehe Abschnitt 3 |
+| `404` | `not_found` | Die Umfrage hat keinen Prod-Stand, existiert nicht oder wird gerade gelöscht. |
+| `429` | `genesys_error` | Genesys drosselt gerade (oder Drosselung durch das API Gateway ohne `error`, siehe Abschnitt 3). Später erneut versuchen. |
+| `500` | `internal_error` | siehe Abschnitt 3 |
+| `502` | `genesys_error` | Die Umfragen konnten nicht geladen werden (Genesys nicht erreichbar, Zugriff fehlt oder die Liste ließ sich nicht rechtzeitig lesen). |
+
+**Hinweise:**
+- **Nur der aktuelle Prod-Stand.** Es gibt keine Versionsgeschichte: Ältere Versionen sind nicht abrufbar. Antworten im Reporting tragen ihre `surveyVersion`; haben sich Fragen seit dieser Version geändert, passen Texte und Verzweigungen nicht mehr zu den alten Antworten (der technische Name `questionId` bleibt dabei gleich).
+- **Bis zu 1 Minute verzögert.** Ein neuer Prod-Stand erscheint in der API erst nach bis zu einer Minute, ein geändertes Design nach bis zu anderthalb Minuten. Das gilt auch für gerade gelöschte Umfragen.
+- Rufen Sie die Liste nicht bei jedem Seitenaufruf Ihres Systems ab, sondern halten Sie das Ergebnis selbst kurz vor.
 
 ---
 

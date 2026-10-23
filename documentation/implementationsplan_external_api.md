@@ -42,12 +42,12 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [x] Doku: Abschnitt API 2 in `polly_customer_api.md`; `WEB_SURVEY_ORIGIN` in `branch_umgebung_einrichten.md` und `betrieb_api_zugaenge.md`; Verweis in `polly_web.md`.
   - Testbar nach dem Deploy: Links erzeugen, `fullLink` im Browser öffnen, `base_url`- und Fallback-Fall prüfen, Einmal-Link nur einmal nutzbar.
 
-- [ ] **M5 API 3: Umfragedetails `GET /ext/v1/surveys` und `/ext/v1/surveys/{surveyId}`** (siehe „API 3“)
-  - [ ] `listProdSurveys` in `genesys_survey_check.ts`; Laden der Designs nach `shared/web_themes.ts`, falls es noch im `web_survey`-Handler steht.
-  - [ ] `amplify/functions/surveys_api/`: `resource.ts`, `v1.ts`, `handler.ts` und Cache für 60 s.
-  - [ ] `backend.ts`: Lambda, Rechte, Routen und Drosselung.
-  - [ ] Tests: v1-Abbildung für alle fünf Fragetypen, Filter der Platzhalter-Bedingungen, Synonyme, Liste.
-  - [ ] Doku: Abschnitt API 3 in `polly_customer_api.md`, Grenze „keine Versionsgeschichte“.
+- [x] **M5 API 3: Umfragedetails `GET /ext/v1/surveys` und `/ext/v1/surveys/{surveyId}`** (siehe „API 3“) (erledigt 2026-10-23)
+  - [x] `listProdSurveys` in `genesys_survey_check.ts`; Laden der Designs nach `shared/web_themes.ts`, falls es noch im `web_survey`-Handler steht.
+  - [x] `amplify/functions/surveys_api/`: `resource.ts`, `v1.ts`, `handler.ts` und Cache für 60 s.
+  - [x] `backend.ts`: Lambda, Rechte, Routen und Drosselung.
+  - [x] Tests: v1-Abbildung für alle fünf Fragetypen, Filter der Platzhalter-Bedingungen, Synonyme, Liste.
+  - [x] Doku: Abschnitt API 3 in `polly_customer_api.md`, Grenze „keine Versionsgeschichte“.
   - Testbar nach dem Deploy: Liste enthält nur Umfragen mit Prod. `questionId` aus den Details passt zum Reporting. 404 ohne Prod.
 
 - [ ] **M6 Ende-zu-Ende-Test und Abschluss**
@@ -97,7 +97,13 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Nicht per Test geprüft: der Ablauf mit Genesys/DynamoDB (`loadProdSurvey`, Rechte), das braucht den Deploy.
 
 ### M5
-- noch keine
+- Das Laden der Designs (`loadTenantThemesCached`) liegt nicht in `shared/web_themes.ts`, sondern in `shared/web_themes_table.ts`: Dort stehen schon die DynamoDB-Zugriffe, `web_themes.ts` bleibt ohne AWS-SDK testbar. Die Tabelle kommt aus `WEB_THEMES_TABLE_NAME`; `web_survey` nutzt dieselbe Funktion (Cache 30 s, Verhalten unverändert).
+- `listProdSurveys` liest 25 Zeilen pro Seite (höchstens 80 Seiten, bei mehr Zeilen oder fehlendem `pageCount` Fehler statt stillem Abschneiden). Vor jeder Seite prüft es das Zeitbudget der Lambda (`canContinue`, Reserve 8 s), sonst 502 statt Abbruch durch das API Gateway. Genesys blättert über den Offset, doppelte Zeilen werden deshalb nach ID entfernt (sonst scheitert der BatchGet). Die Prüfung auf laufende Löschungen läuft als BatchGet über neu `findSurveysBeingDeleted` in `survey_results.ts` (unverarbeitete Schlüssel mit exponentiellem Backoff); `isSurveyBeingDeleted` nutzt dieselbe Statusregel.
+- Der Cache hält die fertigen Antworten (200 und 404) pro Mandant 60 s; Fehler (429, 502) werden nicht gemerkt. Die Designs haben zusätzlich den 30-s-Cache aus `web_survey`, ein Design wirkt in der Kunden-API deshalb nach höchstens ca. 90 s.
+- Fehlercode für Umfragen ohne Prod-Stand: `not_found` (404), für ungültige `surveyId` im Pfad `invalid_request` (400), bei Genesys-Fehlern `genesys_error` (429/502) wie bei den Einladungen. Die `surveyId` im Pfad wird kleingeschrieben.
+- Die Platzhalter-Bedingung wird nur gefiltert, wenn Wert **und** fehlende Folgefrage zum Operator passen (`equals` -1, `less_than` -1000, `greater_than` 1000, gemeinsame Konstante `CONDITION_PLACEHOLDER_VALUES` in `flowTypes.ts`, auch vom Translator genutzt). Fehlende Labels der Skalen sind `null`, fehlende `baseUrl`/`webTheme` ebenfalls.
+- Die Liste ist nach Titel und ID sortiert (Code Units), damit die Reihenfolge stabil bleibt.
+- Der Test der Liste ersetzt `fetch` und prüft `listProdSurveys` mit Seiten, Sonderzeilen, ungültigen Zellen und Fehlern. Nicht per Test geprüft: der Handler-Ablauf mit Cognito/DynamoDB/Genesys (braucht den Deploy).
 
 ### M6
 - noch keine

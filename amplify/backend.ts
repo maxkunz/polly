@@ -18,6 +18,7 @@ import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
 import { reportingApi } from "./functions/reporting_api/resource";
+import { surveysApi } from "./functions/surveys_api/resource";
 import { surveyResponsesDelete } from "./functions/survey_responses_delete/resource";
 import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 import { invitations } from "./functions/invitations/resource";
@@ -82,6 +83,7 @@ const backend = defineBackend({
   webSurvey,
   webThemes,
   reportingApi,
+  surveysApi,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -630,11 +632,40 @@ const reportingApiRoutes = httpApi.addRoutes({
   integration: reportingApiInteg,
 });
 
+// Umfragedetails: liest den Prod-Stand über die Genesys-Credentials des Mandanten (attachTenantAuth), dazu Designs
+// und laufende Löschungen
+const surveysApiLambda = backend.surveysApi.resources.lambda as lambda.Function;
+
+apiClientsTable.grantReadData(surveysApiLambda);
+surveysApiLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+surveyDeletionJobsTable.grantReadData(surveysApiLambda);
+surveysApiLambda.addEnvironment("SURVEY_DELETION_JOBS_TABLE_NAME", surveyDeletionJobsTable.tableName);
+webSurveyThemesTable.grantReadData(surveysApiLambda);
+surveysApiLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
+attachTenantAuth(surveysApiLambda);
+
+const surveysApiInteg = new integrations.HttpLambdaIntegration("SurveysApiInteg", surveysApiLambda);
+
+const surveysApiRoutes = [
+  ...httpApi.addRoutes({
+    path: "/ext/v1/surveys",
+    methods: [apigw.HttpMethod.GET],
+    integration: surveysApiInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/surveys/{surveyId}",
+    methods: [apigw.HttpMethod.GET],
+    integration: surveysApiInteg,
+  }),
+];
+
 // Drosselung der Kunden-API pro Route, für alle Mandanten und Clients zusammen (keine Grenze pro Client).
 // Ein Client in einer Schleife kann damit andere ausbremsen; dokumentiert in polly_customer_api.md, Abschnitt 3.
 const REPORTING_API_THROTTLE = { rateLimit: 20, burstLimit: 40 };
 // Jeder Aufruf signiert bis zu 5000 Einladungen und ruft Genesys auf
 const EXT_INVITATIONS_THROTTLE = { rateLimit: 5, burstLimit: 10 };
+// Jeder Aufruf der Liste liest die Zeilen der Data Table bei Genesys (Antworten werden 60 s gecacht)
+const EXT_SURVEYS_THROTTLE = { rateLimit: 10, burstLimit: 20 };
 
 // Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
 const defaultStage = httpApi.defaultStage;
@@ -657,9 +688,17 @@ if (defaultStage) {
       ThrottlingRateLimit: EXT_INVITATIONS_THROTTLE.rateLimit,
       ThrottlingBurstLimit: EXT_INVITATIONS_THROTTLE.burstLimit,
     },
+    "GET /ext/v1/surveys": {
+      ThrottlingRateLimit: EXT_SURVEYS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_SURVEYS_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/surveys/{surveyId}": {
+      ThrottlingRateLimit: EXT_SURVEYS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_SURVEYS_THROTTLE.burstLimit,
+    },
   };
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
-  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes);
+  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes, ...surveysApiRoutes);
 }
 
 // Pflege der Web-Designs (lesen: jeder App-Nutzer, schreiben: Genesys-User mit polly_deploy)

@@ -17,6 +17,16 @@ export type ConditionOperator = "equals" | "less_than" | "greater_than";
  */
 export const CONDITION_OPERATOR_ORDER: readonly ConditionOperator[] = ["equals", "less_than", "greater_than"];
 
+/**
+ * Unerfüllbare Werte, mit denen der Translator fehlende Bedingungen bei rating/nps auffüllt
+ * (immer mit `next_question_id: null`). Die Kunden-API filtert sie anhand derselben Werte heraus.
+ */
+export const CONDITION_PLACEHOLDER_VALUES: Readonly<Record<ConditionOperator, number>> = {
+	equals: -1,
+	less_than: -1000,
+	greater_than: 1000
+};
+
 /** Feste Skala des Fragetyps nps. */
 export const NPS_SCALE_MIN = 0;
 export const NPS_SCALE_MAX = 10;

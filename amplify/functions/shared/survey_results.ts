@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { BatchGetCommand, DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 /**
  * Gemeinsame Schreib-/Prüflogik für Umfrage-Ergebnisse, genutzt von `survey_responses` (Architect Flow)
@@ -43,8 +43,47 @@ export async function isSurveyBeingDeleted(tenantId: string, surveyId: string): 
       Key: { tenantId, surveyId },
     })
   );
-  const status = result.Item?.status;
+  return isDeletionBlocking(result.Item?.status);
+}
+
+function isDeletionBlocking(status: unknown): boolean {
   return status === "queued" || status === "running" || status === "done";
+}
+
+/** DynamoDB erlaubt höchstens 100 Schlüssel pro BatchGet. */
+const DELETION_BATCH_SIZE = 100;
+const DELETION_BATCH_MAX_ROUNDS = 5;
+/** Wartezeit vor der ersten Wiederholung unverarbeiteter Schlüssel, danach verdoppelt (50, 100, 200, 400 ms). */
+const DELETION_BATCH_RETRY_BASE_MS = 50;
+
+/**
+ * Wie `isSurveyBeingDeleted` für viele Umfragen auf einmal (BatchGet). Liefert die IDs, deren Löschung läuft
+ * oder abgeschlossen ist. Wirft, wenn nach mehreren Runden noch unverarbeitete Schlüssel übrig sind.
+ */
+export async function findSurveysBeingDeleted(tenantId: string, surveyIds: readonly string[]): Promise<Set<string>> {
+  const deleted = new Set<string>();
+  if (!SURVEY_DELETION_JOBS_TABLE_NAME || surveyIds.length === 0) return deleted;
+
+  for (let i = 0; i < surveyIds.length; i += DELETION_BATCH_SIZE) {
+    let keys: Record<string, string>[] | undefined = surveyIds
+      .slice(i, i + DELETION_BATCH_SIZE)
+      .map((surveyId) => ({ tenantId, surveyId }));
+    for (let round = 0; keys && keys.length > 0; round++) {
+      if (round >= DELETION_BATCH_MAX_ROUNDS) throw new Error("Deletion jobs batch read left unprocessed keys");
+      // UnprocessedKeys kommen bei Drosselung: wie von AWS empfohlen mit exponentiellem Backoff wiederholen
+      if (round > 0) await new Promise((resolve) => setTimeout(resolve, DELETION_BATCH_RETRY_BASE_MS * 2 ** (round - 1)));
+      const result: any = await ddb.send(
+        new BatchGetCommand({
+          RequestItems: { [SURVEY_DELETION_JOBS_TABLE_NAME]: { Keys: keys, ProjectionExpression: "surveyId, #s", ExpressionAttributeNames: { "#s": "status" } } },
+        })
+      );
+      for (const item of result.Responses?.[SURVEY_DELETION_JOBS_TABLE_NAME] ?? []) {
+        if (isDeletionBlocking(item.status)) deleted.add(String(item.surveyId));
+      }
+      keys = result.UnprocessedKeys?.[SURVEY_DELETION_JOBS_TABLE_NAME]?.Keys;
+    }
+  }
+  return deleted;
 }
 
 /**

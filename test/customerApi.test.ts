@@ -18,6 +18,18 @@ import { buildV1DataResponse, MAX_LIMIT, parseV1DataParams, toV1Record } from ".
 import { handler as reportingHandler } from "../amplify/functions/reporting_api/handler";
 import { buildV1Response, parseV1InvitationRequest, toV1InviteUrl } from "../amplify/functions/invitations/ext_v1";
 import { handler as invitationsHandler } from "../amplify/functions/invitations/handler";
+import { listProdSurveys } from "../amplify/functions/shared/genesys_survey_check";
+import { handler as surveysHandler } from "../amplify/functions/surveys_api/handler";
+import {
+	buildV1ListResponse,
+	isPlaceholderCondition,
+	splitSynonyms,
+	toV1Question,
+	toV1SurveyDetail,
+	toV1SurveySummary
+} from "../amplify/functions/surveys_api/v1";
+import { defaultWebThemeTokens } from "../src/domain/webTheme/webTheme";
+import type { FlowSurvey } from "../src/domain/survey/flowTypes";
 import { createInvitationKey, signInvitation } from "../amplify/functions/shared/invitation_token";
 import { BASE_URL_MAX_CHARS, buildInvitationUrl, INVITATION_COUNT_MAX } from "../src/domain/survey/invitationLinks";
 
@@ -537,6 +549,272 @@ test("Einladungs-Handler: App-Routen bleiben unverändert (ohne Token 401 unauth
 	});
 	assert.equal(result.statusCode, 401);
 	assert.equal(JSON.parse(result.body).code, "unauthorized");
+});
+
+// ---------------------------------------------------------------------------
+// Umfragedetails (M5)
+// ---------------------------------------------------------------------------
+
+// Fixture nach survey_translator_for_flow.md: alle fünf Fragetypen, Platzhalter-Bedingung bei nps
+const DETAIL_SURVEY_ID = "90f142be-4066-43cd-abef-31a426421b77";
+
+function flowSurveyFixture(): FlowSurvey {
+	const base = { description: "", reprompt: "", mandatory: false, default_next_question_id: "q-comment" };
+	return {
+		id: DETAIL_SURVEY_ID,
+		name: "kundenzufriedenheit_90f142be",
+		title: "Kundenzufriedenheit",
+		description: "Kurze Umfrage",
+		greeting_prompt: "Hallo",
+		closing_prompt: "Danke",
+		language: "en",
+		created_at: "2026-01-01T00:00:00.000Z",
+		updated_at: "2026-02-03T10:00:00.000Z",
+		start_question_id: "q-yesno",
+		version: 3,
+		type: "Flow",
+		questions: [
+			{
+				...base,
+				id: "q-yesno",
+				name: "geklaert_q-yesno",
+				type: "yes_no",
+				prompt: "Geklärt?",
+				reprompt: "Bitte ja oder nein",
+				mandatory: true,
+				options: { yes_next_question_id: null, no_next_question_id: "q-comment" }
+			},
+			{
+				...base,
+				id: "q-choice",
+				name: "kanal_q-choice",
+				type: "choice",
+				prompt: "Kanal?",
+				labels: ["Telefon", "Mail", "Chat"],
+				synonyms: ["Anruf; Hotline", "", "Messenger;  "],
+				next_question_ids: ["q-rating", null, "q-nps"]
+			},
+			{
+				...base,
+				id: "q-rating",
+				name: "zufriedenheit_q-rating",
+				type: "rating",
+				prompt: "Zufriedenheit?",
+				options: { values: [1, 2, 3, 4, 5], min_value: 1, max_value: 5, min_label: "schlecht" },
+				conditional_next_question: [
+					{ operator: "equals", value: -1, next_question_id: null },
+					{ operator: "less_than", value: 3, next_question_id: "q-comment" },
+					{ operator: "greater_than", value: 1000, next_question_id: null }
+				]
+			},
+			{
+				...base,
+				id: "q-nps",
+				name: "empfehlung_q-nps",
+				type: "nps",
+				prompt: "Weiterempfehlen?",
+				options: { max_label: "sehr wahrscheinlich" },
+				conditional_next_question: [
+					{ operator: "equals", value: -1, next_question_id: null },
+					{ operator: "less_than", value: 7, next_question_id: "q-comment" },
+					{ operator: "greater_than", value: 8, next_question_id: "q-comment" }
+				]
+			},
+			{ ...base, id: "q-comment", name: "", type: "comment", prompt: "Anmerkung?", default_next_question_id: null }
+		]
+	};
+}
+
+test("v1-Umfrage: feste Feldlisten für Umfrage und Fragen", () => {
+	const detail = toV1SurveyDetail(flowSurveyFixture(), undefined, undefined);
+	assert.deepEqual(Object.keys(detail), [
+		"surveyId", "name", "title", "description", "version", "updatedAt", "language",
+		"greeting", "closing", "startQuestionId", "baseUrl", "webTheme", "questions"
+	]);
+	const keys = (index: number) => Object.keys(detail.questions[index]);
+	const common = ["id", "questionId", "type", "text", "description", "reprompt", "mandatory", "defaultNextQuestionId"];
+	assert.deepEqual(keys(0), [...common, "yesNextQuestionId", "noNextQuestionId"]);
+	assert.deepEqual(keys(1), [...common, "options"]);
+	assert.deepEqual(keys(2), [...common, "scale", "conditions"]);
+	assert.deepEqual(keys(3), [...common, "scale", "conditions"]);
+	assert.deepEqual(keys(4), common);
+});
+
+test("v1-Umfrage: Kopffelder, Standardwerte und questionId", () => {
+	const detail = toV1SurveyDetail(flowSurveyFixture(), "https://kunde.example.com/s", undefined);
+	assert.equal(detail.surveyId, DETAIL_SURVEY_ID);
+	assert.equal(detail.version, 3);
+	assert.equal(detail.updatedAt, "2026-02-03T10:00:00.000Z");
+	assert.equal(detail.language, "en");
+	assert.equal(detail.greeting, "Hallo");
+	assert.equal(detail.startQuestionId, "q-yesno");
+	assert.equal(detail.baseUrl, "https://kunde.example.com/s");
+	assert.equal(detail.webTheme, null);
+	// questionId = technischer Name (Reporting-Schlüssel), ohne Namen die ID
+	assert.deepEqual(detail.questions.map((q) => q.questionId), [
+		"geklaert_q-yesno", "kanal_q-choice", "zufriedenheit_q-rating", "empfehlung_q-nps", "q-comment"
+	]);
+	assert.equal(detail.questions[0].id, "q-yesno");
+
+	const old = { ...flowSurveyFixture(), language: undefined, version: undefined, updated_at: undefined } as FlowSurvey;
+	const summary = toV1SurveySummary(old);
+	assert.equal(summary.language, "de");
+	assert.equal(summary.version, 0);
+	assert.equal(summary.updatedAt, null);
+});
+
+test("v1-Umfrage: yes_no, choice mit Synonymen als Array", () => {
+	const [yesNo, choice] = flowSurveyFixture().questions.map(toV1Question) as any[];
+	assert.equal(yesNo.mandatory, true);
+	assert.equal(yesNo.yesNextQuestionId, null);
+	assert.equal(yesNo.noNextQuestionId, "q-comment");
+	assert.deepEqual(choice.options, [
+		{ label: "Telefon", synonyms: ["Anruf", "Hotline"], nextQuestionId: "q-rating" },
+		{ label: "Mail", synonyms: [], nextQuestionId: null },
+		{ label: "Chat", synonyms: ["Messenger"], nextQuestionId: "q-nps" }
+	]);
+	assert.deepEqual(splitSynonyms(undefined), []);
+	assert.deepEqual(splitSynonyms("a; b ;;c"), ["a", "b", "c"]);
+});
+
+test("v1-Umfrage: rating und nps mit Skala, ohne Platzhalter-Bedingungen", () => {
+	const questions = flowSurveyFixture().questions.map(toV1Question) as any[];
+	assert.deepEqual(questions[2].scale, { min: 1, max: 5, values: [1, 2, 3, 4, 5], minLabel: "schlecht", maxLabel: null });
+	assert.deepEqual(questions[2].conditions, [{ operator: "less_than", value: 3, nextQuestionId: "q-comment" }]);
+	assert.deepEqual(questions[3].scale, { min: 0, max: 10, minLabel: null, maxLabel: "sehr wahrscheinlich" });
+	assert.deepEqual(questions[3].conditions, [
+		{ operator: "less_than", value: 7, nextQuestionId: "q-comment" },
+		{ operator: "greater_than", value: 8, nextQuestionId: "q-comment" }
+	]);
+});
+
+test("Platzhalter-Bedingungen: nur unerfüllbare Werte ohne Folgefrage", () => {
+	assert.equal(isPlaceholderCondition({ operator: "equals", value: -1, next_question_id: null }), true);
+	assert.equal(isPlaceholderCondition({ operator: "less_than", value: -1000, next_question_id: null }), true);
+	assert.equal(isPlaceholderCondition({ operator: "greater_than", value: 1000, next_question_id: null }), true);
+	// echte Bedingung mit passendem Wert aber Folgefrage bleibt, ebenso falscher Wert zum Operator
+	assert.equal(isPlaceholderCondition({ operator: "equals", value: -1, next_question_id: "x" }), false);
+	assert.equal(isPlaceholderCondition({ operator: "equals", value: 1000, next_question_id: null }), false);
+});
+
+test("v1-Umfrage: webTheme aus den Tokens, ein internes Zusatzfeld erscheint nicht", () => {
+	const tokens = defaultWebThemeTokens();
+	const survey = { ...flowSurveyFixture(), web_theme_id: "11111111-1111-1111-1111-111111111111" };
+	const detail = toV1SurveyDetail(survey, undefined, tokens) as any;
+	assert.deepEqual(detail.webTheme, tokens);
+	assert.equal(detail.web_theme_id, undefined);
+	assert.equal(detail.created_at, undefined);
+	assert.equal(detail.type, undefined);
+	assert.equal((detail.questions[0] as any).name, undefined);
+});
+
+test("v1-Liste: feste Felder, nach Titel und ID sortiert", () => {
+	const other = { ...flowSurveyFixture(), id: "00000000-0000-4000-8000-000000000001", title: "Anrufe" };
+	const response = buildV1ListResponse([flowSurveyFixture(), other]);
+	assert.deepEqual(response.surveys.map((s) => s.title), ["Anrufe", "Kundenzufriedenheit"]);
+	assert.deepEqual(Object.keys(response.surveys[0]), [
+		"surveyId", "name", "title", "description", "version", "updatedAt", "language"
+	]);
+	assert.deepEqual(buildV1ListResponse([]), { surveys: [] });
+});
+
+const CREDENTIALS = {
+	region: "mypurecloud.de",
+	clientId: "client",
+	clientSecret: "secret",
+	allowedDataTableIds: ["table-1"],
+	surveyDataTableId: "table-1"
+};
+
+/** Ersetzt fetch für den Token-Abruf und die Zeilenseiten; liefert die abgerufenen Seitennummern zurück. */
+async function withRowPages<T>(pages: any[], run: () => Promise<T>, status = 200): Promise<{ result: T; requested: string[] }> {
+	const original = globalThis.fetch;
+	const requested: string[] = [];
+	globalThis.fetch = (async (input: any) => {
+		const url = String(input);
+		if (url.includes("/oauth/token")) {
+			return new Response(JSON.stringify({ access_token: "token", expires_in: 300 }), { status: 200 });
+		}
+		requested.push(url);
+		const page = Number(new URL(url).searchParams.get("pageNumber"));
+		return new Response(JSON.stringify(pages[page - 1] ?? {}), { status });
+	}) as typeof fetch;
+	try {
+		return { result: await run(), requested };
+	} finally {
+		globalThis.fetch = original;
+	}
+}
+
+test("listProdSurveys: Sonderzeilen und ungültige Prod-Zellen werden übersprungen, alle Seiten gelesen", async () => {
+	const second = { ...flowSurveyFixture(), id: "00000000-0000-4000-8000-000000000002" };
+	const rows = (list: any[]) => ({ entities: list, pageCount: 2 });
+	const pages = [
+		rows([
+			{ key: "__meta", Draft: "{}" },
+			{ key: "__lock", Draft: "{}" },
+			{ key: "survey_list", Draft: "[]" },
+			{ key: `survey_${DETAIL_SURVEY_ID}`, Prod: JSON.stringify(flowSurveyFixture()) },
+			{ key: "survey_00000000-0000-4000-8000-0000000000aa", Prod: "{}" },
+			{ key: "survey_00000000-0000-4000-8000-0000000000bb", Prod: "kein json" }
+		]),
+		rows([
+			{ key: `survey_${second.id}`, Prod: JSON.stringify(second) },
+			// Prod gehört zu einer anderen ID
+			{ key: "survey_00000000-0000-4000-8000-0000000000cc", Prod: JSON.stringify(second) },
+			{ key: "survey_keine-uuid", Prod: JSON.stringify(second) }
+		])
+	];
+	const { result, requested } = await withRowPages(pages, () => listProdSurveys("tenant", CREDENTIALS));
+	assert.equal(result.status, "ok");
+	assert.deepEqual(result.status === "ok" ? result.surveys.map((s) => s.id) : [], [DETAIL_SURVEY_ID, second.id]);
+	assert.equal(requested.length, 2);
+	assert.ok(requested[0].includes("showbrief=false") && requested[0].includes("pageNumber=1"));
+});
+
+test("listProdSurveys: Fehler von Genesys, 429 als throttled", async () => {
+	const failed = await withRowPages([{}], () => listProdSurveys("tenant", CREDENTIALS), 500);
+	assert.deepEqual(failed.result, { status: "error", reason: "Survey rows HTTP 500" });
+	const throttled = await withRowPages([{}], () => listProdSurveys("tenant", CREDENTIALS), 429);
+	assert.deepEqual(throttled.result, { status: "error", reason: "Survey rows HTTP 429", throttled: true });
+});
+
+test("listProdSurveys: doppelte Zeile durch Blättern über den Offset erscheint nur einmal", async () => {
+	const row = { key: `survey_${DETAIL_SURVEY_ID}`, Prod: JSON.stringify(flowSurveyFixture()) };
+	const pages = [{ entities: [row], pageCount: 2 }, { entities: [row], pageCount: 2 }];
+	const { result } = await withRowPages(pages, () => listProdSurveys("tenant", CREDENTIALS));
+	assert.deepEqual(result.status === "ok" ? result.surveys.map((s) => s.id) : result, [DETAIL_SURVEY_ID]);
+});
+
+test("listProdSurveys: ohne pageCount Fehler statt gekürzter Liste", async () => {
+	const pages = [{ entities: [{ key: `survey_${DETAIL_SURVEY_ID}`, Prod: JSON.stringify(flowSurveyFixture()) }] }];
+	const { result } = await withRowPages(pages, () => listProdSurveys("tenant", CREDENTIALS));
+	assert.deepEqual(result, { status: "error", reason: "Survey rows response without pageCount" });
+});
+
+test("listProdSurveys: bricht ab, wenn das Zeitbudget erschöpft ist", async () => {
+	const pages = [{ entities: [], pageCount: 3 }, { entities: [], pageCount: 3 }, { entities: [], pageCount: 3 }];
+	let calls = 0;
+	const canContinue = () => ++calls < 2;
+	const { result, requested } = await withRowPages(pages, () => listProdSurveys("tenant", CREDENTIALS, { canContinue }));
+	assert.deepEqual(result, { status: "error", reason: "Time budget exhausted" });
+	assert.equal(requested.length, 1);
+});
+
+test("Umfragedetails-Handler: unbekannte Routen ergeben 404 im Fehlerformat", async () => {
+	for (const routeKey of ["GET /ext/v2/surveys", "POST /ext/v1/surveys", "GET /ext/v1/surveys/{surveyId}/x", undefined]) {
+		const result = await surveysHandler({ routeKey });
+		assert.equal(result.statusCode, 404);
+		assert.equal(JSON.parse(result.body).error, "not_found");
+	}
+});
+
+test("Umfragedetails-Handler: ohne Token ergibt 401", async () => {
+	for (const routeKey of ["GET /ext/v1/surveys", "GET /ext/v1/surveys/{surveyId}"]) {
+		const result = await surveysHandler({ routeKey, headers: {}, pathParameters: { surveyId: DETAIL_SURVEY_ID } });
+		assert.equal(result.statusCode, 401);
+		assert.equal(JSON.parse(result.body).error, "invalid_token");
+	}
 });
 
 async function main(): Promise<void> {
