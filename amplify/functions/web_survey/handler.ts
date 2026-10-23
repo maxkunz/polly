@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
 import type { WebThemeTokens } from "../../../src/domain/webTheme/webTheme";
 import { pruneFlowAnswers, validateFlowAnswers } from "../../../src/domain/survey/flowNavigation";
 import type { WebSurveySubmitStatus } from "../../../src/domain/survey/webSurveyTypes";
@@ -10,6 +9,7 @@ import { loadInvitationKeys } from "../shared/invitation_keys";
 import { verifyInvitation, type InvitationClaims } from "../shared/invitation_token";
 import { updateSurveyAggregate } from "../shared/survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "../shared/tenant_auth";
+import { TtlCache } from "../shared/ttl_cache";
 import { buildStoredAnswers, surveyVersionOf, toWebSurvey } from "../shared/web_survey_format";
 import { pickTheme } from "../shared/web_themes";
 import { loadTenantThemesCached } from "../shared/web_themes_table";
@@ -45,32 +45,19 @@ const USED_TOKEN_RETENTION_SECONDS = 180 * 24 * 60 * 60;
  * würden sonst bei jedem Seitenaufruf die Genesys-API des Mandanten belasten (Rate-Limit). Das Absenden
  * liest immer frisch und aktualisiert den Cache.
  */
-const PROD_CACHE_TTL_MS = 30 * 1000;
-const PROD_CACHE_MAX_ENTRIES = 500;
-
-const prodCache = new Map<string, { expiresAt: number; survey: FlowSurvey }>();
+const prodCache = new TtlCache<ProdSurveyResult>({ ttlMs: 30 * 1000 });
 
 /**
  * Cache der Mandanten-Credentials (Query auf die Tenants-Tabelle), damit nicht jeder Seitenaufruf DynamoDB abfragt.
  * Nur Treffer werden gemerkt; ein entzogener Mandant wird spätestens nach Ablauf abgelehnt.
  */
-const TENANT_CACHE_TTL_MS = 60 * 1000;
-const TENANT_CACHE_MAX_ENTRIES = 500;
-
-const tenantCache = new Map<string, { expiresAt: number; credentials: TenantCredentials }>();
+const tenantCache = new TtlCache<TenantCredentials | undefined>({ ttlMs: 60 * 1000 });
 
 async function loadCredentialsCached(tenantId: string): Promise<TenantCredentials | undefined> {
-  const cached = tenantCache.get(tenantId);
-  if (cached && cached.expiresAt > Date.now()) return cached.credentials;
-
-  const credentials = await loadTenantCredentials(tenantId);
-  if (credentials) {
-    if (tenantCache.size >= TENANT_CACHE_MAX_ENTRIES) tenantCache.clear();
-    tenantCache.set(tenantId, { credentials, expiresAt: Date.now() + TENANT_CACHE_TTL_MS });
-  } else {
-    tenantCache.delete(tenantId);
-  }
-  return credentials;
+  return tenantCache.getOrLoad(tenantId, async () => {
+    const credentials = await loadTenantCredentials(tenantId);
+    return { value: credentials, ttlMs: credentials ? undefined : 0 };
+  });
 }
 
 /** `{ preview: true }` nur bei Webvorschau-Links (Stage-Stand, nichts wird gespeichert). */
@@ -159,17 +146,15 @@ function invitationErrorResponse(
 async function loadProd(claims: InvitationClaims, credentials: TenantCredentials, fresh: boolean): Promise<ProdSurveyResult> {
   const column = claims.stage ? "Stage" : "Prod";
   const cacheKey = `${claims.tenant_id}#${claims.survey_id}#${column}`;
-  const cached = prodCache.get(cacheKey);
-  if (!fresh && cached && cached.expiresAt > Date.now()) return { status: "ok", survey: cached.survey };
-
-  const result = await loadFlowSurvey(claims.tenant_id, claims.survey_id, credentials, column);
-  if (result.status === "ok") {
-    if (prodCache.size >= PROD_CACHE_MAX_ENTRIES) prodCache.clear();
-    prodCache.set(cacheKey, { survey: result.survey, expiresAt: Date.now() + PROD_CACHE_TTL_MS });
-  } else if (result.status === "unavailable") {
-    prodCache.delete(cacheKey);
-  }
-  return result;
+  return prodCache.getOrLoad(
+    cacheKey,
+    async () => {
+      // Nur gelesene Stände merken; sonst wird ein alter Eintrag verworfen
+      const result = await loadFlowSurvey(claims.tenant_id, claims.survey_id, credentials, column);
+      return { value: result, ttlMs: result.status === "ok" ? undefined : 0 };
+    },
+    fresh
+  );
 }
 
 function prodErrorResponse(

@@ -4,6 +4,7 @@ import { fetchWithTimeout } from "./http";
 import { isValidSurveyId } from "./survey_id";
 import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "./survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "./tenant_auth";
+import { TtlCache, type CacheLoad } from "./ttl_cache";
 import { parseProdSurvey } from "./web_survey_format";
 
 /**
@@ -28,7 +29,8 @@ export type SurveyAbsenceResult =
   | { status: "exists"; reason: string }
   | { status: "error"; reason: string };
 
-const clientTokenCache = new Map<string, { token: string; expiresAt: number }>();
+/** Lebensdauer pro Token aus `expires_in` (Standard 300 s) abzüglich `TOKEN_REFRESH_MARGIN_MS`. */
+const clientTokenCache = new TtlCache<string>({ ttlMs: 300 * 1000 - TOKEN_REFRESH_MARGIN_MS });
 
 export { isValidSurveyId };
 
@@ -37,10 +39,10 @@ export async function getClientCredentialsToken(
   clientId: string,
   clientSecret: string
 ): Promise<string> {
-  const cacheKey = `${region}:${clientId}`;
-  const cached = clientTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt - TOKEN_REFRESH_MARGIN_MS > Date.now()) return cached.token;
+  return clientTokenCache.getOrLoad(`${region}:${clientId}`, () => requestClientCredentialsToken(region, clientId, clientSecret));
+}
 
+async function requestClientCredentialsToken(region: string, clientId: string, clientSecret: string): Promise<CacheLoad<string>> {
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const res = await fetchWithTimeout(`https://login.${region}/oauth/token`, {
     method: "POST",
@@ -57,11 +59,7 @@ export async function getClientCredentialsToken(
   const data: any = await res.json();
   if (!data?.access_token) throw new Error("Genesys token response without access_token");
 
-  clientTokenCache.set(cacheKey, {
-    token: data.access_token,
-    expiresAt: Date.now() + Number(data.expires_in ?? 300) * 1000,
-  });
-  return data.access_token;
+  return { value: data.access_token, ttlMs: Number(data.expires_in ?? 300) * 1000 - TOKEN_REFRESH_MARGIN_MS };
 }
 
 export async function getRow(
@@ -167,9 +165,8 @@ const SURVEY_EXISTS_TTL_MS = 30 * 60 * 1000;
 const SURVEY_ABSENT_TTL_MS = 5 * 60 * 1000;
 // Auch unklare Ergebnisse kurz merken, damit eine Störung bei Genesys nicht mit jeder Antwort weiter angefragt wird
 const SURVEY_CHECK_ERROR_TTL_MS = 60 * 1000;
-const SURVEY_EXISTENCE_CACHE_MAX = 1000;
 
-const surveyExistenceCache = new Map<string, { result: SurveyExistenceResult; expiresAt: number }>();
+const surveyExistenceCache = new TtlCache<SurveyExistenceResult>({ ttlMs: SURVEY_CHECK_ERROR_TTL_MS, maxEntries: 1000 });
 
 const CONFIG_ERROR_HTTP_STATUS = new Set([400, 401, 403]);
 
@@ -215,23 +212,15 @@ export async function checkSurveyExists(
   surveyId: string,
   credentials?: TenantCredentials
 ): Promise<SurveyExistenceResult & { cached: boolean }> {
-  const cacheKey = `${tenantId}:${surveyId}`;
-  const now = Date.now();
-  const cached = surveyExistenceCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) return { ...cached.result, cached: true };
-
-  const result = await querySurveyExists(tenantId, surveyId, credentials);
-  const ttl =
-    result.status === "exists" ? SURVEY_EXISTS_TTL_MS : result.status === "absent" ? SURVEY_ABSENT_TTL_MS : SURVEY_CHECK_ERROR_TTL_MS;
-
-  // Abgelaufene Einträge verwerfen, Größe begrenzen
-  const storedAt = Date.now();
-  if (surveyExistenceCache.size >= SURVEY_EXISTENCE_CACHE_MAX) {
-    for (const [k, v] of surveyExistenceCache) if (v.expiresAt <= storedAt) surveyExistenceCache.delete(k);
-    if (surveyExistenceCache.size >= SURVEY_EXISTENCE_CACHE_MAX) surveyExistenceCache.clear();
-  }
-  surveyExistenceCache.set(cacheKey, { result, expiresAt: storedAt + ttl });
-  return { ...result, cached: false };
+  let cached = true;
+  const result = await surveyExistenceCache.getOrLoad(`${tenantId}:${surveyId}`, async () => {
+    cached = false;
+    const result = await querySurveyExists(tenantId, surveyId, credentials);
+    const ttlMs =
+      result.status === "exists" ? SURVEY_EXISTS_TTL_MS : result.status === "absent" ? SURVEY_ABSENT_TTL_MS : SURVEY_CHECK_ERROR_TTL_MS;
+    return { value: result, ttlMs };
+  });
+  return { ...result, cached };
 }
 
 /** Nur für Tests. */

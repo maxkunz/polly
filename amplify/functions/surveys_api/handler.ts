@@ -5,6 +5,7 @@ import { listProdSurveys, loadProdSurvey } from "../shared/genesys_survey_check"
 import { isValidSurveyId } from "../shared/survey_id";
 import { loadTenantCredentials } from "../shared/tenant_auth";
 import { pickTheme } from "../shared/web_themes";
+import { TtlCache } from "../shared/ttl_cache";
 import { loadTenantThemesCached } from "../shared/web_themes_table";
 import * as v1 from "./v1";
 
@@ -26,24 +27,14 @@ function errorResponse(statusCode: number, error: string, message: string): AnyR
  * Cache der fertigen Antworten (200 und 404) pro Mandant im Lambda-Speicher: schont das Rate-Limit von Genesys.
  * Ein Deploy wirkt in der API deshalb bis zu 1 min später. Fehler (429, 502) werden nicht gemerkt.
  */
-const CACHE_TTL_MS = 60 * 1000;
-const CACHE_MAX_ENTRIES = 500;
+const responseCache = new TtlCache<AnyResult>({ ttlMs: 60 * 1000 });
 
-const responseCache = new Map<string, { expiresAt: number; result: AnyResult }>();
-
-function fromCache(key: string): AnyResult | undefined {
-  const cached = responseCache.get(key);
-  return cached && cached.expiresAt > Date.now() ? cached.result : undefined;
-}
-
-function toCache(key: string, result: AnyResult): AnyResult {
-  if (responseCache.size >= CACHE_MAX_ENTRIES) {
-    const now = Date.now();
-    for (const [k, v] of responseCache) if (v.expiresAt <= now) responseCache.delete(k);
-    if (responseCache.size >= CACHE_MAX_ENTRIES) responseCache.clear();
-  }
-  responseCache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
-  return result;
+/** Antwort aus dem Cache oder über `build`; gemerkt werden nur 200 und 404. */
+function cachedResponse(key: string, build: () => Promise<AnyResult>): Promise<AnyResult> {
+  return responseCache.getOrLoad(key, async () => {
+    const result = await build();
+    return { value: result, ttlMs: result.statusCode === 200 || result.statusCode === 404 ? undefined : 0 };
+  });
 }
 
 /** Nur für Tests. */
@@ -57,14 +48,16 @@ function genesysFailure(throttled: boolean | undefined): AnyResult {
     : errorResponse(502, "genesys_error", "Cannot load surveys");
 }
 
+type ApiClient = Extract<Awaited<ReturnType<typeof resolveApiClient>>, { ok: true }>;
+
 async function list(event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> {
   const auth = await resolveApiClient(event, "polly-api/surveys.read");
   if (!auth.ok) return errorResponse(auth.statusCode, auth.error, auth.message);
 
-  const cacheKey = `${auth.tenantId}:list`;
-  const cached = fromCache(cacheKey);
-  if (cached) return cached;
+  return cachedResponse(`${auth.tenantId}:list`, () => buildList(auth, context));
+}
 
+async function buildList(auth: ApiClient, context?: AnyLambdaContext): Promise<AnyResult> {
   const credentials = await loadTenantCredentials(auth.tenantId, auth.tenant);
   if (!credentials) return errorResponse(502, "genesys_error", "No Genesys backend credentials for tenant");
 
@@ -76,7 +69,7 @@ async function list(event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<A
   }
 
   console.log("[surveys_api] list", { clientId: auth.clientId, tenantId: auth.tenantId, surveys: result.surveys.length });
-  return toCache(cacheKey, { statusCode: 200, headers, body: JSON.stringify(v1.buildV1ListResponse(result.surveys)) });
+  return { statusCode: 200, headers, body: JSON.stringify(v1.buildV1ListResponse(result.surveys)) };
 }
 
 async function detail(event: AnyApiGwEvent): Promise<AnyResult> {
@@ -87,10 +80,10 @@ async function detail(event: AnyApiGwEvent): Promise<AnyResult> {
   if (!isValidSurveyId(rawId)) return errorResponse(400, "invalid_request", "surveyId must be a UUID");
   const surveyId = rawId.toLowerCase();
 
-  const cacheKey = `${auth.tenantId}:${surveyId}`;
-  const cached = fromCache(cacheKey);
-  if (cached) return cached;
+  return cachedResponse(`${auth.tenantId}:${surveyId}`, () => buildDetail(auth, surveyId));
+}
 
+async function buildDetail(auth: ApiClient, surveyId: string): Promise<AnyResult> {
   const credentials = await loadTenantCredentials(auth.tenantId, auth.tenant);
   if (!credentials) return errorResponse(502, "genesys_error", "No Genesys backend credentials for tenant");
 
@@ -99,7 +92,7 @@ async function detail(event: AnyApiGwEvent): Promise<AnyResult> {
     loadTenantThemesCached(auth.tenantId),
   ]);
   if (prod.status === "unavailable") {
-    return toCache(cacheKey, errorResponse(404, "not_found", "Survey has no Prod version, does not exist or is being deleted"));
+    return errorResponse(404, "not_found", "Survey has no Prod version, does not exist or is being deleted");
   }
   if (prod.status === "error") {
     console.warn("[surveys_api] detail failed", { clientId: auth.clientId, tenantId: auth.tenantId, surveyId, reason: prod.reason });
@@ -108,7 +101,7 @@ async function detail(event: AnyApiGwEvent): Promise<AnyResult> {
 
   console.log("[surveys_api] detail", { clientId: auth.clientId, tenantId: auth.tenantId, surveyId });
   const body = v1.toV1SurveyDetail(prod.survey, prod.baseUrl, pickTheme(themes, prod.survey.web_theme_id));
-  return toCache(cacheKey, { statusCode: 200, headers, body: JSON.stringify(body) });
+  return { statusCode: 200, headers, body: JSON.stringify(body) };
 }
 
 /** Routing-Tabelle: eine neue Version braucht nur einen weiteren Eintrag. */

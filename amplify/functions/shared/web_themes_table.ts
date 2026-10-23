@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { WebTheme } from "../../../src/domain/webTheme/webTheme";
+import { TtlCache } from "./ttl_cache";
 import { toWebTheme } from "./web_themes";
 
 /**
@@ -41,10 +42,7 @@ export async function queryWebThemeItems(
  * Cache der Designs pro Mandant (eine Query auf PK `tenantId`, höchstens 50 Designs, wenige KB).
  * Auch eine leere Liste wird gemerkt. Änderungen an einem Design wirken so nach höchstens 30 s.
  */
-const THEME_CACHE_TTL_MS = 30 * 1000;
-const THEME_CACHE_MAX_ENTRIES = 500;
-
-const themeCache = new Map<string, { expiresAt: number; themes: WebTheme[] }>();
+const themeCache = new TtlCache<WebTheme[]>({ ttlMs: 30 * 1000 });
 
 /**
  * Designs des Mandanten (gecacht, Tabelle aus `WEB_THEMES_TABLE_NAME`). Fehler sind nicht fatal: Die Seite
@@ -54,15 +52,15 @@ const themeCache = new Map<string, { expiresAt: number; themes: WebTheme[] }>();
 export async function loadTenantThemesCached(tenantId: string, fresh = false): Promise<WebTheme[]> {
   const tableName = process.env.WEB_THEMES_TABLE_NAME ?? "";
   if (!tableName) return [];
-  const cached = themeCache.get(tenantId);
-  if (!fresh && cached && cached.expiresAt > Date.now()) return cached.themes;
-
   try {
-    const items = await queryWebThemeItems(tableName, tenantId);
-    const themes = items.map(toWebTheme).filter((theme): theme is WebTheme => theme !== null);
-    if (themeCache.size >= THEME_CACHE_MAX_ENTRIES) themeCache.clear();
-    themeCache.set(tenantId, { themes, expiresAt: Date.now() + THEME_CACHE_TTL_MS });
-    return themes;
+    return await themeCache.getOrLoad(
+      tenantId,
+      async () => {
+        const items = await queryWebThemeItems(tableName, tenantId);
+        return { value: items.map(toWebTheme).filter((theme): theme is WebTheme => theme !== null) };
+      },
+      fresh
+    );
   } catch (err) {
     console.error("[web_themes_table] cannot load themes", { tenantId, error: String((err as Error)?.message ?? err) });
     return [];
