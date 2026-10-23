@@ -33,13 +33,13 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [x] Doku: Abschnitt API 1 in `polly_customer_api.md`, Verweis in `survey_responses_api.md`.
   - Testbar nach dem Deploy: `/data` liefert dieselben Antworten wie der CSV-Export derselben Umfrage und desselben Zeitraums. Fehlerfälle 400/401/403.
 
-- [ ] **M4 API 2: Einladungen `POST /ext/v1/invitations`** (siehe „API 2“)
-  - [ ] `loadFlowSurvey` gibt `baseUrl` aus dem Draft mit zurück.
-  - [ ] `signInvitations` aus `invitations/handler.ts` auslagern. Die App-Routen bleiben unverändert.
-  - [ ] `amplify/functions/invitations/ext_v1.ts` und die Routing-Tabelle im Handler.
-  - [ ] `backend.ts`: `WEB_SURVEY_ORIGIN`, Rechte, Route und Drosselung.
-  - [ ] Tests: Request-Prüfung, Linkaufbau, feste Feldliste von `toV1InviteUrl`, Antwortgröße bei 5000 Einträgen.
-  - [ ] Doku: Abschnitt API 2 in `polly_customer_api.md`; `WEB_SURVEY_ORIGIN` in `branch_umgebung_einrichten.md` und `betrieb_api_zugaenge.md`; Verweis in `polly_web.md`.
+- [x] **M4 API 2: Einladungen `POST /ext/v1/invitations`** (siehe „API 2“) (erledigt 2026-10-23)
+  - [x] `loadFlowSurvey` gibt `baseUrl` aus dem Draft mit zurück.
+  - [x] `signInvitations` aus `invitations/handler.ts` auslagern. Die App-Routen bleiben unverändert.
+  - [x] `amplify/functions/invitations/ext_v1.ts` und die Routing-Tabelle im Handler.
+  - [x] `backend.ts`: `WEB_SURVEY_ORIGIN`, Rechte, Route und Drosselung.
+  - [x] Tests: Request-Prüfung, Linkaufbau, feste Feldliste von `toV1InviteUrl`, Antwortgröße bei 5000 Einträgen.
+  - [x] Doku: Abschnitt API 2 in `polly_customer_api.md`; `WEB_SURVEY_ORIGIN` in `branch_umgebung_einrichten.md` und `betrieb_api_zugaenge.md`; Verweis in `polly_web.md`.
   - Testbar nach dem Deploy: Links erzeugen, `fullLink` im Browser öffnen, `base_url`- und Fallback-Fall prüfen, Einmal-Link nur einmal nutzbar.
 
 - [ ] **M5 API 3: Umfragedetails `GET /ext/v1/surveys` und `/ext/v1/surveys/{surveyId}`** (siehe „API 3“)
@@ -84,7 +84,17 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Nicht per Test geprüft: der Abfrageteil mit DynamoDB (`iterateSessions`), das ist unverändert aus dem CSV-Export.
 
 ### M4
-- noch keine
+- `signInvitations` bleibt in `invitations/handler.ts` (nicht in eine eigene Datei ausgelagert); es liefert `{ tokens, kid }`, das Protokoll schreiben die beiden Aufrufer.
+- `loadFlowSurvey` liest `baseUrl` nur mit Option `withBaseUrl` (nur die Kunden-API; `web_survey` und die Vorschau parsen den Draft nicht). Geliefert wird es nur, wenn `Draft.base_url` gesetzt ist und `baseUrlError` (aus `invitationLinks.ts`, gemeinsam mit dem Editor-Validator) nichts meldet; ungültige Werte werden protokolliert und ignoriert, ein unlesbarer Draft ergibt ebenfalls kein `baseUrl` (dann gilt der Fallback). Grund: Der Draft wird ohne Deploy gespeichert.
+- `base_url` ist auf `BASE_URL_MAX_CHARS` (200) begrenzt, damit 5000 Links unter dem Lambda-Limit bleiben; zusätzlich prüft der Handler die Antwortgröße (`413 response_too_large`).
+- `survey_uuid` wird kleingeschrieben. Die Regeln für Umfrage-ID, Anzahl, `multi` und `exp` liegen gemeinsam für App und v1 in `checkInvitationFields` (`request.ts`), `ext_v1.ts` bildet nur die Felder ab und liefert die v1-Feldnamen für die Meldungen.
+- Der Handler erkennt Kunden-Routen nur am `routeKey` (`/ext/…`) und prüft sie vor `resolveTenantContext`; alle anderen Pfade laufen unverändert. Fehlerformat dort `{ error, message }` (App-Routen weiter `{ code, message }`). Fehlerformat und Routing-Tabelle kommen aus `shared/ext_http.ts` (`extError`, `dispatchExtRoute`), gemeinsam mit `reporting_api` und für M5.
+- `resolveApiClient` liefert den geladenen Mandanteneintrag mit (`tenant`), `loadTenantCredentials` übernimmt ihn ohne zweiten DynamoDB-Zugriff.
+- Fehlercodes: `payload_too_large` (413), `response_too_large` (413), `genesys_error` (429 bei Drosselung durch Genesys, 502 bei Fehler oder fehlenden Credentials), `no_prod` (409, ohne `reason`).
+- `expiration_date` in der Antwort wird aus `exp` (UTC-Tag) abgeleitet, nicht aus dem Request durchgereicht.
+- `WEB_SURVEY_ORIGIN` wird in `backend.ts` immer gesetzt (Variable oder abgeleitet), die Lambda liest nur `process.env`.
+- Antwortgröße: 5000 Einträge mit Basis-URL in voller Länge (200 Zeichen) bleiben unter 5,5 MB (JWT ca. 372 Zeichen), Test dazu in `customerApi.test.ts`.
+- Nicht per Test geprüft: der Ablauf mit Genesys/DynamoDB (`loadProdSurvey`, Rechte), das braucht den Deploy.
 
 ### M5
 - noch keine
@@ -319,7 +329,7 @@ Grundlage sind `requireAdmin` (Header `x-admin-token`) und der vorhandene Cognit
   - Route `GET /ext/v1/reporting/data`, Drosselung z. B. 20/40.
 - **`invitations` (M4):**
   - Rechte und Variablen: Lesezugriff auf `apiClientsTable` und `API_CLIENTS_TABLE_NAME`.
-  - `WEB_SURVEY_ORIGIN` kommt aus der Amplify-Umgebungsvariable gleichen Namens. Fehlt sie, wird `https://<branch>.<appId>.amplifyapp.com` abgeleitet; der Branch-Name wird dabei mit `-` statt `/` geschrieben und nicht gekürzt.
+  - `WEB_SURVEY_ORIGIN` kommt aus der Amplify-Umgebungsvariable gleichen Namens. Fehlt sie, wird `https://<branch>.<appId>.amplifyapp.com` abgeleitet; im Branch-Namen werden Zeichen außer `a-z0-9-` zu `-`, er wird nicht gekürzt. Ohne App-ID (Sandbox) warnt `backend.ts`.
   - Route `POST /ext/v1/invitations`, Drosselung z. B. 5/10, weil jeder Aufruf bis zu 5000 Signaturen und Genesys-Aufrufe auslöst.
 - **`surveys_api` (M5):**
   - Rechte und Variablen: Lesezugriff auf `apiClientsTable`, `surveyDeletionJobsTable` und `webSurveyThemesTable`, die Umgebungsvariablen dazu und `attachTenantAuth`.

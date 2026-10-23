@@ -21,14 +21,33 @@ export type InvitationRequestResult =
   | { ok: true; request: InvitationRequest }
   | { ok: false; message: string };
 
+/** Feldnamen in den Fehlermeldungen; die Kunden-API nennt die Felder anders (siehe `ext_v1.ts`). */
+export type InvitationFieldNames = Record<keyof InvitationRequest, string>;
+
+const APP_FIELD_NAMES: InvitationFieldNames = { surveyId: "surveyId", count: "count", multi: "multi", exp: "exp" };
+
 export function parseInvitationRequest(body: unknown, nowSeconds: number): InvitationRequestResult {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return { ok: false, message: "Body must be a JSON object" };
   }
   const { surveyId, count, multi, exp } = body as Record<string, unknown>;
+  return checkInvitationFields({ surveyId, count, multi, exp }, nowSeconds, APP_FIELD_NAMES);
+}
+
+/**
+ * Fachliche Regeln einer Einladungsanfrage, gemeinsam für App-Route und Kunden-API (jede Version bildet
+ * ihre Felder vorher auf das interne Modell ab). Die Umfrage-ID wird kleingeschrieben: Zeilenschlüssel
+ * `survey_<id>` und JWT-Claim hängen an der exakten Schreibweise.
+ */
+export function checkInvitationFields(
+  values: Record<keyof InvitationRequest, unknown>,
+  nowSeconds: number,
+  names: InvitationFieldNames
+): InvitationRequestResult {
+  const { surveyId, count, multi, exp } = values;
 
   if (!isValidSurveyId(surveyId)) {
-    return { ok: false, message: "surveyId must be a valid UUID" };
+    return { ok: false, message: `${names.surveyId} must be a valid UUID` };
   }
   if (
     typeof count !== "number" ||
@@ -36,21 +55,22 @@ export function parseInvitationRequest(body: unknown, nowSeconds: number): Invit
     count < INVITATION_COUNT_MIN ||
     count > INVITATION_COUNT_MAX
   ) {
-    return { ok: false, message: `count must be an integer between ${INVITATION_COUNT_MIN} and ${INVITATION_COUNT_MAX}` };
+    return { ok: false, message: `${names.count} must be an integer between ${INVITATION_COUNT_MIN} and ${INVITATION_COUNT_MAX}` };
   }
   if (typeof multi !== "boolean") {
-    return { ok: false, message: "multi must be a boolean" };
+    return { ok: false, message: `${names.multi} must be a boolean` };
   }
+  const request: InvitationRequest = { surveyId: surveyId.toLowerCase(), count, multi };
   if (exp !== undefined && exp !== null) {
     if (typeof exp !== "number" || !Number.isSafeInteger(exp) || exp < 0) {
-      return { ok: false, message: "exp must be epoch seconds" };
+      return { ok: false, message: `${names.exp} must be epoch seconds` };
     }
     if (exp <= nowSeconds) {
-      return { ok: false, message: "exp must be in the future" };
+      return { ok: false, message: `${names.exp} must be in the future` };
     }
-    return { ok: true, request: { surveyId, count, multi, exp } };
+    request.exp = exp;
   }
-  return { ok: true, request: { surveyId, count, multi } };
+  return { ok: true, request };
 }
 
 /** Body von `POST /invitations/preview`: nur die Umfrage; Laufzeit und Mehrfachnutzung setzt der Server. */

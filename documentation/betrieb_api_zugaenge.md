@@ -165,7 +165,11 @@ Wie beim Erneuern: neuen Client mit den gewünschten Scopes anlegen, übergeben,
 
 ## 10. Umgebungsvariable `WEB_SURVEY_ORIGIN`
 
-Folgt mit der Einladungs-API.
+Die Einladungs-API (`POST /ext/v1/invitations`) baut `fullLink` wie die App. Hat die Umfrage keine `base_url`, zeigt der Link auf die Polly-Umfrageseite `<WEB_SURVEY_ORIGIN>/s/<token>`.
+
+- **Ohne Variable** leitet das Backend den Ursprung ab: `https://<branch>.<appId>.amplifyapp.com`. Der Branchname wird kleingeschrieben, Zeichen außer `a-z`, `0-9` und `-` (z. B. `/`, `_`, `.`) werden zu `-`, und er wird **nicht** auf 20 Zeichen gekürzt (anders als bei den Ressourcennamen). In der Sandbox (`npx ampx sandbox`, ohne App-ID) entsteht eine Domain, die es nicht gibt; `backend.ts` warnt dann beim Synthetisieren.
+- **Setzen** (Amplify Console → Hosting → Environment variables, für den Branch) bei eigener Domain, z. B. `https://umfragen.example.com`. Ohne `/` am Ende; die Variable wirkt beim nächsten Backend-Deploy.
+- **Prüfen:** Mit der Einladungs-API einen Link erzeugen und `fullLink` im Browser öffnen. Zeigt er auf eine falsche Domain, die Variable setzen und neu deployen.
 
 ## 11. Fehlersuche
 
@@ -176,8 +180,9 @@ Folgt mit der Einladungs-API.
 | `401 invalid_token` | Token abgelaufen (60 min), beschädigt oder aus einer anderen Umgebung (falsche Token-URL) |
 | `403 insufficient_scope` | Der Client hat den Scope der Route nicht. Auch der `backend/invoke`-Client der Data Action bekommt auf `/ext/v1` immer 403. |
 | `403 access_denied` | Client gelöscht bzw. Status nicht `ACTIVE`, oder Mandant nicht `APPROVED` (z. B. nach Uninstall) |
-| `409` (Einladungen) | Umfrage ohne Prod-Stand (folgt mit der Einladungs-API) |
-| `429` | Drosselung der Route im API Gateway |
+| `409` (Einladungen) | Umfrage ohne Prod-Stand, nicht vorhanden oder wird gerade gelöscht (`no_prod`) |
+| `413 response_too_large` (Einladungen) | Antwort wäre über dem Lambda-Limit; sollte durch die Längengrenze der Basis-URL nicht vorkommen. Kunde soll weniger Links pro Aufruf anfordern. |
+| `429` | Drosselung der Route im API Gateway. Die Grenze gilt pro Route für **alle** Mandanten zusammen; ein Client, der in einer Schleife aufruft, bremst die anderen mit aus. Im Zugriffsprotokoll des API Gateways nachsehen, welcher Client die Last erzeugt. |
 
 **Protokolle:** CloudWatch Logs der jeweiligen Lambda.
 

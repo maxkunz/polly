@@ -1,4 +1,5 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
+import { baseUrlError } from "../../../src/domain/survey/invitationLinks";
 import { fetchWithTimeout } from "./http";
 import { isValidSurveyId } from "./survey_id";
 import { isSurveyBeingDeleted } from "./survey_results";
@@ -250,7 +251,8 @@ export type SurveyTableAccess = {
 };
 
 export type ProdSurveyResult =
-  | { status: "ok"; survey: FlowSurvey }
+  /** `baseUrl`: gültige `base_url` aus dem Draft (steht nicht im Flow-JSON), nur mit `withBaseUrl` und wenn gesetzt. */
+  | { status: "ok"; survey: FlowSurvey; baseUrl?: string }
   /** Kein Prod- bzw. Stage-Stand, Umfrage gelöscht oder Löschung läuft. */
   | { status: "unavailable"; reason: string }
   /** Genesys nicht erreichbar oder Zugriff fehlt; `throttled` bei HTTP 429 von Genesys. */
@@ -268,8 +270,34 @@ export async function getSurveyTableAccess(credentials: TenantCredentials): Prom
   return { region: credentials.region, token, dataTableId };
 }
 
+/**
+ * `base_url` aus dem Draft der Zeile. Unlesbare Drafts, fehlende oder ungültige Werte (`baseUrlError`, wie im
+ * Editor) ergeben `undefined`, dann gilt der Fallback. Der Draft wird ohne Deploy gespeichert, deshalb hier prüfen.
+ */
+function readDraftBaseUrl(raw: unknown, surveyId: string): string | undefined {
+  let draft: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      draft = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  const baseUrl = (draft as { base_url?: unknown } | null)?.base_url;
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) return undefined;
+  const error = baseUrlError(baseUrl);
+  if (error) {
+    console.warn("[genesys_survey_check] Ignoring invalid base_url in Draft", { surveyId, error, length: baseUrl.length });
+    return undefined;
+  }
+  return baseUrl.trim();
+}
+
 /** Spalte der Zeile `survey_<id>`, aus der ein Flow-Stand gelesen wird. */
 export type FlowSurveyColumn = "Prod" | "Stage";
+
+/** `withBaseUrl`: zusätzlich `base_url` aus dem Draft lesen (parst den ganzen Draft, nur für Links der Kunden-API). */
+export type FlowSurveyOptions = { withBaseUrl?: boolean };
 
 /**
  * Lädt den Prod-Stand der Umfrage aus der Data Table des Mandanten. Liegt ein Lösch-Job vor
@@ -279,9 +307,10 @@ export type FlowSurveyColumn = "Prod" | "Stage";
 export function loadProdSurvey(
   tenantId: string,
   surveyId: string,
-  credentials?: TenantCredentials
+  credentials?: TenantCredentials,
+  options?: FlowSurveyOptions
 ): Promise<ProdSurveyResult> {
-  return loadFlowSurvey(tenantId, surveyId, credentials, "Prod");
+  return loadFlowSurvey(tenantId, surveyId, credentials, "Prod", options);
 }
 
 /** Wie `loadProdSurvey`, liest aber die angegebene Spalte (`Stage` für die Webvorschau). */
@@ -289,7 +318,8 @@ export async function loadFlowSurvey(
   tenantId: string,
   surveyId: string,
   credentials: TenantCredentials | undefined,
-  column: FlowSurveyColumn
+  column: FlowSurveyColumn,
+  options: FlowSurveyOptions = {}
 ): Promise<ProdSurveyResult> {
   if (!isValidSurveyId(surveyId)) return { status: "unavailable", reason: "Invalid surveyId" };
   if (await isSurveyBeingDeleted(tenantId, surveyId)) return { status: "unavailable", reason: "Survey is being deleted" };
@@ -305,7 +335,8 @@ export async function loadFlowSurvey(
 
     const survey = parseProdSurvey(row.body?.[column], surveyId);
     if (!survey) return { status: "unavailable", reason: `No valid ${column} version` };
-    return { status: "ok", survey };
+    const baseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
+    return { status: "ok", survey, ...(baseUrl ? { baseUrl } : {}) };
   } catch (err: any) {
     return errorResult(err?.message ?? "request failed", err?.status);
   }

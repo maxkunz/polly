@@ -22,6 +22,7 @@ Mandanten lassen sich **nicht** aus einer anderen Umgebung in die Tenants-Tabell
 4. Optionale Branch-Umgebungsvariablen (Hosting → Environment variables, als Override für den Branch):
    - `GENESYS_REGION`, falls die Test-Org nicht in `mypurecloud.de` liegt
    - `WEB_SURVEY_RESERVED_CONCURRENCY`, siehe [polly_web.md](polly_web.md)
+   - `WEB_SURVEY_ORIGIN`, falls die Umfrageseite unter einer eigenen Domain erreichbar ist (Links der Kunden-API ohne `base_url`); ohne sie `https://<branch>.<appId>.amplifyapp.com`, siehe [betrieb_api_zugaenge.md](betrieb_api_zugaenge.md#10-umgebungsvariable-web_survey_origin)
 
 Der Branchname wird für die Ressourcennamen bereinigt (Kleinbuchstaben, Sonderzeichen → `-`) und auf 20 Zeichen gekürzt. Aus `feature/websurveys` wird `feature-websurveys`.
 

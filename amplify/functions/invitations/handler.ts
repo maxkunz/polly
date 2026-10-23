@@ -1,7 +1,10 @@
 import { randomUUID } from "crypto";
 import { POLLY_ROLE_DEPLOY } from "../../../src/constants/permissionConstants";
 import { requireCallerRole } from "../shared/caller_roles";
-import { PREVIEW_TOKEN_TTL_SECONDS } from "../../../src/domain/survey/invitationLinks";
+import { buildInvitationUrl, PREVIEW_TOKEN_TTL_SECONDS } from "../../../src/domain/survey/invitationLinks";
+import { resolveApiClient } from "../shared/api_client_auth";
+import { dispatchExtRoute, extError as extErrorWith, extHeaders, isExtRouteKey } from "../shared/ext_http";
+import type { ExtRoute } from "../shared/ext_http";
 import { loadFlowSurvey, loadProdSurvey } from "../shared/genesys_survey_check";
 import { readRequestBody } from "../shared/http";
 import { loadInvitationKeys } from "../shared/invitation_keys";
@@ -13,6 +16,7 @@ import {
   resolveTenantContext,
   type TenantCredentials,
 } from "../shared/tenant_auth";
+import { buildV1Response, parseV1InvitationRequest, toV1InviteUrl } from "./ext_v1";
 import { parseInvitationRequest, parsePreviewRequest } from "./request";
 
 /**
@@ -21,6 +25,8 @@ import { parseInvitationRequest, parsePreviewRequest } from "./request";
  * mehrfach nutzbar, läuft nach `PREVIEW_TOKEN_TTL_SECONDS` ab; `web_survey` speichert dazu nichts).
  * Nur mit Genesys-Bearer eines Users mit Rolle `polly_deploy` (serverseitig geprüft); Cognito-M2M-Tokens
  * werden abgelehnt. Die Tokens werden nicht gespeichert, den Link baut das Frontend.
+ * POST /ext/v1/invitations – Kunden-API (Scope `invitations.write`, Anmeldung über `resolveApiClient`),
+ * liefert fertige Links (siehe `documentation/polly_customer_api.md`).
  */
 
 type AnyApiGwEvent = any;
@@ -28,6 +34,17 @@ type AnyResult = { statusCode: number; headers: Record<string, string>; body: st
 
 /** Der Body enthält nur wenige Felder; größere Bodies werden nicht geparst. */
 const INVITATION_MAX_BODY_BYTES = 4 * 1024;
+
+/** Ursprung der Polly-Umfrageseite für Links ohne `base_url` (die App nimmt dafür `window.location.origin`). */
+const WEB_SURVEY_ORIGIN = (process.env.WEB_SURVEY_ORIGIN ?? "").trim();
+
+/**
+ * Lambda-Antworten hinter API Gateway sind auf 6 MB begrenzt. `BASE_URL_MAX_CHARS` hält 5000 Links darunter;
+ * die Prüfung fängt Abweichungen (z. B. längere Tokens) mit 413 im Fehlerformat statt eines 500 ab.
+ */
+const EXT_MAX_RESPONSE_BYTES = 5.5 * 1024 * 1024;
+
+const extResponseHeaders = extHeaders("POST");
 
 function jsonResponse(statusCode: number, body: unknown): AnyResult {
   return {
@@ -76,6 +93,28 @@ async function checkCaller(event: AnyApiGwEvent, tenantId: string, region: strin
   return { ok: true, credentials };
 }
 
+/** Signiert `count` Einladungen; gemeinsam genutzt von der App-Route und der Kunden-API. */
+async function signInvitations(
+  tenantId: string,
+  surveyId: string,
+  count: number,
+  multi: boolean,
+  exp: number | undefined,
+  nowSeconds: number
+): Promise<{ tokens: Array<{ jwt: string; exp: number | undefined; multi: boolean }>; kid: string }> {
+  const [signingKey] = await loadInvitationKeys();
+  const tokens = Array.from({ length: count }, () => ({
+    jwt: signInvitation(
+      { tenant_id: tenantId, survey_id: surveyId, token_id: randomUUID(), multi, iat: nowSeconds, ...(exp !== undefined ? { exp } : {}) },
+      signingKey,
+      nowSeconds
+    ),
+    exp,
+    multi,
+  }));
+  return { tokens, kid: signingKey.kid };
+}
+
 async function createInvitations(event: AnyApiGwEvent, tenantId: string, region: string): Promise<AnyResult> {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const body = readRequestBody(event, INVITATION_MAX_BODY_BYTES);
@@ -96,18 +135,9 @@ async function createInvitations(event: AnyApiGwEvent, tenantId: string, region:
     return jsonResponse(prod.throttled ? 429 : 502, { code: "genesys_error", message: "Cannot load survey" });
   }
 
-  const [signingKey] = await loadInvitationKeys();
-  const tokens = Array.from({ length: count }, () => ({
-    jwt: signInvitation(
-      { tenant_id: tenantId, survey_id: surveyId, token_id: randomUUID(), multi, iat: nowSeconds, ...(exp !== undefined ? { exp } : {}) },
-      signingKey,
-      nowSeconds
-    ),
-    exp,
-    multi,
-  }));
+  const { tokens, kid } = await signInvitations(tenantId, surveyId, count, multi, exp, nowSeconds);
 
-  console.log("[invitations] created", { tenantId, surveyId, count, multi, exp: exp ?? null, kid: signingKey.kid });
+  console.log("[invitations] created", { tenantId, surveyId, count, multi, exp: exp ?? null, kid });
   return jsonResponse(200, { tokens });
 }
 
@@ -143,9 +173,66 @@ async function createPreviewInvitation(event: AnyApiGwEvent, tenantId: string, r
   return jsonResponse(200, { jwt, exp });
 }
 
+function extError(statusCode: number, error: string, message: string): AnyResult {
+  return extErrorWith(extResponseHeaders, statusCode, error, message);
+}
+
+async function createExtInvitations(event: AnyApiGwEvent): Promise<AnyResult> {
+  const auth = await resolveApiClient(event, "polly-api/invitations.write");
+  if (!auth.ok) return extError(auth.statusCode, auth.error, auth.message);
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const body = readRequestBody(event, INVITATION_MAX_BODY_BYTES);
+  if (!body.ok) return extError(413, "payload_too_large", "Request body too large");
+  const parsed = parseV1InvitationRequest(parseJson(body.text), nowSeconds);
+  if (!parsed.ok) return extError(400, "invalid_request", parsed.message);
+  const { surveyId, count, multi, exp } = parsed.request;
+  const { tenantId, clientId } = auth;
+
+  const credentials = await loadTenantCredentials(tenantId, auth.tenant);
+  if (!credentials) return extError(502, "genesys_error", "No Genesys backend credentials for tenant");
+
+  const prod = await loadProdSurvey(tenantId, surveyId, credentials, { withBaseUrl: true });
+  if (prod.status === "unavailable") {
+    return extError(409, "no_prod", "Survey has no Prod version, does not exist or is being deleted");
+  }
+  if (prod.status === "error") {
+    console.error("[invitations] cannot load Prod", { clientId, tenantId, surveyId, reason: prod.reason });
+    return prod.throttled
+      ? extError(429, "genesys_error", "Genesys is throttling requests, please retry later")
+      : extError(502, "genesys_error", "Cannot load survey");
+  }
+
+  const { tokens, kid } = await signInvitations(tenantId, surveyId, count, multi, exp, nowSeconds);
+  const inviteUrls = tokens.map((token) =>
+    toV1InviteUrl({ ...token, fullLink: buildInvitationUrl(prod.baseUrl, token.jwt, WEB_SURVEY_ORIGIN) })
+  );
+
+  const responseBody = JSON.stringify(buildV1Response(inviteUrls));
+  const bytes = Buffer.byteLength(responseBody, "utf8");
+  if (bytes > EXT_MAX_RESPONSE_BYTES) {
+    // Tokens wurden nicht gespeichert, verworfene Links sind damit folgenlos
+    console.warn("[invitations] response too large (ext v1)", { clientId, tenantId, surveyId, count, bytes });
+    return extError(413, "response_too_large", "The response would be too large, please request fewer links per call");
+  }
+
+  console.log("[invitations] created (ext v1)", { clientId, tenantId, surveyId, count, multi, exp: exp ?? null, kid });
+  return { statusCode: 200, headers: extResponseHeaders, body: responseBody };
+}
+
+/** Routing der Kunden-API: eine neue Version braucht nur einen weiteren Eintrag. */
+export const extRoutes: Record<string, ExtRoute> = {
+  "POST /ext/v1/invitations": createExtInvitations,
+};
+
 export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
   const method = event?.requestContext?.http?.method ?? "";
   const path = event?.requestContext?.http?.path ?? event?.rawPath ?? "";
+
+  // Kunden-API: nur nach routeKey, wie das Routing selbst
+  if (isExtRouteKey(event)) {
+    return dispatchExtRoute(extRoutes, event, undefined, extResponseHeaders, "[invitations] (ext)");
+  }
 
   if (method === "OPTIONS") return jsonResponse(204, "");
   if (method !== "POST" || (path !== "/invitations" && path !== "/invitations/preview")) {

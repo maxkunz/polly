@@ -43,6 +43,18 @@ const appId = (
   "app"
 ).toLowerCase();
 const envSuffix = `${appId}-${safeBranchName}`;
+// Ursprung der Polly-Umfrageseite für Einladungslinks der Kunden-API ohne base_url. Amplify-Hosting-Domain:
+// Branch mit "-" statt Zeichen, die im Hostnamen nicht erlaubt sind ("/", "_", "." …), nicht gekürzt
+// (anders als safeBranchName). Eigene Domain oder abweichender Branch-Name: Variable WEB_SURVEY_ORIGIN setzen.
+const webSurveyOriginFromEnv = process.env.WEB_SURVEY_ORIGIN?.trim();
+const webSurveyOrigin = (
+  webSurveyOriginFromEnv ||
+  `https://${rawBranchName.replace(/[^a-z0-9-]/g, "-")}.${appId}.amplifyapp.com`
+).replace(/\/+$/, "");
+if (!webSurveyOriginFromEnv && appId === "app") {
+  // Sandbox ohne Amplify-Hosting: abgeleitete Domain existiert nicht
+  console.warn(`[backend] WEB_SURVEY_ORIGIN fehlt, Links der Kunden-API ohne base_url zeigen auf ${webSurveyOrigin}`);
+}
 const tenantSecretsPrefix = `gc-clients/${envSuffix}`;
 // Optionale Genesys-Region (Amplify-Hosting-Umgebungsvariable), Default liegt in shared/tenant_auth.ts.
 const genesysRegion = (process.env.GENESYS_REGION ?? "").trim();
@@ -526,6 +538,10 @@ invitationsLambda.addEnvironment(
   surveyDeletionJobsTable.tableName,
 );
 attachTenantAuth(invitationsLambda);
+// Kunden-API: Anmeldung über resolveApiClient, Links ohne base_url zeigen auf die Polly-Umfrageseite
+apiClientsTable.grantReadData(invitationsLambda);
+invitationsLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+invitationsLambda.addEnvironment("WEB_SURVEY_ORIGIN", webSurveyOrigin);
 
 const invitationsInteg = new integrations.HttpLambdaIntegration("InvitationsInteg", invitationsLambda);
 
@@ -537,6 +553,12 @@ httpApi.addRoutes({
 // Webvorschau des Stage-Stands (Token mit stage: true, 7 Tage gültig)
 httpApi.addRoutes({
   path: "/invitations/preview",
+  methods: [apigw.HttpMethod.POST],
+  integration: invitationsInteg,
+});
+
+const extInvitationsRoutes = httpApi.addRoutes({
+  path: "/ext/v1/invitations",
   methods: [apigw.HttpMethod.POST],
   integration: invitationsInteg,
 });
@@ -608,8 +630,11 @@ const reportingApiRoutes = httpApi.addRoutes({
   integration: reportingApiInteg,
 });
 
-// Drosselung der Kunden-API pro Route
+// Drosselung der Kunden-API pro Route, für alle Mandanten und Clients zusammen (keine Grenze pro Client).
+// Ein Client in einer Schleife kann damit andere ausbremsen; dokumentiert in polly_customer_api.md, Abschnitt 3.
 const REPORTING_API_THROTTLE = { rateLimit: 20, burstLimit: 40 };
+// Jeder Aufruf signiert bis zu 5000 Einladungen und ruft Genesys auf
+const EXT_INVITATIONS_THROTTLE = { rateLimit: 5, burstLimit: 10 };
 
 // Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
 const defaultStage = httpApi.defaultStage;
@@ -628,9 +653,13 @@ if (defaultStage) {
       ThrottlingRateLimit: REPORTING_API_THROTTLE.rateLimit,
       ThrottlingBurstLimit: REPORTING_API_THROTTLE.burstLimit,
     },
+    "POST /ext/v1/invitations": {
+      ThrottlingRateLimit: EXT_INVITATIONS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_INVITATIONS_THROTTLE.burstLimit,
+    },
   };
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
-  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes);
+  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes);
 }
 
 // Pflege der Web-Designs (lesen: jeder App-Nutzer, schreiben: Genesys-User mit polly_deploy)

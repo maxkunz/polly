@@ -1,31 +1,24 @@
 import { compareAnswerRecords, sessionToAnswerRecords } from "../shared/answer_records";
 import type { AnswerRecord } from "../shared/answer_records";
 import { resolveApiClient } from "../shared/api_client_auth";
+import { dispatchExtRoute, extError, extHeaders } from "../shared/ext_http";
+import type { ExtResult, ExtRoute } from "../shared/ext_http";
 import { iterateSessions, SessionReadAbortedError } from "../shared/survey_sessions";
 import { paginate } from "./pagination";
 import * as v1 from "./v1";
 
 type AnyApiGwEvent = any;
 type AnyLambdaContext = { getRemainingTimeInMillis: () => number };
-type AnyResult = { statusCode: number; headers: Record<string, string>; body: string };
+type AnyResult = ExtResult;
 
 // Die HTTP API bricht nach 30 s ab: vorher mit 413 im dokumentierten Fehlerformat antworten.
 // Reserve für Sortieren, Serialisieren und die letzte DynamoDB-Seite.
 const MIN_REMAINING_MS = 6000;
 
-const headers = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "*",
-  "Access-Control-Allow-Methods": "OPTIONS,GET",
-};
-
-function json(statusCode: number, body: unknown): AnyResult {
-  return { statusCode, headers, body: JSON.stringify(body) };
-}
+const headers = extHeaders("GET");
 
 function errorResponse(statusCode: number, error: string, message: string): AnyResult {
-  return json(statusCode, { error, message });
+  return extError(headers, statusCode, error, message);
 }
 
 async function data(event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> {
@@ -82,17 +75,9 @@ async function data(event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<A
 }
 
 /** Routing-Tabelle: eine neue Version braucht nur einen weiteren Eintrag. */
-export const routes: Record<string, (event: AnyApiGwEvent, context?: AnyLambdaContext) => Promise<AnyResult>> = {
+export const routes: Record<string, ExtRoute<AnyLambdaContext>> = {
   "GET /ext/v1/reporting/data": data,
 };
 
-export const handler = async (event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> => {
-  const route = routes[event?.routeKey ?? ""];
-  if (!route) return errorResponse(404, "not_found", "Route not found");
-  try {
-    return await route(event, context);
-  } catch (error) {
-    console.error("[reporting_api] Unhandled error", error);
-    return errorResponse(500, "internal_error", "Internal error");
-  }
-};
+export const handler = (event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> =>
+  dispatchExtRoute(routes, event, context, headers, "[reporting_api]");

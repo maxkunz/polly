@@ -21,7 +21,7 @@ In der App ist der Web-Kanal nur sichtbar, wenn das Feature Flag `web_survey` ak
 ## Änderungen im Editor
 
 * **Labels bei rating und nps:** Pro Frage gibt es ein optionales Label für den minimalen und den maximalen Wert (`min_label`, `max_label` in `options`, höchstens 100 Zeichen). Sie werden nicht vorgelesen und sind nur im Web (und in der Skalenvorschau des Editors) sichtbar.
-* **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}`.
+* **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}` und höchstens 200 Zeichen (`BASE_URL_MAX_CHARS`, hält die Antwort der Kunden-API bei 5000 Links unter dem Lambda-Limit). Die Kunden-API prüft den Wert serverseitig mit derselben Funktion (`baseUrlError`) und nimmt bei einem ungültigen Wert den Fallback.
 * **Sprache der Umfrage** (`language`): siehe oben. Neue Umfragen starten mit `de`.
 * **Design der Umfrage** (`web_theme_id`, optional): Auswahl „Standard des Mandanten“ (Feld fehlt) oder eines der Designs aus `GET /web-themes`. Ein inzwischen gelöschtes Design bleibt mit Hinweis sichtbar; die Seite zeigt dann das Standard-Design.
 
@@ -135,6 +135,8 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 | `409` | `no_prod` | Umfrage hat keinen Prod-Stand, ist gelöscht oder wird gerade gelöscht |
 | `429` | `genesys_error` | Genesys hat gedrosselt |
 | `502` | `no_credentials`, `genesys_error` | Keine Backend-Credentials des Mandanten oder Genesys-Fehler |
+
+**`POST /api/ext/v1/invitations`** (Kunden-API, Scope `invitations.write` statt Genesys-Bearer): erzeugt dieselben Einladungen mit fertigen Links, ohne Genesys-Login und ohne Rollenprüfung. Request, Antwort und Fehler: [polly_customer_api.md](polly_customer_api.md#6-api-2-einladungen). Die Signatur teilt sich die Lambda mit der App-Route (`signInvitations`).
 
 **`POST /api/invitations/preview`** (Genesys-Bearer, Lambda `invitations`)
 

@@ -35,11 +35,18 @@ export type ApiClientAuthError = {
   message: string;
 };
 
-export type ApiClientAuthResult = { ok: true; tenantId: string; clientId: string } | ApiClientAuthError;
+/** Eintrag des Mandanten in der TenantsTable (Status `APPROVED`). */
+export type ApprovedTenant = Record<string, any>;
+
+/** `tenant`: der bereits geladene Mandanteneintrag, z. B. für `loadTenantCredentials` ohne zweiten Lesezugriff. */
+export type ApiClientAuthResult =
+  | { ok: true; tenantId: string; clientId: string; tenant: ApprovedTenant }
+  | ApiClientAuthError;
 
 export type ApiClientAuthDeps = {
   loadApiClient: (clientId: string) => Promise<Pick<ApiClientItem, "tenantId" | "status"> | undefined>;
-  isTenantApproved: (tenantId: string) => Promise<boolean>;
+  /** Mandanteneintrag nur bei Status `APPROVED`, sonst `undefined`. */
+  loadApprovedTenant: (tenantId: string) => Promise<ApprovedTenant | undefined>;
 };
 
 function denied(statusCode: 401 | 403, error: ApiClientAuthError["error"], message: string): ApiClientAuthError {
@@ -66,12 +73,13 @@ export async function authorizeApiClient(
     return denied(403, "access_denied", "API client is not active");
   }
 
-  if (!(await deps.isTenantApproved(client.tenantId))) {
+  const tenant = await deps.loadApprovedTenant(client.tenantId);
+  if (!tenant) {
     console.warn("[api_client_auth] Tenant not approved", { clientId, tenantId: client.tenantId });
     return denied(403, "access_denied", "Tenant is not active");
   }
 
-  return { ok: true, tenantId: client.tenantId, clientId };
+  return { ok: true, tenantId: client.tenantId, clientId, tenant };
 }
 
 async function loadApiClient(clientId: string): Promise<ApiClientItem | undefined> {
@@ -83,10 +91,6 @@ async function loadApiClient(clientId: string): Promise<ApiClientItem | undefine
   return res.Item as ApiClientItem | undefined;
 }
 
-async function isTenantApproved(tenantId: string): Promise<boolean> {
-  // loadTenantByTenantId liefert nur Einträge mit Status APPROVED
-  return Boolean(await loadTenantByTenantId(tenantId));
-}
 
 /**
  * Meldet einen API-Client an und liefert seinen Mandanten. Konfigurations- und DynamoDB-Fehler werden
@@ -102,5 +106,6 @@ export async function resolveApiClient(event: any, requiredScope: ApiFullScope):
     return denied(401, "invalid_token", "Invalid or expired token");
   }
 
-  return authorizeApiClient(claims, requiredScope, { loadApiClient, isTenantApproved });
+  // loadTenantByTenantId liefert nur Einträge mit Status APPROVED
+  return authorizeApiClient(claims, requiredScope, { loadApiClient, loadApprovedTenant: loadTenantByTenantId });
 }

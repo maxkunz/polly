@@ -380,9 +380,13 @@ export type TenantCredentials = {
 
 /**
  * Lädt die hinterlegten Genesys-Backend-Credentials eines Mandanten (für Hintergrundjobs ohne User-Token).
+ * `tenantItem`: bereits geladener Eintrag aus `loadTenantByTenantId` (spart den zweiten Lesezugriff).
  */
-export async function loadTenantCredentials(tenantId: string): Promise<TenantCredentials | undefined> {
-  const item = await loadTenantByTenantId(tenantId);
+export async function loadTenantCredentials(
+  tenantId: string,
+  tenantItem?: Record<string, any>
+): Promise<TenantCredentials | undefined> {
+  const item = tenantItem ?? (await loadTenantByTenantId(tenantId));
   if (!item?.genesysSecretArn || item.status !== "APPROVED") return undefined;
 
   const secret = await loadGenesysSecret(item.genesysSecretArn);

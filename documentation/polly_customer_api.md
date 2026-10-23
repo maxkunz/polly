@@ -84,7 +84,7 @@ Diese Codes gelten für alle APIs. Die einzelnen APIs ergänzen eigene Codes in 
 | `403` | `insufficient_scope` | Das Token hat nicht den Scope, den die Route verlangt. |
 | `403` | `access_denied` | Der Zugang ist gesperrt bzw. gelöscht, oder die Polly-Installation ist nicht mehr aktiv. Ein noch gültiges Token hilft dann nicht. |
 | `404` | `not_found` | Unbekannte Route. Kann auch direkt vom API Gateway kommen, dann im Format `{ "message": "Not Found" }`. |
-| `429` | | Zu viele Anfragen. Später erneut versuchen, am besten mit wachsendem Abstand. Die Antwort kommt vom API Gateway und hat das Format `{ "message": "Too Many Requests" }`. |
+| `429` | | Zu viele Anfragen. Später erneut versuchen, am besten mit wachsendem Abstand. Die Antwort kommt vom API Gateway und hat das Format `{ "message": "Too Many Requests" }`. Die Grenze gilt pro Route für alle Aufrufer zusammen, nicht pro Zugang; ein `429` kann also auch ohne eigene hohe Last auftreten. |
 | `500` | `internal_error` | Interner Fehler. Bei wiederholtem Auftreten den Polly-Betrieb mit Uhrzeit und Route informieren. |
 
 ## 4. Versionierung
@@ -180,7 +180,68 @@ Die Datensätze sind nach `sessionStartedAt`, `responseId`, `answeredAt` und `qu
 
 ## 6. API 2: Einladungen
 
-Folgt.
+Erzeugt Einladungslinks für Web-Umfragen, so wie die App auf der Einladungs-Unterseite. Die Links lassen sich direkt an Teilnehmer verschicken.
+
+- **Scope:** `polly-api/invitations.write`
+- **`[API_URL]`:** `https://<app-domain>/api/ext/v1`
+
+### 6.1 `POST [API_URL]/invitations`
+
+**Request (JSON):**
+
+| Feld | Pflicht | Format | Hinweis |
+|---|---|---|---|
+| `survey_uuid` | ja | UUID der Umfrage | Die Umfrage braucht einen Prod-Stand. Groß- und Kleinschreibung egal. |
+| `amount` | ja | Ganzzahl von 1 bis 5000 | Anzahl der Links. |
+| `is_multi` | ja | Boolean | `true`: Der Link ist beliebig oft nutzbar. `false`: Genau eine Teilnahme pro Link. |
+| `expiration_date` | nein | `YYYY-MM-DD` | Der Link läuft am **Ende dieses Tages um 23:59:59 UTC** ab. Ein vergangener Tag ist ungültig, heute ist erlaubt. Ohne das Feld läuft der Link nie ab. |
+
+```bash
+curl -X POST "[API_URL]/invitations" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "survey_uuid": "123e4567-e89b-12d3-a456-426614174000", "amount": 100, "is_multi": false, "expiration_date": "2026-12-31" }'
+```
+
+**Antwort `200`:**
+
+```json
+{
+  "inviteUrls": [
+    {
+      "inviteToken": "eyJhbGciOiJIUzI1NiIs…",
+      "fullLink": "https://example.amplifyapp.com/s/eyJhbGciOiJIUzI1NiIs…",
+      "expiration_date": "2026-12-31",
+      "is_multi": false
+    }
+  ]
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `inviteToken` | Der signierte Token der Einladung. |
+| `fullLink` | Fertiger Link zur Umfrage. Hat die Umfrage in Polly eine gültige Basis-URL, zeigt er auf diese Seite (Platzhalter `{token}` wird ersetzt, sonst wird `token=<jwt>` angehängt). Sonst, auch bei einer ungültigen Basis-URL, zeigt er auf die Umfrageseite von Polly (`…/s/<token>`). |
+| `expiration_date` | Ablaufdatum (UTC) oder `null`, wenn die Einladung nicht abläuft. |
+| `is_multi` | Wie im Request. |
+
+Die Tokens werden bei Polly nicht gespeichert. Ein Link mit `is_multi: false` wird beim ersten Absenden der Umfrage verbraucht. Jeder Aufruf erzeugt neue Links, auch bei gleichem Request.
+
+**Antwortcodes:**
+
+| HTTP | `error` | Bedeutung |
+|---|---|---|
+| `200` | | Erfolg. |
+| `400` | `invalid_request` | Ungültiges oder fehlendes Feld (`message` nennt es), vergangenes Ablaufdatum. |
+| `401`, `403` | | siehe Abschnitt 3 |
+| `409` | `no_prod` | Die Umfrage hat keinen Prod-Stand, existiert nicht oder wird gerade gelöscht. |
+| `413` | `payload_too_large` | Der Request ist zu groß. |
+| `413` | `response_too_large` | Die Antwort wäre zu groß. Weniger Links pro Aufruf anfordern. |
+| `429` | `genesys_error` | Genesys drosselt gerade (oder Drosselung durch das API Gateway ohne `error`, siehe Abschnitt 3). Später erneut versuchen. |
+| `500` | `internal_error` | siehe Abschnitt 3 |
+| `502` | `genesys_error` | Die Umfrage konnte nicht geladen werden (Genesys nicht erreichbar oder Zugriff fehlt). |
+
+**Hinweis:** Die Route ist stark gedrosselt (jeder Aufruf kann bis zu 5000 Links erzeugen). Erzeugen Sie lieber einen größeren Stapel als viele kleine Aufrufe. Bei 5000 Links ist die Antwort etwa 4 bis 5 MB groß (je nach Länge der Basis-URL).
 
 ## 7. API 3: Umfragedetails
 

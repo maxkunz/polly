@@ -16,6 +16,10 @@ import type { AnswerRecord } from "../amplify/functions/shared/answer_records";
 import { paginate } from "../amplify/functions/reporting_api/pagination";
 import { buildV1DataResponse, MAX_LIMIT, parseV1DataParams, toV1Record } from "../amplify/functions/reporting_api/v1";
 import { handler as reportingHandler } from "../amplify/functions/reporting_api/handler";
+import { buildV1Response, parseV1InvitationRequest, toV1InviteUrl } from "../amplify/functions/invitations/ext_v1";
+import { handler as invitationsHandler } from "../amplify/functions/invitations/handler";
+import { createInvitationKey, signInvitation } from "../amplify/functions/shared/invitation_token";
+import { BASE_URL_MAX_CHARS, buildInvitationUrl, INVITATION_COUNT_MAX } from "../src/domain/survey/invitationLinks";
 
 let passed = 0;
 // Tests werden gesammelt und am Ende nacheinander ausgeführt (einige sind asynchron)
@@ -90,9 +94,9 @@ function fakeDeps(
 			calls.push(`client:${clientId}`);
 			return clients[clientId];
 		},
-		isTenantApproved: async (tenantId) => {
+		loadApprovedTenant: async (tenantId) => {
 			calls.push(`tenant:${tenantId}`);
-			return approvedTenants.includes(tenantId);
+			return approvedTenants.includes(tenantId) ? { tenantId, status: "APPROVED" } : undefined;
 		}
 	};
 }
@@ -106,7 +110,12 @@ test("authorizeApiClient liefert Mandant und Client bei passendem Scope", async 
 		"polly-api/surveys.read",
 		deps
 	);
-	assert.deepEqual(result, { ok: true, tenantId: "tenant-1", clientId: "client-1" });
+	assert.deepEqual(result, {
+		ok: true,
+		tenantId: "tenant-1",
+		clientId: "client-1",
+		tenant: { tenantId: "tenant-1", status: "APPROVED" }
+	});
 });
 
 test("authorizeApiClient: fehlender Scope ergibt 403 ohne Tabellenzugriff", async () => {
@@ -379,6 +388,155 @@ test("Reporting-Handler: ohne Token ergibt 401", async () => {
 	const result = await reportingHandler({ routeKey: "GET /ext/v1/reporting/data", headers: {} });
 	assert.equal(result.statusCode, 401);
 	assert.equal(JSON.parse(result.body).error, "invalid_token");
+});
+
+// ---------------------------------------------------------------------------
+// Einladungen (M4)
+// ---------------------------------------------------------------------------
+
+const INVITE_SURVEY_ID = "123e4567-e89b-42d3-a456-426614174000";
+// 2026-10-23T12:00:00Z
+const INVITE_NOW = Date.UTC(2026, 9, 23, 12, 0, 0) / 1000;
+
+function inviteBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return { survey_uuid: INVITE_SURVEY_ID, amount: 100, is_multi: false, expiration_date: "2026-12-31", ...overrides };
+}
+
+test("Einladungs-Request: gültiger Body wird auf InvitationRequest abgebildet, Ablauf = Tagesende UTC", () => {
+	const result = parseV1InvitationRequest(inviteBody(), INVITE_NOW);
+	assert.ok(result.ok);
+	assert.deepEqual(result.request, {
+		surveyId: INVITE_SURVEY_ID,
+		count: 100,
+		multi: false,
+		exp: Date.UTC(2026, 11, 31, 23, 59, 59) / 1000
+	});
+});
+
+test("Einladungs-Request: survey_uuid in Großbuchstaben wird kleingeschrieben", () => {
+	const result = parseV1InvitationRequest(inviteBody({ survey_uuid: INVITE_SURVEY_ID.toUpperCase() }), INVITE_NOW);
+	assert.ok(result.ok);
+	assert.equal(result.request.surveyId, INVITE_SURVEY_ID);
+});
+
+test("Einladungs-Request: Meldungen nennen die v1-Feldnamen", () => {
+	const cases: Array<[Record<string, unknown>, string]> = [
+		[{ survey_uuid: "nope" }, "survey_uuid"],
+		[{ amount: 0 }, "amount"],
+		[{ is_multi: "true" }, "is_multi"],
+		[{ expiration_date: "2026-10-22" }, "expiration_date"],
+		[{ expiration_date: "31.12.2026" }, "expiration_date"]
+	];
+	for (const [overrides, field] of cases) {
+		const result = parseV1InvitationRequest(inviteBody(overrides), INVITE_NOW);
+		assert.ok(!result.ok && result.message.startsWith(`${field} `), JSON.stringify(overrides));
+	}
+});
+
+test("Einladungs-Request: ohne expiration_date kein exp, auch bei null", () => {
+	for (const body of [inviteBody({ expiration_date: undefined }), inviteBody({ expiration_date: null })]) {
+		const result = parseV1InvitationRequest(body, INVITE_NOW);
+		assert.ok(result.ok);
+		assert.deepEqual(result.request, { surveyId: INVITE_SURVEY_ID, count: 100, multi: false });
+	}
+});
+
+test("Einladungs-Request: Pflichtfelder und Typen", () => {
+	for (const body of [null, [], "x", 1]) assert.equal(parseV1InvitationRequest(body, INVITE_NOW).ok, false);
+	assert.equal(parseV1InvitationRequest(inviteBody({ survey_uuid: undefined }), INVITE_NOW).ok, false);
+	assert.equal(parseV1InvitationRequest(inviteBody({ survey_uuid: "nope" }), INVITE_NOW).ok, false);
+	assert.equal(parseV1InvitationRequest(inviteBody({ amount: undefined }), INVITE_NOW).ok, false);
+	assert.equal(parseV1InvitationRequest(inviteBody({ is_multi: undefined }), INVITE_NOW).ok, false);
+	assert.equal(parseV1InvitationRequest(inviteBody({ is_multi: "true" }), INVITE_NOW).ok, false);
+});
+
+test("Einladungs-Request: amount nur ganzzahlig von 1 bis 5000", () => {
+	for (const amount of [0, -1, 5001, 1.5, "10", null, Number.NaN]) {
+		assert.equal(parseV1InvitationRequest(inviteBody({ amount }), INVITE_NOW).ok, false, String(amount));
+	}
+	for (const amount of [1, INVITATION_COUNT_MAX]) {
+		assert.equal(parseV1InvitationRequest(inviteBody({ amount }), INVITE_NOW).ok, true, String(amount));
+	}
+});
+
+test("Einladungs-Request: Datumsformat, vergangener Tag, heute", () => {
+	for (const expiration_date of ["2026-12-31T00:00:00", "31.12.2026", "2026-1-5", "2026-02-31", "2026-13-01", 20261231, ""]) {
+		assert.equal(parseV1InvitationRequest(inviteBody({ expiration_date }), INVITE_NOW).ok, false, String(expiration_date));
+	}
+	const past = parseV1InvitationRequest(inviteBody({ expiration_date: "2026-10-22" }), INVITE_NOW);
+	assert.equal(past.ok, false);
+	const today = parseV1InvitationRequest(inviteBody({ expiration_date: "2026-10-23" }), INVITE_NOW);
+	assert.ok(today.ok);
+	assert.equal(today.request.exp, Date.UTC(2026, 9, 23, 23, 59, 59) / 1000);
+});
+
+test("Linkaufbau für fullLink: {token}, ?/&token=, Fallback /s/<jwt>", () => {
+	const origin = "https://main.abc.amplifyapp.com/";
+	assert.equal(buildInvitationUrl("https://kunde.de/p/{token}/x", "J", origin), "https://kunde.de/p/J/x");
+	assert.equal(buildInvitationUrl("https://kunde.de/p", "J", origin), "https://kunde.de/p?token=J");
+	assert.equal(buildInvitationUrl("https://kunde.de/p?a=1", "J", origin), "https://kunde.de/p?a=1&token=J");
+	assert.equal(buildInvitationUrl(undefined, "J", origin), "https://main.abc.amplifyapp.com/s/J");
+	assert.equal(buildInvitationUrl("  ", "J", origin), "https://main.abc.amplifyapp.com/s/J");
+});
+
+test("toV1InviteUrl gibt feste Felder aus, interne Zusatzfelder erscheinen nicht", () => {
+	const exp = Date.UTC(2026, 11, 31, 23, 59, 59) / 1000;
+	const item = toV1InviteUrl({ jwt: "J", fullLink: "https://x/s/J", exp, multi: true, secret: "intern" } as any);
+	assert.deepEqual(item, { inviteToken: "J", fullLink: "https://x/s/J", expiration_date: "2026-12-31", is_multi: true });
+	assert.deepEqual(Object.keys(item), ["inviteToken", "fullLink", "expiration_date", "is_multi"]);
+	assert.equal(toV1InviteUrl({ jwt: "J", fullLink: "L", multi: false }).expiration_date, null);
+	assert.deepEqual(Object.keys(buildV1Response([item])), ["inviteUrls"]);
+});
+
+test("Antwortgröße bei 5000 Einträgen bleibt unter dem Limit von 6 MB", () => {
+	const key = createInvitationKey("k".repeat(64));
+	const exp = Date.UTC(2026, 11, 31, 23, 59, 59) / 1000;
+	const inviteUrls = Array.from({ length: INVITATION_COUNT_MAX }, (_, i) => {
+		const jwt = signInvitation(
+			{ tenant_id: "t".repeat(36), survey_id: INVITE_SURVEY_ID, token_id: `${INVITE_SURVEY_ID}`, multi: i % 2 === 0, iat: INVITE_NOW, exp },
+			key,
+			INVITE_NOW
+		);
+		// längste zulässige Basis-URL: Token steht zweimal in der Antwort (inviteToken und fullLink)
+		const baseUrl = "https://kunde.example.com/" + "u".repeat(BASE_URL_MAX_CHARS - 26);
+		return toV1InviteUrl({ jwt, fullLink: buildInvitationUrl(baseUrl, jwt, ""), exp, multi: i % 2 === 0 });
+	});
+	const bytes = Buffer.byteLength(JSON.stringify(buildV1Response(inviteUrls)), "utf8");
+	assert.ok(bytes < 5.5 * 1024 * 1024, `Antwort hat ${bytes} Bytes`);
+});
+
+test("Einladungs-Handler: unbekannte Kunden-Routen ergeben 404 im Fehlerformat", async () => {
+	for (const routeKey of ["POST /ext/v2/invitations", "GET /ext/v1/invitations"]) {
+		const result = await invitationsHandler({ routeKey });
+		assert.equal(result.statusCode, 404);
+		assert.equal(JSON.parse(result.body).error, "not_found");
+	}
+});
+
+test("Einladungs-Handler: Kunden-Routen nur über routeKey, nicht über den Pfad", async () => {
+	const result = await invitationsHandler({
+		routeKey: "$default",
+		requestContext: { http: { method: "POST", path: "/ext/v1/invitations" } },
+		headers: {}
+	});
+	assert.equal(result.statusCode, 404);
+	assert.equal(JSON.parse(result.body).error, undefined);
+});
+
+test("Einladungs-Handler: Kunden-Route ohne Token ergibt 401", async () => {
+	const result = await invitationsHandler({ routeKey: "POST /ext/v1/invitations", headers: {} });
+	assert.equal(result.statusCode, 401);
+	assert.equal(JSON.parse(result.body).error, "invalid_token");
+});
+
+test("Einladungs-Handler: App-Routen bleiben unverändert (ohne Token 401 unauthorized)", async () => {
+	const result = await invitationsHandler({
+		routeKey: "POST /invitations",
+		requestContext: { http: { method: "POST", path: "/invitations" } },
+		headers: {}
+	});
+	assert.equal(result.statusCode, 401);
+	assert.equal(JSON.parse(result.body).code, "unauthorized");
 });
 
 async function main(): Promise<void> {
