@@ -87,10 +87,10 @@ const themeCache = new Map<string, { expiresAt: number; themes: WebTheme[] }>();
  * Designs des Mandanten (gecacht). Fehler sind nicht fatal: Die Seite erscheint dann im eingebauten Design.
  * Läuft per `Promise.all` parallel zum Laden des Prod-Stands, weil nur `tenantId` gebraucht wird.
  */
-async function loadTenantThemesCached(tenantId: string): Promise<WebTheme[]> {
+async function loadTenantThemesCached(tenantId: string, fresh = false): Promise<WebTheme[]> {
   if (!WEB_THEMES_TABLE_NAME) return [];
   const cached = themeCache.get(tenantId);
-  if (cached && cached.expiresAt > Date.now()) return cached.themes;
+  if (!fresh && cached && cached.expiresAt > Date.now()) return cached.themes;
 
   try {
     const items = await queryWebThemeItems(WEB_THEMES_TABLE_NAME, tenantId);
@@ -240,9 +240,11 @@ async function getWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
   }
   if (check.status !== "ok") return invitationErrorResponse(check, false);
 
+  // Webvorschau liest ohne Cache, damit ein neuer Stand und geänderte Designs sofort sichtbar sind
+  const fresh = check.claims.stage === true;
   const [prod, themes] = await Promise.all([
-    loadProd(check.claims, check.credentials, false),
-    loadTenantThemesCached(check.claims.tenant_id),
+    loadProd(check.claims, check.credentials, fresh),
+    loadTenantThemesCached(check.claims.tenant_id, fresh),
   ]);
   if (prod.status !== "ok") return prodErrorResponse(prod, check.claims, false, pickTheme(themes));
 

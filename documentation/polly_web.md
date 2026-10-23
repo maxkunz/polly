@@ -152,7 +152,7 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
   * `{ "status": "invalid" | "expired" | "used" | "unavailable" }`
   * Zusätzlich optional `"theme": { … }` (bereinigte Tokens, siehe „Designs“): bei `ok` und `used` das Design der Umfrage (bei `used` aus dem gecachten Prod-Stand; ist er nicht ladbar, das Standard-Design), bei `unavailable` das Standard-Design des Mandanten. So erscheinen auch diese Meldungen im iframe im CI. `invalid`/`expired` haben kein Design. Fehlt ein passendes Design, fehlt das Feld.
 * Weitere Antworten: `429 { "status": "throttled" }` (Drosselung der API oder von Genesys), `502 { "status": "error" }` (Genesys nicht erreichbar).
-* **Webvorschau** (`stage` im Token): Statt Prod wird die Spalte `Stage` gelesen, die Antwort `ok` enthält zusätzlich `"preview": true`; `unavailable` bedeutet dann „kein Stage-Stand“. Das Design kommt aus dem Stage-Stand.
+* **Webvorschau** (`stage` im Token): Statt Prod wird die Spalte `Stage` gelesen, die Antwort `ok` enthält zusätzlich `"preview": true`; `unavailable` bedeutet dann „kein Stage-Stand“. Das Design kommt aus dem Stage-Stand. Die Lambda liest Stage-Stand und Designs bei jedem GET ohne Cache (bei echten Links gilt der Cache von 30 s), damit ein neuer Stand sofort sichtbar ist.
 * Der Prod-Stand wird pro Lambda-Container **30 Sekunden** zwischengespeichert (Stage getrennt davon ebenso), damit große Kampagnen das Genesys-Rate-Limit des Mandanten nicht ausschöpfen. Ein neuer Prod-Deploy ist deshalb beim Laden der Seite spätestens nach 30 s sichtbar; beim Absenden wird immer frisch gelesen.
 
 **`POST /api/web-survey/submit`** (öffentlich)
