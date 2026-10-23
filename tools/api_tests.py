@@ -27,9 +27,11 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
 Optionen (jeweils auch per gleichnamiger Umgebungsvariable in Großbuchstaben):
   --survey-id             Umfrage für die Antworttests, muss in der Data Table DIESER Installation
                           existieren, sonst liefern [1]–[5] 404
-  --survey-name           Name der Umfrage (Default mini_1718e427)
-  --survey-version        Version der Umfrage (Default 5)
-  --datatable-id          Data Table der Umfragen; ohne sie entfallen die Lösch-Tests [D1]–[D4]
+  --survey-name           Name der Umfrage (Default mini_1718e427; mit --datatable-id aus Prod gelesen)
+  --survey-version        Version der Umfrage (Default 5; mit --datatable-id aus Prod gelesen)
+  --datatable-id          Data Table der Umfragen: Name, Version und Fragen der Antworttests kommen aus der
+                          Spalte Prod von survey_<id> (Fehler [S2], wenn nicht deployt); ohne sie gelten die
+                          festen Fragen von mini_1718e427, und die Lösch-Tests [D1]–[D4] entfallen
   --existing-survey-id    Umfrage, die in dieser Data Table existiert ([D1], erwartet 409)
   --preview-survey-id     Umfrage mit Stage-Stand für die Webvorschau (Default: --survey-id)
   --web-token             vorhandene Einladung (JWT) für [W6]/[W7]; ohne sie wird über POST /invitations
@@ -341,6 +343,64 @@ def tests_web_expired(suite: Suite, api: PollyApi, token: str, exp: int) -> None
                403, json_field("status", "expired"))
 
 
+DEFAULT_QUESTIONS = [
+    ("ja_oder_nein_46d4db2f", "yes_no", False),
+    ("nps_ce9b05b7", "nps", 9),
+    ("bewertung_3557a5bf", "rating", 5),
+    ("auswahl_frucht_58bd0bde", "choice", "Äpfel"),
+    ("kommentar_e80f5583", "comment", "Wartezeit war etwas lang, aber der Support sehr freundlich."),
+]
+
+
+def sample_answer(question: dict) -> Any:
+    """Gültiger Beispielwert zu einer Frage aus dem Prod-Flow-JSON."""
+    qtype = question.get("type")
+    if qtype == "yes_no":
+        return False
+    if qtype == "nps":
+        return 9
+    if qtype == "rating":
+        values = (question.get("options") or {}).get("values") or []
+        return values[-1] if values else 1
+    if qtype == "choice":
+        labels = question.get("labels") or []
+        return labels[0] if labels else ""
+    return "Testantwort aus api_tests.py"
+
+
+def load_prod_questions(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
+    """Liest Name, Version und Fragen aus der Spalte Prod der Umfragezeile (Genesys) in cfg.
+
+    Ohne --datatable-id bleiben die festen Vorgaben (mini_1718e427); mit ihr ist ein fehlender
+    Prod-Stand ein Fehler, und die Antworttests verwenden die echten Fragen der Umfrage."""
+    cfg.questions = DEFAULT_QUESTIONS
+    suite.section("Umfrage: Prod-Stand aus der Data Table")
+    if not cfg.datatable_id:
+        suite.skip("[S1]", "DATATABLE_ID nicht gesetzt, feste Fragen von --survey-name")
+        return
+    genesys = HttpClient(f"https://api.{cfg.region}", api.ssl_context)
+    res = suite.case("[S1] Zeile survey_<id> aus der Data Table lesen",
+                     lambda: genesys.request("GET", f"/api/v2/flows/datatables/{cfg.datatable_id}/rows/"
+                                             f"survey_{cfg.survey_id}", params={"showbrief": "false"},
+                                             headers={"Authorization": f"Bearer {cfg.token}"}),
+                     200)
+    row = res.json() if res is not None and res.status == 200 else None
+    try:
+        prod = json.loads(row.get("Prod") or "") if isinstance(row, dict) else None
+    except ValueError:
+        prod = None
+    questions = prod.get("questions") if isinstance(prod, dict) else None
+    suite.case("[S2] Prod-Stand vorhanden und nicht leer (sonst nicht deployt)",
+               lambda: Response(200 if questions else 404, {}, ""), 200)
+    if not questions:
+        return
+    cfg.survey_name = prod.get("name", cfg.survey_name)
+    cfg.survey_version = prod.get("version", cfg.survey_version)
+    cfg.questions = [(q["name"], q["type"], sample_answer(q)) for q in questions
+                     if isinstance(q, dict) and q.get("name") and q.get("type")]
+    print(f"Umfrage {cfg.survey_name} Version {cfg.survey_version}, {len(cfg.questions)} Fragen")
+
+
 def tests_survey_responses(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     suite.section("Antworten: POST /survey-responses")
 
@@ -357,13 +417,10 @@ def tests_survey_responses(suite: Suite, api: PollyApi, cfg: argparse.Namespace,
         }
         return lambda: api.genesys("POST", "/survey-responses", body=body)
 
-    suite.case("[1] POST /survey-responses – yes_no Antwort", answer("ja_oder_nein_46d4db2f", "yes_no", False, False))
-    suite.case("[2] POST /survey-responses – nps Antwort", answer("nps_ce9b05b7", "nps", 9, False))
-    suite.case("[3] POST /survey-responses – rating Antwort", answer("bewertung_3557a5bf", "rating", 5, False))
-    suite.case("[4] POST /survey-responses – choice Antwort", answer("auswahl_frucht_58bd0bde", "choice", "Äpfel", False))
-    suite.case("[5] POST /survey-responses – comment Antwort, Session abschließen",
-               answer("kommentar_e80f5583", "comment",
-                      "Wartezeit war etwas lang, aber der Support sehr freundlich.", True))
+    for number, (name, qtype, value) in enumerate(cfg.questions, start=1):
+        last = number == len(cfg.questions)
+        suite.case(f"[{number}] POST /survey-responses – {qtype} Antwort" + (", Session abschließen" if last else ""),
+                   answer(name, qtype, value, last))
 
     suite.section("Auswertung")
     suite.case("[7] GET /survey-responses/session",
@@ -412,7 +469,8 @@ def tests_survey_responses(suite: Suite, api: PollyApi, cfg: argparse.Namespace,
 
 def tests_survey_responses_errors(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     suite.section("Fehlerfälle: POST /survey-responses")
-    nps = {"surveyId": cfg.survey_id, "questionName": "nps_ce9b05b7", "questionType": "nps", "value": 5}
+    first_name, first_type, first_value = cfg.questions[0]
+    nps = {"surveyId": cfg.survey_id, "questionName": first_name, "questionType": first_type, "value": first_value}
     unknown_survey_id = str(uuid.uuid4())
 
     suite.case("[13] fehlende conversationId (400)",
@@ -756,6 +814,7 @@ def main() -> int:
         suite.summary()
         return 1
 
+    load_prod_questions(suite, api, cfg)
     prepare_invitations(suite, api, cfg)
     tests_web_invitation(suite, api, cfg.web_token)
     tests_survey_responses(suite, api, cfg, conversation_id)
