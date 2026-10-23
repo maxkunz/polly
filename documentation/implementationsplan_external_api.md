@@ -16,14 +16,14 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [x] `test/surveyResponsesExport.test.ts` ist unverändert grün, die CSV-Ausgabe hat sich nicht geändert.
   - Kein Deploy nötig.
 
-- [ ] **M2 Basis: API-Clients, Scopes, Anmeldung, Admin-Routen** (siehe „Gemeinsame Basis“)
-  - [ ] `backend.ts`: `ApiClientsTable` mit GSI `byTenantId` und `PollyApiResourceServer` (`polly-api`) mit allen drei Scopes.
-  - [ ] `amplify/functions/shared/api_client_auth.ts` mit `resolveApiClient(event, requiredScope)`.
-  - [ ] Admin-Routen `/onboarding/api-clients/{create,list,delete}` in der `onboarding`-Lambda, dazu die Rechte und Umgebungsvariablen in `backend.ts`.
-  - [ ] `deleteTenantRoute`/`wipeAllRoute` räumen die API-Clients des Mandanten mit ab.
-  - [ ] `test/customerApi.test.ts` anlegen (Prüfung der Scopes) und ins `test`-Script aufnehmen.
-  - [ ] Doku: `documentation/polly_customer_api.md` anlegen mit Abschnitt Anmeldung, Token-Abruf und Versionierung. `documentation/betrieb_api_zugaenge.md` anlegen (siehe „Doku für das Betriebsteam“).
-  - [ ] `CLAUDE.md`: Kunden-API, `ApiClientsTable`, Verweis auf diesen Plan und die neue Testdatei.
+- [x] **M2 Basis: API-Clients, Scopes, Anmeldung, Admin-Routen** (siehe „Gemeinsame Basis“) (erledigt 2026-10-23)
+  - [x] `backend.ts`: `ApiClientsTable` mit GSI `byTenantId` und `PollyApiResourceServer` (`polly-api`) mit allen drei Scopes.
+  - [x] `amplify/functions/shared/api_client_auth.ts` mit `resolveApiClient(event, requiredScope)`.
+  - [x] Admin-Routen `/onboarding/api-clients/{create,list,delete}` in der `onboarding`-Lambda, dazu die Rechte und Umgebungsvariablen in `backend.ts`.
+  - [x] `deleteTenantRoute`/`wipeAllRoute` räumen die API-Clients des Mandanten mit ab.
+  - [x] `test/customerApi.test.ts` anlegen (Prüfung der Scopes) und ins `test`-Script aufnehmen.
+  - [x] Doku: `documentation/polly_customer_api.md` anlegen mit Abschnitt Anmeldung, Token-Abruf und Versionierung. `documentation/betrieb_api_zugaenge.md` anlegen (siehe „Doku für das Betriebsteam“).
+  - [x] `CLAUDE.md`: Kunden-API, `ApiClientsTable`, Verweis auf diesen Plan und die neue Testdatei.
   - Testbar nach dem Deploy: Client per Admin-Route anlegen, Token an der `tokenUrl` holen. Der Client wird von bestehenden Routen wie `/survey-responses/aggregates` abgelehnt.
 
 - [ ] **M3 API 1: Reporting `GET /ext/v1/reporting/data`** (siehe „API 1“)
@@ -61,10 +61,16 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 
 ### M1
 - `ExportSession` hat zusätzlich `surveyId` und `startedAt`; `sessionToAnswerRecords` liefert schon den vollständigen `AnswerRecord` (inkl. `conversationId` = `responseId` bei Kanal `flow`, sonst `null`), damit M3 nichts mehr umbauen muss.
-- `iterateSessions` nimmt den Typ `SessionQueryParams` (in `survey_sessions.ts`); `PAGE_SIZE` ist dort eigene Konstante, der Export-Handler behält seine für die Vorschau.
+- `iterateSessions` nimmt den Typ `SessionQueryParams` (in `survey_sessions.ts`); Seitengröße `SESSION_PAGE_SIZE` und DynamoDB-Client kommen von dort, der Export-Handler nutzt beide auch für die Vorschau.
 
 ### M2
-- noch keine
+- Resource-Server-Kennung und Scopes stehen als Konstanten in `amplify/functions/shared/api_scopes.ts` (rein, ohne AWS-SDK). `backend.ts` legt den Resource Server daraus an, `onboarding` und `api_client_auth.ts` nutzen dieselben Werte. Die Umgebungsvariable `API_RESOURCE_SERVER` entfällt, so können Resource Server und Prüfung nicht auseinanderlaufen.
+- `resolveApiClient(event, requiredScope)` erwartet den vollen Scope (Typ `ApiFullScope`, z. B. `"polly-api/reporting.read"`) und liefert `{ ok: true, tenantId, clientId }` oder `{ ok: false, statusCode: 401 | 403, error, message }`. Die Schritte 2–4 liegen in `authorizeApiClient(claims, scope, deps)` mit austauschbaren Datenzugriffen; die Tests prüfen damit auch die Reihenfolge der Prüfungen, nicht nur die Scopes.
+- Fehlerformat der Kunden-API festgelegt: `{ error, message }` mit den Codes `invalid_token` (401), `insufficient_scope` / `access_denied` (403), `not_found` (404) und `internal_error` (500), siehe `polly_customer_api.md`. M3–M5 verwenden es ebenso (z. B. `no_prod` bei M4).
+- `create`: `label` ist Pflicht (max. 100 Zeichen); die Antwort enthält zusätzlich `tenantId` und `label`; Mandant nicht `APPROVED` ergibt `409`. Scheitert der Tabelleneintrag, wird der Cognito-Client wieder gelöscht.
+- `delete` löscht nur Clients, die in `ApiClientsTable` stehen (`404` sonst), damit keine `backendClientId` der Data Action versehentlich gelöscht wird. Ablauf in drei wiederholbaren Schritten: Status `DELETING` (sperrt sofort) → Cognito-Client → Eintrag.
+- `deleteTenantRoute` bricht bei einem Fehler beim Aufräumen der API-Clients nicht ab (der Mandant ist dann schon gelöscht, die Clients damit gesperrt) und meldet `deletedApiClients`, `failedApiClientIds` bzw. `apiClientsError`; ein fehlgeschlagener Client hält die übrigen nicht auf. Ob noch ein Eintrag mit der `tenantId` übrig ist, prüft der GSI `byTenantId` ohne die gerade gelöschten Einträge (GSI-Lesen ist nur eventually consistent). `wipeAllRoute` räumt nach dem Scan auf. `loadApiClient` liest mit `ConsistentRead`, damit Sperren sofort wirkt. Hinweis: `/onboarding/wipeAll` hat wie bisher keine Route in `backend.ts`.
+- Test „Routing-Tabelle, unbekannte Routen ergeben 404“ kommt mit M3, weil es in M2 noch keinen `/ext`-Handler gibt.
 
 ### M3
 - noch keine

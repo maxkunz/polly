@@ -9,6 +9,7 @@ import {
   GetCommand,
   DeleteCommand,
   ScanCommand,
+  QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 
 import {
@@ -25,7 +26,9 @@ import {
   CreateUserPoolClientCommand,
   DeleteUserPoolClientCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { resolveTenantContext } from "../shared/tenant_auth";
+import { loadTenantByTenantId, resolveTenantContext } from "../shared/tenant_auth";
+import type { ApiClientItem } from "../shared/api_client_auth";
+import { parseRequestedScopes, scopeString, toFullScope } from "../shared/api_scopes";
 
 import { isGenesysRegion, normalizeGenesysRegion } from "../shared/genesys_regions";
 
@@ -35,6 +38,11 @@ const RESOURCE_SERVER_IDENTIFIER = process.env.RESOURCE_SERVER_IDENTIFIER!; // e
 const CLIENT_SCOPE = process.env.CLIENT_SCOPE!; // e.g. "invoke"
 const SECRETS_PREFIX = process.env.SECRETS_PREFIX ?? "gc-clients"; // name prefix only
 const TOKEN_URL = process.env.TOKEN_URL ?? "";
+// API-Clients der Kunden-API (/ext/v1); fehlt die Variable, antworten nur die api-clients-Routen mit 500
+const API_CLIENTS_TABLE_NAME = process.env.API_CLIENTS_TABLE_NAME ?? "";
+const API_CLIENT_TOKEN_VALIDITY_MINUTES = 60;
+const API_CLIENT_LABEL_MAX_CHARS = 100;
+const COGNITO_CLIENT_NAME_MAX_CHARS = 128;
 
 // Optional: protect destructive endpoints (HIGHLY recommended)
 // Set this env var to a random value (and provide it as header x-admin-token)
@@ -185,6 +193,22 @@ type WipeAllBody = {
   forceDeleteSecrets?: boolean;
 };
 
+type CreateApiClientBody = {
+  tenantId: string;
+  // Freitext für das Betriebsteam, z. B. "CMS Kunde X"
+  label: string;
+  // ohne Präfix polly-api/, z. B. ["reporting.read"]
+  scopes: string[];
+};
+
+type ListApiClientsBody = {
+  tenantId: string;
+};
+
+type DeleteApiClientBody = {
+  clientId: string;
+};
+
 type RouteHandler = (event: AnyApiGwEvent) => Promise<AnyResult>;
 type RouteKey = `${string} ${string}`;
 
@@ -197,6 +221,11 @@ const routes: Record<RouteKey, RouteHandler> = {
   // Destructive endpoints (ADMIN_TOKEN required)
   "POST /onboarding/delete": deleteTenantRoute,
   "POST /onboarding/wipeAll": wipeAllRoute,
+
+  // API-Clients der Kunden-API (ADMIN_TOKEN required)
+  "POST /onboarding/api-clients/create": createApiClientRoute,
+  "POST /onboarding/api-clients/list": listApiClientsRoute,
+  "POST /onboarding/api-clients/delete": deleteApiClientRoute,
 };
 
 export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
@@ -606,11 +635,29 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
 
   console.log("Deleted tenant record", { backendClientId, tenantId });
 
+  // 4) API-Clients der Kunden-API, falls keine weitere Installation mit dieser tenantId übrig ist.
+  // Ein Fehler bricht nicht ab: Der Mandant ist schon gelöscht, die Clients sind damit ohnehin gesperrt.
+  let deletedApiClients = 0;
+  let failedApiClientIds: string[] = [];
+  let apiClientsError: string | null = null;
+  try {
+    const cleanup = await deleteApiClientsOfRemovedTenant(tenantId, new Set([backendClientId]));
+    deletedApiClients = cleanup.deleted;
+    failedApiClientIds = cleanup.failedClientIds;
+    if (failedApiClientIds.length) apiClientsError = "Some API clients could not be deleted";
+  } catch (e: any) {
+    console.warn("Failed to delete API clients of tenant", { tenantId, errorName: e?.name, message: e?.message });
+    apiClientsError = e?.message ?? String(e);
+  }
+
   return json(200, {
     message: "Tenant deleted",
     backendClientId,
     tenantId,
     deletedSecretArn: secretArn ?? null,
+    deletedApiClients,
+    failedApiClientIds,
+    apiClientsError,
   });
 }
 
@@ -638,6 +685,8 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
 
   let deletedCount = 0;
   let lastEvaluatedKey: Record<string, any> | undefined = undefined;
+  const wipedTenantIds = new Set<string>();
+  const wipedBackendClientIds = new Set<string>();
 
   do {
     const page = await ddb.send(
@@ -708,6 +757,8 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
           })
         );
         deletedCount += 1;
+        wipedBackendClientIds.add(backendClientId);
+        if (tenantId) wipedTenantIds.add(tenantId);
       } catch (e: any) {
         console.warn("Failed to delete DynamoDB item (continuing)", {
           backendClientId,
@@ -720,11 +771,282 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     lastEvaluatedKey = page.LastEvaluatedKey as any;
   } while (lastEvaluatedKey);
 
-  console.warn("WIPING ALL TENANTS - DONE", { deletedCount });
+  // API-Clients erst nach dem Scan löschen: Erst dann steht fest, welche tenantIds ganz verschwunden sind
+  let deletedApiClients = 0;
+  const failedApiClientIds: string[] = [];
+  for (const tenantId of wipedTenantIds) {
+    try {
+      const cleanup = await deleteApiClientsOfRemovedTenant(tenantId, wipedBackendClientIds);
+      deletedApiClients += cleanup.deleted;
+      failedApiClientIds.push(...cleanup.failedClientIds);
+    } catch (e: any) {
+      console.warn("Failed to delete API clients (continuing)", {
+        tenantId,
+        errorName: e?.name,
+        message: e?.message,
+      });
+    }
+  }
+
+  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds });
 
   return json(200, {
     message: "All tenants wiped",
     deletedCount,
+    deletedApiClients,
+    failedApiClientIds,
     forceDeleteSecrets,
   });
+}
+
+// ---------------------------------------------------------------------------
+// API-Clients der Kunden-API (/ext/v1). Anleitung: documentation/betrieb_api_zugaenge.md
+// ---------------------------------------------------------------------------
+
+function apiClientsTableMissing(): AnyResult | null {
+  if (API_CLIENTS_TABLE_NAME) return null;
+  console.error("API_CLIENTS_TABLE_NAME not configured");
+  return json(500, { message: "API_CLIENTS_TABLE_NAME not configured" });
+}
+
+/**
+ * Legt einen Cognito-Client (Client Credentials) mit den gewünschten Scopes und den Eintrag in
+ * ApiClientsTable an. Das Secret steht nur in dieser Antwort und wird nirgends gespeichert.
+ */
+async function createApiClientRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const authErr = await requireAdmin(event);
+  if (authErr) return authErr;
+  const configErr = apiClientsTableMissing();
+  if (configErr) return configErr;
+
+  const body = safeParse<CreateApiClientBody>(event.body);
+  const tenantId = typeof body?.tenantId === "string" ? body.tenantId.trim() : "";
+  if (!tenantId) return json(400, { message: "tenantId is required" });
+  const label = typeof body?.label === "string" ? body.label.trim() : "";
+  if (!label || label.length > API_CLIENT_LABEL_MAX_CHARS) {
+    return json(400, { message: `label is required (max. ${API_CLIENT_LABEL_MAX_CHARS} characters)` });
+  }
+  const requested = parseRequestedScopes(body?.scopes);
+  if (!requested.ok) return json(400, { message: requested.error });
+  const scopes = requested.scopes;
+
+  if (!(await loadTenantByTenantId(tenantId))) {
+    return json(409, { message: "Tenant not found or not APPROVED" });
+  }
+
+  const created = await cognito.send(
+    new CreateUserPoolClientCommand({
+      UserPoolId: USER_POOL_ID,
+      ClientName: `polly-api-${tenantId}`.slice(0, COGNITO_CLIENT_NAME_MAX_CHARS),
+      GenerateSecret: true,
+      AllowedOAuthFlowsUserPoolClient: true,
+      AllowedOAuthFlows: ["client_credentials"],
+      AllowedOAuthScopes: scopes.map(toFullScope),
+      AccessTokenValidity: API_CLIENT_TOKEN_VALIDITY_MINUTES,
+      TokenValidityUnits: { AccessToken: "minutes" },
+      PreventUserExistenceErrors: "ENABLED",
+    })
+  );
+
+  const clientId = created.UserPoolClient?.ClientId;
+  const clientSecret = created.UserPoolClient?.ClientSecret;
+  if (!clientId || !clientSecret) {
+    return json(500, { message: "Failed to create cognito app client" });
+  }
+
+  const item: ApiClientItem = {
+    clientId,
+    tenantId,
+    scopes,
+    label,
+    status: "ACTIVE",
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: API_CLIENTS_TABLE_NAME,
+        Item: item,
+        ConditionExpression: "attribute_not_exists(clientId)",
+      })
+    );
+  } catch (e) {
+    // Ohne Tabelleneintrag wäre der Client nutzlos (resolveApiClient lehnt ihn ab), also wieder entfernen
+    await cognito
+      .send(new DeleteUserPoolClientCommand({ UserPoolId: USER_POOL_ID, ClientId: clientId }))
+      .catch((cleanupErr: any) =>
+        console.warn("Failed to roll back Cognito app client", { clientId, errorName: cleanupErr?.name })
+      );
+    throw e;
+  }
+
+  console.log("API client created", { clientId, tenantId, scopes, label });
+
+  return json(200, {
+    clientId,
+    clientSecret,
+    tokenUrl: TOKEN_URL,
+    scope: scopeString(scopes),
+    tenantId,
+    label,
+  });
+}
+
+async function listApiClientsRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const authErr = await requireAdmin(event);
+  if (authErr) return authErr;
+  const configErr = apiClientsTableMissing();
+  if (configErr) return configErr;
+
+  const body = safeParse<ListApiClientsBody>(event.body);
+  const tenantId = typeof body?.tenantId === "string" ? body.tenantId.trim() : "";
+  if (!tenantId) return json(400, { message: "tenantId is required" });
+
+  const clients = await listApiClientsOfTenant(tenantId);
+  return json(200, {
+    tenantId,
+    clients: clients.map((client) => ({
+      clientId: client.clientId,
+      label: client.label,
+      scopes: client.scopes,
+      status: client.status,
+      createdAt: client.createdAt,
+    })),
+  });
+}
+
+async function deleteApiClientRoute(event: AnyApiGwEvent): Promise<AnyResult> {
+  const authErr = await requireAdmin(event);
+  if (authErr) return authErr;
+  const configErr = apiClientsTableMissing();
+  if (configErr) return configErr;
+
+  const body = safeParse<DeleteApiClientBody>(event.body);
+  const clientId = typeof body?.clientId === "string" ? body.clientId.trim() : "";
+  if (!clientId) return json(400, { message: "clientId is required" });
+
+  // Nur Clients aus ApiClientsTable: Eine versehentlich übergebene backendClientId eines Mandanten
+  // (Data Action) darf hier nicht gelöscht werden.
+  const existing = await ddb.send(
+    new GetCommand({ TableName: API_CLIENTS_TABLE_NAME, Key: { clientId } })
+  );
+  if (!existing.Item) return json(404, { message: "API client not found" });
+
+  await deleteApiClient(clientId);
+  console.log("API client deleted", { clientId, tenantId: existing.Item.tenantId });
+
+  return json(200, {
+    message: "API client deleted",
+    clientId,
+    tenantId: existing.Item.tenantId ?? null,
+  });
+}
+
+async function listApiClientsOfTenant(tenantId: string): Promise<ApiClientItem[]> {
+  const items: ApiClientItem[] = [];
+  let lastEvaluatedKey: Record<string, any> | undefined;
+  do {
+    const page = await ddb.send(
+      new QueryCommand({
+        TableName: API_CLIENTS_TABLE_NAME,
+        IndexName: "byTenantId",
+        KeyConditionExpression: "tenantId = :t",
+        ExpressionAttributeValues: { ":t": tenantId },
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+    items.push(...((page.Items ?? []) as ApiClientItem[]));
+    lastEvaluatedKey = page.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+  return items;
+}
+
+/**
+ * Sperrt den Client zuerst (Status DELETING, resolveApiClient akzeptiert nur ACTIVE), löscht dann den
+ * Cognito-Client und zuletzt den Eintrag. Bricht ein Schritt ab, lässt sich der Aufruf wiederholen.
+ */
+async function deleteApiClient(clientId: string): Promise<void> {
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: API_CLIENTS_TABLE_NAME,
+        Key: { clientId },
+        UpdateExpression: "SET #s = :deleting",
+        ConditionExpression: "attribute_exists(clientId)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: { ":deleting": "DELETING" },
+      })
+    );
+  } catch (e: any) {
+    // Eintrag schon weg (paralleles Löschen): nichts mehr zu tun
+    if (e?.name === "ConditionalCheckFailedException") return;
+    throw e;
+  }
+
+  try {
+    await cognito.send(
+      new DeleteUserPoolClientCommand({ UserPoolId: USER_POOL_ID, ClientId: clientId })
+    );
+  } catch (e: any) {
+    if (e?.name !== "ResourceNotFoundException") throw e;
+  }
+
+  await ddb.send(new DeleteCommand({ TableName: API_CLIENTS_TABLE_NAME, Key: { clientId } }));
+}
+
+type ApiClientCleanup = { deleted: number; failedClientIds: string[] };
+
+/**
+ * Löscht die API-Clients einer tenantId, sofern in der Tenants-Tabelle kein weiterer Eintrag (gleich
+ * welcher Status) mit dieser tenantId übrig ist. `removedBackendClientIds` sind die gerade gelöschten
+ * Einträge: Der GSI liest nur eventually consistent und liefert sie kurz nach dem Löschen noch mit.
+ * Ein fehlgeschlagener Client hält die übrigen nicht auf, er steht in `failedClientIds`.
+ */
+async function deleteApiClientsOfRemovedTenant(
+  tenantId: string,
+  removedBackendClientIds: ReadonlySet<string>
+): Promise<ApiClientCleanup> {
+  const result: ApiClientCleanup = { deleted: 0, failedClientIds: [] };
+  if (!tenantId) return result;
+  if (!API_CLIENTS_TABLE_NAME) {
+    console.warn("API_CLIENTS_TABLE_NAME not configured; skipping API client cleanup", { tenantId });
+    return result;
+  }
+
+  let lastEvaluatedKey: Record<string, any> | undefined;
+  do {
+    const page = await ddb.send(
+      new QueryCommand({
+        TableName: TENANTS_TABLE_NAME,
+        IndexName: "byTenantId",
+        KeyConditionExpression: "tenantId = :t",
+        ExpressionAttributeValues: { ":t": tenantId },
+        ProjectionExpression: "backendClientId",
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+    if ((page.Items ?? []).some((item) => !removedBackendClientIds.has(item.backendClientId))) {
+      return result;
+    }
+    lastEvaluatedKey = page.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  const clients = await listApiClientsOfTenant(tenantId);
+  for (const client of clients) {
+    try {
+      await deleteApiClient(client.clientId);
+      result.deleted += 1;
+      console.log("Deleted API client of removed tenant", { clientId: client.clientId, tenantId });
+    } catch (e: any) {
+      result.failedClientIds.push(client.clientId);
+      console.warn("Failed to delete API client of removed tenant (continuing)", {
+        clientId: client.clientId,
+        tenantId,
+        errorName: e?.name,
+        message: e?.message,
+      });
+    }
+  }
+  return result;
 }

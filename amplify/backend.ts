@@ -22,6 +22,7 @@ import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 import { invitations } from "./functions/invitations/resource";
 import { webSurvey } from "./functions/web_survey/resource";
 import { webThemes } from "./functions/web_themes/resource";
+import { API_RESOURCE_SERVER, API_SCOPES, API_SCOPE_DESCRIPTIONS } from "./functions/shared/api_scopes";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -177,6 +178,23 @@ const webSurveyThemesTable = new dynamodb.Table(stack, "WebSurveyThemesTable", {
   removalPolicy: RemovalPolicy.RETAIN,
 });
 
+// API-Clients der Kunden-API (/ext/v1): Cognito-Client (Client Credentials) → Mandant und Status.
+// Legt das Betriebsteam über /onboarding/api-clients/* an; ohne Eintrag mit Status ACTIVE wird jedes
+// Token abgelehnt (resolveApiClient in shared/api_client_auth.ts).
+const apiClientsTable = new dynamodb.Table(stack, "ApiClientsTable", {
+  partitionKey: { name: "clientId", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Clients eines Mandanten (Liste, Aufräumen beim Löschen des Mandanten)
+apiClientsTable.addGlobalSecondaryIndex({
+  indexName: "byTenantId",
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "clientId", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.ALL,
+});
+
 // Signaturschlüssel der Einladungen (HS256), ein Schlüssel pro Umgebung. Verlässt AWS nie: Die Lambdas
 // bekommen nur den ARN. RETAIN, weil ein neuer Schlüssel alle verschickten Links ungültig machen würde.
 const webSurveyJwtSecret = new secretsmanager.Secret(stack, "WebSurveyJwtSecret", {
@@ -251,10 +269,26 @@ onboardingCfn.addPropertyOverride(
   tenantSecretsPrefix,
 );
 
+apiClientsTable.grantReadWriteData(onboardingLambda);
+onboardingCfn.addPropertyOverride(
+  "Environment.Variables.API_CLIENTS_TABLE_NAME",
+  apiClientsTable.tableName,
+);
+
 new cognito.UserPoolResourceServer(stack, "BackendResourceServer", {
   userPool: backend.auth.resources.userPool,
   identifier: "backend",
   scopes: [{ scopeName: "invoke", scopeDescription: "Invoke backend APIs" }],
+});
+
+// Fachliche Scopes der Kunden-API, ohne Mandant und ohne Version (siehe shared/api_scopes.ts)
+new cognito.UserPoolResourceServer(stack, "PollyApiResourceServer", {
+  userPool: backend.auth.resources.userPool,
+  identifier: API_RESOURCE_SERVER,
+  scopes: API_SCOPES.map((scopeName) => ({
+    scopeName,
+    scopeDescription: API_SCOPE_DESCRIPTIONS[scopeName],
+  })),
 });
 
 new cognito.CfnUserPoolDomain(stack, "UserPoolDomain", {
@@ -323,6 +357,15 @@ httpApi.addRoutes({
   methods: [apigw.HttpMethod.POST],
   integration: onboardingHttpIntegration,
 });
+
+// API-Clients der Kunden-API verwalten (Admin-Token), Anleitung: documentation/betrieb_api_zugaenge.md
+for (const action of ["create", "list", "delete"]) {
+  httpApi.addRoutes({
+    path: `/onboarding/api-clients/${action}`,
+    methods: [apigw.HttpMethod.POST],
+    integration: onboardingHttpIntegration,
+  });
+}
 
 const surveyResponsesLambda = backend.surveyResponses.resources
   .lambda as lambda.Function;

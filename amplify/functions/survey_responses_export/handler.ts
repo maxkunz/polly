@@ -1,6 +1,5 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { iterateSessions, type SessionQueryParams } from "../shared/survey_sessions";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { ddb, iterateSessions, SESSION_PAGE_SIZE, type SessionQueryParams } from "../shared/survey_sessions";
 import { resolveTenantContext } from "../shared/tenant_auth";
 import { CSV_HEADER, sessionToCsvRows, type ExportSession } from "./csv";
 import { addToSummary, createSummary, type ExportSummary } from "./summary";
@@ -9,15 +8,12 @@ type AnyApiGwEvent = any;
 type AnyLambdaContext = { getRemainingTimeInMillis: () => number };
 type AnyResult = { statusCode: number; headers: Record<string, string>; body: string };
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-
 const SURVEY_RESPONSES_TABLE_NAME = process.env.SURVEY_RESPONSES_TABLE_NAME ?? "";
 
 // Lambda-Antworten hinter API Gateway sind auf 6 MB begrenzt, daher Teilabrufe mit Größenbudget.
 const CHUNK_BYTES = Number(process.env.EXPORT_CHUNK_BYTES ?? 4 * 1024 * 1024);
 // Die HTTP API bricht nach 30 s ab: nach Ablauf des Zeitbudgets wird das Teilstück abgeschlossen.
 const MIN_REMAINING_MS = 9000;
-const PAGE_SIZE = 200;
 
 const EXPOSED_HEADERS = "x-next-cursor,x-sessions,x-rows,content-disposition";
 
@@ -36,9 +32,7 @@ function jsonResponse(statusCode: number, body: unknown): AnyResult {
   };
 }
 
-type ExportParams = SessionQueryParams;
-
-type ParseResult = { params: ExportParams } | { error: AnyResult };
+type ParseResult = { params: SessionQueryParams } | { error: AnyResult };
 
 function toIso(raw: unknown): string | null {
   const text = String(raw ?? "").trim();
@@ -102,7 +96,7 @@ function encodeCursor(key: Record<string, any>): string {
  * Cursor zum Fortsetzen nach einem Abbruch wegen Budget. Wurde in diesem Teilabruf noch nichts
  * verarbeitet, bleibt der eingehende Cursor bestehen (statt die Daten stillschweigend abzuschneiden).
  */
-function resumeCursor(lastKey: Record<string, any> | undefined, params: ExportParams): string | null {
+function resumeCursor(lastKey: Record<string, any> | undefined, params: SessionQueryParams): string | null {
   const key = lastKey ?? params.exclusiveStartKey;
   return key ? encodeCursor(key) : null;
 }
@@ -259,7 +253,7 @@ async function processSlice(
           ":to": `${surveyId}#${slice.to}`,
         },
         ProjectionExpression: SUMMARY_PROJECTION,
-        Limit: PAGE_SIZE,
+        Limit: SESSION_PAGE_SIZE,
         ScanIndexForward: true,
         ExclusiveStartKey: startKey,
       }),

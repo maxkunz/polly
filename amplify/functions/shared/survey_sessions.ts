@@ -2,11 +2,12 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { ExportSession } from "./answer_records";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+// Auch vom CSV-Export genutzt, damit Seitengröße und Client nur einmal existieren
+export const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const SURVEY_RESPONSES_TABLE_NAME = process.env.SURVEY_RESPONSES_TABLE_NAME ?? "";
 
-const PAGE_SIZE = 200;
+export const SESSION_PAGE_SIZE = 200;
 
 export interface SessionQueryParams {
   surveyId: string;
@@ -72,7 +73,7 @@ export async function* iterateSessions(
         ExpressionAttributeNames: names,
         ExpressionAttributeValues: values,
         ProjectionExpression: projection.join(", "),
-        Limit: PAGE_SIZE,
+        Limit: SESSION_PAGE_SIZE,
         ScanIndexForward: true,
         ExclusiveStartKey: startKey,
       }),
