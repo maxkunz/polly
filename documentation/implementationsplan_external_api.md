@@ -50,10 +50,10 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [x] Doku: Abschnitt API 3 in `polly_customer_api.md`, Grenze „keine Versionsgeschichte“.
   - Testbar nach dem Deploy: Liste enthält nur Umfragen mit Prod. `questionId` aus den Details passt zum Reporting. 404 ohne Prod.
 
-- [ ] **M6 Ende-zu-Ende-Test und Abschluss**
-  - [ ] `tools/api_tests.py`: `tests_customer_api` mit allen drei APIs und den Fehlerfällen (siehe „Tests“).
-  - [ ] Prüfung nach „Prüfung“ in einer Branch-Umgebung vollständig durchlaufen.
-  - [ ] Doku abschließend prüfen: `polly_customer_api.md` (auch der Entwicklerabschnitt „So entsteht eine v2“), `betrieb_api_zugaenge.md` und `CLAUDE.md`.
+- [ ] **M6 Ende-zu-Ende-Test und Abschluss** (Code und Doku fertig 2026-10-23, offen ist nur der Lauf gegen eine Branch-Umgebung)
+  - [x] `tools/api_tests.py`: `tests_customer_api` mit allen drei APIs und den Fehlerfällen (siehe „Tests“).
+  - [ ] Prüfung nach „Prüfung“ in einer Branch-Umgebung vollständig durchlaufen (braucht Deploy und Zugangsdaten, nicht in der Sandbox möglich).
+  - [x] Doku abschließend geprüft: `polly_customer_api.md` (auch der Entwicklerabschnitt „So entsteht eine v2“), `betrieb_api_zugaenge.md` und `CLAUDE.md`.
 
 ## Abweichungen vom Plan
 
@@ -106,7 +106,11 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Der Test der Liste ersetzt `fetch` und prüft `listProdSurveys` mit Seiten, Sonderzeilen, ungültigen Zellen und Fehlern. Nicht per Test geprüft: der Handler-Ablauf mit Cognito/DynamoDB/Genesys (braucht den Deploy).
 
 ### M6
-- noch keine
+- `tests_customer_api` hat die Fälle [C1]–[C21] und läuft nach den Antworttests (braucht deren Session) und nur mit `GENESYS_TOKEN`. Ohne `API_CLIENT_ID`, `API_CLIENT_SECRET` und `API_TOKEN_URL` werden sie übersprungen.
+- Einen zweiten Client für den Fall „Scope fehlt“ braucht der Lauf nicht: [C2] holt vom selben Client ein Token mit `scope=polly-api/reporting.read`, damit sind Einladungen und Umfragedetails dafür 403.
+- Zusätzlich geprüft: Kunden-Token an einer App-Route wird abgelehnt ([C21]), `fullLink` des erzeugten Tokens wird von `GET /web-survey` akzeptiert ([C9]), `questionId` aus dem Reporting kommen in den Umfragedetails vor ([C14b]). Verglichen werden nur Antworten mit `surveyName` und `surveyVersion` des Prod-Stands, weil [1]–[5] feste Fragennamen von `--survey-name` schreiben, die zu einer anderen `--survey-id` nicht passen; ohne solche Antworten im Zeitraum wird [C14b] übersprungen.
+- Nicht geprüft werden die Sperre eines gelöschten Clients mit noch gültigem Token und der `backend/invoke`-Client (Prüfung 2.7 per Hand), weil das Skript dafür den Admin-Token bräuchte. Ebenso nicht: Vergleich mit dem CSV-Export und das Öffnen von `fullLink` im Browser (Prüfung 2.3/2.4).
+- Der Python-Lauf selbst ist nicht gegen eine echte Umgebung gelaufen, nur Syntax geprüft.
 
 ---
 
