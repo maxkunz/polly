@@ -4,6 +4,7 @@ import { resolveApiClient } from "../shared/api_client_auth";
 import { dispatchExtRoute, extError, extHeaders } from "../shared/ext_http";
 import type { ExtResult, ExtRoute } from "../shared/ext_http";
 import { createSummary, openSlices, summarizeSlices } from "../shared/session_summary";
+import { isSurveyBeingDeleted, loadSurveyAggregates } from "../shared/survey_results";
 import { iterateSessions, SessionReadAbortedError } from "../shared/survey_sessions";
 import { paginate } from "./pagination";
 import * as v1 from "./v1";
@@ -113,10 +114,37 @@ async function summary(event: AnyApiGwEvent, context?: AnyLambdaContext): Promis
   return { statusCode: 200, headers, body: JSON.stringify(v1.toV1Summary(params, counts)) };
 }
 
+async function aggregates(event: AnyApiGwEvent): Promise<AnyResult> {
+  const auth = await resolveApiClient(event, "polly-api/reporting.read");
+  if (!auth.ok) return errorResponse(auth.statusCode, auth.error, auth.message);
+
+  const parsed = v1.parseV1AggregatesParams(event?.queryStringParameters);
+  if (!parsed.ok) return errorResponse(400, "invalid_request", parsed.message);
+  const { surveyId } = parsed;
+
+  // Beide Lesezugriffe parallel; nach dem Löschen der Umfrage sollen keine Restwerte mehr erscheinen
+  const [deleting, items] = await Promise.all([
+    isSurveyBeingDeleted(auth.tenantId, surveyId),
+    loadSurveyAggregates(auth.tenantId, surveyId),
+  ]);
+  if (deleting) return errorResponse(404, "not_found", "Survey not found");
+
+  // Keine Antwortinhalte im Protokoll
+  console.log("[reporting_api] aggregates", {
+    clientId: auth.clientId,
+    tenantId: auth.tenantId,
+    surveyId,
+    questions: items.length,
+  });
+
+  return { statusCode: 200, headers, body: JSON.stringify(v1.toV1Aggregates(surveyId, items)) };
+}
+
 /** Routing-Tabelle: eine neue Version braucht nur einen weiteren Eintrag. */
 export const routes: Record<string, ExtRoute<AnyLambdaContext>> = {
   "GET /ext/v1/reporting/data": data,
   "GET /ext/v1/reporting/summary": summary,
+  "GET /ext/v1/reporting/aggregates": aggregates,
 };
 
 export const handler = (event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> =>

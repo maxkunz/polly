@@ -61,18 +61,18 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [x] Zeitraumprüfung (`parseRangeParams` mit `parseDate`) in `reporting_api/v1.ts` für beide Routen gemeinsam; `parseV1SummaryParams`, `toV1Summary`, `MAX_SUMMARY_RANGE_MS` (31 Tage).
   - [x] Handler-Route, `backend.ts` (Route, Drosselung 10/20), Tests, Doku (Abschnitt in `polly_customer_api.md`), E2E-Fall.
 
-- [ ] **M8 API 5: Aggregate `GET /ext/v1/reporting/aggregates`** (siehe „API 5“)
-  - [ ] `loadSurveyAggregates` in `shared/survey_results.ts` (mit Blättern), Prüfung auf laufende Löschung (`404 not_found`).
-  - [ ] `toV1Aggregates` (`average`, `npsScore`, `counts` ohne `comment`) in `reporting_api/v1.ts` bzw. eigener Datei.
-  - [ ] `backend.ts`: Leserechte auf `SurveyAggregatesTable` und `SurveyDeletionJobsTable`, Umgebungsvariablen, Route, Drosselung 20/40.
-  - [ ] Tests, Doku (Grenzen der Näherung), E2E-Fall.
+- [x] **M8 API 5: Aggregate `GET /ext/v1/reporting/aggregates`** (siehe „API 5“)
+  - [x] `loadSurveyAggregates` in `shared/survey_results.ts` (mit Blättern), Prüfung auf laufende Löschung (`404 not_found`).
+  - [x] `toV1Aggregates` (`average`, `npsScore`, `counts` ohne `comment`) in `reporting_api/v1.ts` bzw. eigener Datei.
+  - [x] `backend.ts`: Leserechte auf `SurveyAggregatesTable` und `SurveyDeletionJobsTable`, Umgebungsvariablen, Route, Drosselung 20/40.
+  - [x] Tests, Doku (Grenzen der Näherung), E2E-Fall.
 
-- [ ] **M9 API 6: Web-Designs exportieren und importieren** (siehe „API 6“)
-  - [ ] Scopes `themes.read` und `themes.write` in `shared/api_scopes.ts`.
-  - [ ] Schreiblogik aus `web_themes/handler.ts` als `saveWebThemes` nach `shared/web_themes_table.ts`; App-Route unverändert.
-  - [ ] `web_themes/ext_v1.ts` (`parseV1ImportRequest`, `toV1Theme`, `buildV1Response`), Routing-Tabelle `extRoutes` im Handler.
-  - [ ] `backend.ts`: `API_CLIENTS_TABLE_NAME`, Leserechte, zwei Routen, Drosselung 10/20 bzw. 5/10.
-  - [ ] Tests, Doku (`polly_customer_api.md`, `betrieb_api_zugaenge.md`, `polly_web.md`, `CLAUDE.md`), E2E-Fälle.
+- [x] **M9 API 6: Web-Designs exportieren und importieren** (siehe „API 6“)
+  - [x] Scopes `themes.read` und `themes.write` in `shared/api_scopes.ts`.
+  - [x] Schreiblogik aus `web_themes/handler.ts` als `saveWebThemes` nach `shared/web_themes_table.ts`; App-Route unverändert.
+  - [x] `web_themes/ext_v1.ts` (`parseV1ImportRequest`, `toV1Theme`, `buildV1Response`), Routing-Tabelle `extRoutes` im Handler.
+  - [x] `backend.ts`: `API_CLIENTS_TABLE_NAME`, Leserechte, zwei Routen, Drosselung 10/20 bzw. 5/10.
+  - [x] Tests, Doku (`polly_customer_api.md`, `betrieb_api_zugaenge.md`, `polly_web.md`, `CLAUDE.md`), E2E-Fälle.
 
 ## Abweichungen vom Plan
 
@@ -140,10 +140,18 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - E2E-Fälle [C22]–[C24] (Summen von Status/Kanal/Version = `sessions`, 31-Tage-Grenze, ohne Token). Nicht per Test geprüft: der Ablauf mit DynamoDB und der 413 bei Zeitüberschreitung (braucht den Deploy).
 
 ### M8
-(noch leer)
+- `loadSurveyAggregates` und der Typ `SurveyAggregateItem` liegen in `shared/survey_results.ts`; ohne `SURVEY_AGGREGATES_TABLE_NAME` wirft die Funktion, statt leer zu antworten. Die Route prüft vor dem Lesen `isSurveyBeingDeleted`.
+- `parseV1AggregatesParams`, `toV1Aggregate` und `toV1Aggregates` stehen in `reporting_api/v1.ts` (keine eigene Datei); `surveyId` wird kleingeschrieben, wie bei `/data` und `/summary` (gemeinsam über `parseSurveyIdParam`). `average` auf zwei Nachkommastellen gerundet, `npsScore` auf eine; beide nur über die Zahlenwerte in `counts` (`numericCounts`), d. h. `"empty"` (keine Eingabe) zählt weder beim Durchschnitt noch beim NPS mit, `totalResponses` dagegen schon. Die Route liest `isSurveyBeingDeleted` und die Aggregate parallel. Sortierung nach `questionId` in Code Units.
+- `backend.ts`: `reportingApiLambda` bekommt Leserechte und Variablen für `SurveyAggregatesTable` und `SurveyDeletionJobsTable`; Drosselung wie `/data` (`REPORTING_API_THROTTLE` 20/40).
+- E2E-Fälle [C25]–[C27]. Kunden-Doku Abschnitt 5.3 mit den Grenzen der Näherung. Nicht per Test geprüft: Lesen aus DynamoDB und das Blättern (braucht den Deploy).
 
 ### M9
-(noch leer)
+- `checkWebThemeName` (Namensprüfung) liegt in `shared/web_themes.ts` und wird von `parseWebThemeRequest` und dem Import gemeinsam genutzt (gleiche Meldung, beim Import mit Präfix `themes[i].`).
+- `saveWebThemes(tableName, tenantId, themes, updatedBy, { expectedUpdatedAt })` nimmt eine Liste; `expectedUpdatedAt` (nur für ein Design, `null` = neu) ist die Option der App-Route, ohne sie überschreibt der Aufruf. Ergebnis `{ ok, themes, created, updated, clearedDefaults }` bzw. `{ ok: false, reason: "limit_reached" | "conflict" }`; die Handler bilden das auf ihr Fehlerformat ab. Jedes Speichern ist eine Transaktion mit dem Verwaltungseintrag `#revision` (SK, pro Mandant, Zähler `revision` unter Bedingung erhöht): Parallele Speichervorgänge desselben Mandanten ergeben `conflict`, so gilt die Obergrenze (Gesamtzahl nach dem Import, bestehende + neue IDs) auch bei gleichzeitigen Importen. `queryWebThemeItems` blendet den Eintrag aus. `conflict` nur bei den Abbruchgründen `ConditionalCheckFailed`/`TransactionConflict`, andere (z. B. Drosselung) werden mit den Gründen geloggt und ergeben 500. Fehlt `isDefault` im Import, bleibt die Markierung eines vorhandenen Designs erhalten (außer ein anderer Eintrag ist `true`).
+- Import: `themeId` wird kleingeschrieben (wie bei den Einladungen), „doppelt“ gilt nach dem Kleinschreiben. Ebenso die ID im Pfad von `PUT`/`DELETE /web-themes/{id}` und die Auswahl in `pickTheme`. Der Index steht in allen Meldungen (`themes[i].themeId`, `.name`, `.isDefault`, `.tokens are invalid`); bei zwei Standard-Designs nennt die Meldung beide Indizes. Das Feld `updatedAt` des Exports wird im Import ignoriert.
+- `toV1Theme` gibt `updatedAt` als `null` aus, wenn es fehlt (nie bei gespeicherten Designs). `buildV1Response` sortiert selbst (Name, dann ID in Code Units, `compareWebThemes` in `shared/web_themes.ts`, auch für die App-Liste), nicht der Handler. Der Export liest ohne Cache; der Handler teilt `loadThemes` mit der App-Route `GET /web-themes`.
+- Die Kunden-Routen werden vor der Prüfung der Tabellenkonfiguration verteilt (wie bei `invitations`), damit der 401 ohne Token auch ohne Umgebung testbar ist. Das Feature Flag `web_survey` wird serverseitig nicht geprüft.
+- E2E-Fälle [C28]–[C34] (dazu [C32b] Export ohne `themes.read`, [C33b] nach abgelehntem Import unverändert); werden übersprungen, wenn dem Client die Scopes `themes.read`/`themes.write` fehlen (Scopes aus dem JWT des Tokens gelesen). Das Test-Design `00000000-0000-4000-8000-00000000a9e1` („Polly API-Test“) bleibt im Mandanten stehen und wird bei jedem Lauf überschrieben. Nicht per Test geprüft: der Ablauf mit DynamoDB (`saveWebThemes`, Transaktion, Limit) und der 403 ohne `themes.read`/`themes.write` bei gültigem Token (nur per E2E [C32]/[C32b] mit reporting-only-Token).
 
 ---
 

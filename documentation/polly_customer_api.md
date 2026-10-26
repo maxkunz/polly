@@ -8,8 +8,8 @@ Mit der Kunden-API rufen Sie Daten aus Polly maschinell ab, ohne Genesys-Login:
 | Einladungen | Einladungslinks für Web-Umfragen erzeugen | `polly-api/invitations.write` | verfügbar |
 | Umfragedetails | Fragetexte, Optionen und Skalen der veröffentlichten Umfragen lesen | `polly-api/surveys.read` | verfügbar |
 | Reporting-Summary | Anzahl und Verteilung der Sitzungen eines Zeitraums | `polly-api/reporting.read` | verfügbar |
-| Reporting-Aggregate | Zählung pro Frage über die ganze Laufzeit | `polly-api/reporting.read` | geplant |
-| Web-Designs | Designs der Umfrageseite exportieren und importieren | `polly-api/themes.read`, `polly-api/themes.write` | geplant |
+| Reporting-Aggregate | Zählung pro Frage über die ganze Laufzeit | `polly-api/reporting.read` | verfügbar |
+| Web-Designs | Designs der Umfrageseite exportieren und importieren | `polly-api/themes.read`, `polly-api/themes.write` | verfügbar |
 
 Alle Anfragen und Antworten sind JSON in UTF-8. Zeitangaben sind UTC.
 
@@ -110,7 +110,7 @@ Liefert die Antworten einer Umfrage in einem Zeitraum, dieselben Daten wie der C
 
 | Parameter | Pflicht | Format / Standard | Hinweis |
 |---|---|---|---|
-| `surveyId` | ja | UUID der Umfrage | Es gibt keine Abfrage über alle Umfragen. |
+| `surveyId` | ja | UUID der Umfrage | Groß- und Kleinschreibung egal. Es gibt keine Abfrage über alle Umfragen. |
 | `from` | ja | `YYYY-MM-DDTHH:mm:ss` (UTC, ohne `Z`) | Inklusiv, bezogen auf den Start der Sitzung. |
 | `to` | ja | wie `from` | Exklusiv, muss nach `from` liegen. `to − from` darf höchstens 24 Stunden betragen. |
 | `version` | nein | Ganzzahl | Nur Antworten dieser Umfrageversion. |
@@ -187,7 +187,7 @@ Zählt die Sitzungen einer Umfrage in einem Zeitraum und verteilt sie nach Statu
 
 | Parameter | Pflicht | Format / Standard | Hinweis |
 |---|---|---|---|
-| `surveyId` | ja | UUID der Umfrage | |
+| `surveyId` | ja | UUID der Umfrage | Groß- und Kleinschreibung egal. |
 | `from` | ja | `YYYY-MM-DDTHH:mm:ss` (UTC, ohne `Z`) | Inklusiv, bezogen auf den Start der Sitzung. |
 | `to` | ja | wie `from` | Exklusiv, muss nach `from` liegen. `to − from` darf höchstens **31 Tage** betragen. |
 | `version` | nein | Ganzzahl | Nur Sitzungen dieser Umfrageversion. |
@@ -236,6 +236,63 @@ Ohne Sitzungen antwortet die Route mit `200`, `sessions` `0` und leeren Objekten
 | `500` | `internal_error` | siehe Abschnitt 3 |
 
 **Hinweis:** Wie bei `/data` nur Zeiträume abfragen, die **mindestens eine Stunde zurückliegen**, weil offene Sitzungen noch ihren Status ändern.
+
+### 5.3 `GET [API_URL]/aggregates`
+
+Liefert pro Frage der Umfrage die laufende Zählung der Antworten (Verteilung, Durchschnitt, NPS), ohne die Rohantworten zu laden.
+
+| Parameter | Pflicht | Format | Hinweis |
+|---|---|---|---|
+| `surveyId` | ja | UUID der Umfrage | Groß- und Kleinschreibung egal. |
+
+```bash
+curl "[API_URL]/aggregates?surveyId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+**Antwort `200`:**
+
+```json
+{
+  "surveyId": "123e4567-e89b-12d3-a456-426614174000",
+  "questions": [
+    {
+      "questionId": "nps_a1b2c3d4",
+      "questionType": "nps",
+      "totalResponses": 4,
+      "counts": { "3": 1, "8": 1, "9": 1, "10": 1 },
+      "sum": 30,
+      "average": 7.5,
+      "npsScore": 25,
+      "updatedAt": "2026-10-20T14:03:11.000Z"
+    }
+  ]
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `questionId` | Derselbe Schlüssel wie in `/data` und in den Umfragedetails. Die Liste ist danach sortiert. |
+| `questionType` | Typ der Frage. |
+| `totalResponses` | Anzahl der gezählten Antworten, auch solcher ohne Eingabe (Schlüssel `"empty"` in `counts`, z. B. nach einer Zeitüberschreitung). |
+| `counts` | Anzahl pro Antwortwert; die Schlüssel sind Texte (`"true"`/`"false"`, Antwortlabels, Zahlen). `null` bei `comment`. |
+| `sum`, `average` | Nur bei `rating` und `nps` (Summe und Durchschnitt, auf zwei Nachkommastellen gerundet), sonst `null`. `average` bezieht sich wie `sum` nur auf Zahlenwerte, Antworten ohne Eingabe zählen nicht mit; `null` ohne Zahlenwerte. |
+| `npsScore` | Nur bei `nps`: (Anzahl 9–10 − Anzahl 0–6) / Anzahl gezählter Werte × 100, auf eine Nachkommastelle gerundet; `null` ohne Antworten. |
+| `updatedAt` | Zeitpunkt der letzten Zählung. |
+
+Ohne Daten antwortet die Route mit `200` und leerem `questions`. Eine unbekannte Umfrage lässt sich davon nicht unterscheiden.
+
+**Grenzen:** Die Zählung läuft seit Beginn über **alle Versionen** der Umfrage und lässt sich weder nach Zeitraum noch nach Version filtern; Fragen älterer Versionen bleiben enthalten. Sie ist eine **Näherung**: erneut gesendete Antworten zählen doppelt, fehlgeschlagene Zähl-Updates fehlen. Genaue Zahlen für einen Zeitraum liefert `/data`.
+
+**Antwortcodes:**
+
+| HTTP | `error` | Bedeutung |
+|---|---|---|
+| `200` | | Erfolg, auch ohne Daten. |
+| `400` | `invalid_request` | `surveyId` fehlt oder ist keine UUID. |
+| `401`, `403` | | siehe Abschnitt 3 |
+| `404` | `not_found` | Die Umfrage wird gerade gelöscht oder wurde gelöscht. |
+| `500` | `internal_error` | siehe Abschnitt 3 |
 
 ## 6. API 2: Einladungen
 
@@ -438,6 +495,88 @@ curl "[API_URL]/surveys/123e4567-e89b-12d3-a456-426614174000" -H "Authorization:
 - **Nur der aktuelle Prod-Stand.** Es gibt keine Versionsgeschichte: Ältere Versionen sind nicht abrufbar. Antworten im Reporting tragen ihre `surveyVersion`; haben sich Fragen seit dieser Version geändert, passen Texte und Verzweigungen nicht mehr zu den alten Antworten (der technische Name `questionId` bleibt dabei gleich).
 - **Bis zu 1 Minute verzögert.** Ein neuer Prod-Stand erscheint in der API erst nach bis zu einer Minute, ein geändertes Design nach bis zu anderthalb Minuten. Das gilt auch für gerade gelöschte Umfragen.
 - Rufen Sie die Liste nicht bei jedem Seitenaufruf Ihres Systems ab, sondern halten Sie das Ergebnis selbst kurz vor.
+
+## 8. API 6: Web-Designs
+
+Exportiert und importiert die Designs der Umfrageseite (Schrift, Textstile, Farben), zum Beispiel zur Sicherung, zum Übertragen zwischen Umgebungen oder aus einem CI-/CMS-System. Export und Import haben dasselbe Format: Ein Export lässt sich unverändert wieder importieren.
+
+- **Scopes:** `polly-api/themes.read` (Export), `polly-api/themes.write` (Import). Die Scopes vergibt der Polly-Betrieb nur für Installationen mit Web-Kanal; bestehende Zugänge haben sie nicht.
+- **`[API_URL]`:** `https://<app-domain>/api/ext/v1/web-themes`
+
+### 8.1 `GET [API_URL]`
+
+```bash
+curl "[API_URL]" -H "Authorization: Bearer <access_token>"
+```
+
+**Antwort `200`:** Alle Designs der Installation, sortiert nach Name und ID.
+
+```json
+{
+  "themes": [
+    {
+      "themeId": "6f1c1c0e-5b0e-4f64-9d0e-0a6b0f7c9d11",
+      "name": "CI Blau",
+      "isDefault": true,
+      "updatedAt": "2026-10-26T10:00:00.000Z",
+      "tokens": { "schemaVersion": 1, "fontFamily": "…", "text": { … }, "colors": { … }, "transparentBackground": false }
+    }
+  ]
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `themeId` | UUID des Designs. Umfragen verweisen darauf (`webTheme` in den Umfragedetails). |
+| `name` | Name, 1 bis 60 Zeichen. |
+| `isDefault` | `true` beim Standard-Design der Installation (höchstens eines). Umfragen ohne eigene Auswahl nutzen es. |
+| `updatedAt` | Zeitpunkt der letzten Änderung (UTC) oder `null`. |
+| `tokens` | Die Einstellungen des Designs, dieselbe Struktur wie `webTheme` in den Umfragedetails. Unbekannte Felder ignorieren. |
+
+### 8.2 `POST [API_URL]/import`
+
+Legt Designs an oder überschreibt sie (**Upsert nach `themeId`**): Eine bekannte ID überschreibt das Design, eine neue legt es an. Nicht genannte Designs bleiben erhalten, die API löscht nichts. Da die ID gleich bleibt, passen die Auswahlen in den Umfragen weiterhin.
+
+**Request (JSON, höchstens 128 KB):**
+
+| Feld | Pflicht | Format | Hinweis |
+|---|---|---|---|
+| `themes` | ja | Liste mit 1 bis 50 Einträgen | |
+| `themes[].themeId` | ja | UUID | Groß- und Kleinschreibung egal, keine doppelten IDs. |
+| `themes[].name` | ja | Text, 1 bis 60 Zeichen | Ohne Zeilenumbrüche. |
+| `themes[].isDefault` | nein | Boolean | Höchstens ein Eintrag darf `true` sein. Dann verliert das bisherige Standard-Design die Markierung. Fehlt das Feld, behält ein vorhandenes Design seine Markierung, ein neues wird kein Standard-Design (außer ein anderer Eintrag ist `true`). `false` nimmt die Markierung weg. |
+| `themes[].tokens` | ja | Objekt wie im Export | Fehlende Felder werden mit den Standardwerten aufgefüllt, unbekannte Felder verworfen. Farben als `#rrggbb`, Schrift und Größen nur aus den erlaubten Werten. |
+
+Weitere Felder des Exports (`updatedAt`) dürfen im Request stehen und werden ignoriert.
+
+```bash
+curl -X POST "[API_URL]/import" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "themes": [ { "themeId": "6f1c1c0e-5b0e-4f64-9d0e-0a6b0f7c9d11", "name": "CI Blau", "isDefault": true, "tokens": { "schemaVersion": 1, "colors": { "primary": "#0057b8" } } } ] }'
+```
+
+**Antwort `200`:** `{ "created": 1, "updated": 0, "themes": [ … ] }` mit dem gespeicherten Stand der importierten Designs im Format des Exports.
+
+Der Import ist **alles oder nichts**: Ist ein Eintrag ungültig, wird nichts gespeichert. Die Meldung nennt den Index, z. B. `themes[3].tokens are invalid`. Es gibt kein optimistisches Sperren, der Import gewinnt gegenüber Änderungen in der App.
+
+**Antwortcodes:**
+
+| HTTP | `error` | Bedeutung |
+|---|---|---|
+| `200` | | Erfolg. |
+| `400` | `invalid_request` | Ungültiger Body oder Eintrag (`message` nennt ihn mit Index), doppelte `themeId`, mehr als ein Standard-Design. |
+| `401`, `403` | | siehe Abschnitt 3 |
+| `409` | `limit_reached` | Nach dem Import wären es mehr als 50 Designs in der Installation. |
+| `409` | `conflict` | Die Designs der Installation wurden gleichzeitig geändert (in der App oder durch einen anderen Import). Erneut versuchen. |
+| `413` | `payload_too_large` | Der Request ist größer als 128 KB. |
+| `429` | | Drosselung durch das API Gateway, siehe Abschnitt 3. |
+| `500` | `internal_error` | siehe Abschnitt 3 |
+
+**Hinweise:**
+- Importierte Designs wirken auf der Umfrageseite nach höchstens 30 Sekunden, in den Umfragedetails nach höchstens anderthalb Minuten.
+- Die Kontrastwarnungen der App gibt es per API nicht. Der Import prüft nur Format und Grenzen; für lesbare Umfragen sind Sie selbst verantwortlich.
+- Den Export lesen Sie ohne Verzögerung (kein Cache).
 
 ---
 

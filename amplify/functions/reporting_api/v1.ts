@@ -1,5 +1,6 @@
-import type { AnswerRecord } from "../shared/answer_records";
+import { compareCodeUnits, type AnswerRecord } from "../shared/answer_records";
 import type { ExportSummary } from "../shared/session_summary";
+import type { SurveyAggregateItem } from "../shared/survey_results";
 import { isValidSurveyId } from "../shared/survey_id";
 import type { PageInfo } from "./pagination";
 
@@ -67,15 +68,26 @@ interface RangeParams {
   version?: number;
 }
 
+/**
+ * `surveyId` für alle Reporting-Routen: Pflicht, UUID, kleingeschrieben wie die in der App erzeugten IDs
+ * (so auch in `surveys_api` und `invitations`), damit dieselbe ID überall dasselbe Ergebnis liefert.
+ */
+function parseSurveyIdParam(q: Record<string, unknown>): { ok: true; surveyId: string } | { ok: false; message: string } {
+  const surveyId = typeof q.surveyId === "string" ? q.surveyId.trim() : "";
+  if (!surveyId) return { ok: false, message: "surveyId query parameter is required" };
+  if (!isValidSurveyId(surveyId)) return { ok: false, message: "surveyId must be a UUID" };
+  return { ok: true, surveyId: surveyId.toLowerCase() };
+}
+
 /** `surveyId`, `from`/`to` und `version`: gemeinsam für `/data` und `/summary`, nur die größte Spanne unterscheidet sich. */
 function parseRangeParams(
   q: Record<string, unknown>,
   maxRangeMs: number,
   maxRangeLabel: string,
 ): { ok: true; range: RangeParams } | { ok: false; message: string } {
-  const surveyId = typeof q.surveyId === "string" ? q.surveyId.trim() : "";
-  if (!surveyId) return { ok: false, message: "surveyId query parameter is required" };
-  if (!isValidSurveyId(surveyId)) return { ok: false, message: "surveyId must be a UUID" };
+  const parsedId = parseSurveyIdParam(q);
+  if (!parsedId.ok) return parsedId;
+  const { surveyId } = parsedId;
 
   const from = parseDate(q.from, "from");
   if ("message" in from) return { ok: false, message: from.message };
@@ -196,5 +208,68 @@ export function toV1Summary(params: V1SummaryParams, summary: ExportSummary) {
     statusCounts: summary.statusCounts,
     channelCounts: summary.channels,
     versionCounts: summary.versions,
+  };
+}
+
+/** Nur `surveyId`, gemeinsame Regel mit `/data` und `/summary`. */
+export function parseV1AggregatesParams(
+  query: Record<string, unknown> | null | undefined,
+): { ok: true; surveyId: string } | { ok: false; message: string } {
+  return parseSurveyIdParam(query ?? {});
+}
+
+/** Gezählte Zahlenwerte als `[Wert, Anzahl]`; `"empty"` (keine Eingabe) und andere Schlüssel fallen weg. */
+function numericCounts(counts: Record<string, number>): [number, number][] {
+  const result: [number, number][] = [];
+  for (const [key, count] of Object.entries(counts)) {
+    const value = Number(key);
+    if (!Number.isFinite(count) || count <= 0 || key.trim() === "" || !Number.isFinite(value)) continue;
+    result.push([value, count]);
+  }
+  return result;
+}
+
+/** Anzahl der Werte 9–10 minus 0–6 im Verhältnis zu allen gezählten Werten, in Prozent (eine Nachkommastelle). */
+function npsScore(values: [number, number][]): number | null {
+  let total = 0;
+  let promoters = 0;
+  let detractors = 0;
+  for (const [value, count] of values) {
+    total += count;
+    if (value >= 9) promoters += count;
+    else if (value <= 6) detractors += count;
+  }
+  if (total === 0) return null;
+  return Math.round(((promoters - detractors) / total) * 1000) / 10;
+}
+
+/** Ein Aggregat in v1: Felder einzeln, interne Felder (`tenantId`, `tenantSurveyId`, `surveyName`) erscheinen nicht. */
+export function toV1Aggregate(item: SurveyAggregateItem) {
+  const type = item.questionType ?? "unknown";
+  const totalResponses = Number(item.totalResponses) || 0;
+  const numeric = type === "rating" || type === "nps";
+  const sum = numeric ? Number(item.sum) || 0 : null;
+  // Wie `sum` nur über Zahlenwerte: `totalResponses` zählt auch Antworten ohne Eingabe (`"empty"`)
+  const values = numeric ? numericCounts(item.counts ?? {}) : [];
+  const valueCount = values.reduce((total, [, count]) => total + count, 0);
+  return {
+    questionId: item.questionName,
+    questionType: type,
+    totalResponses,
+    counts: type === "comment" ? null : { ...(item.counts ?? {}) },
+    sum,
+    average: sum !== null && valueCount > 0 ? Math.round((sum / valueCount) * 100) / 100 : null,
+    npsScore: type === "nps" ? npsScore(values) : null,
+    updatedAt: item.updatedAt ?? null,
+  };
+}
+
+/** Antwort von `/aggregates` in v1, sortiert nach `questionId` (Code Units). */
+export function toV1Aggregates(surveyId: string, items: readonly SurveyAggregateItem[]) {
+  return {
+    surveyId,
+    questions: items
+      .map(toV1Aggregate)
+      .sort((a, b) => compareCodeUnits(a.questionId, b.questionId)),
   };
 }

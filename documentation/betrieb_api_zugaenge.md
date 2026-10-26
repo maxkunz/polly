@@ -39,8 +39,10 @@ ADMIN_TOKEN="<Admin-Token>"
 | `reporting.read` | Antworten abrufen (`GET /ext/v1/reporting/data`) | |
 | `invitations.write` | Einladungslinks erzeugen (`POST /ext/v1/invitations`) | Nur bei aktivem Web-Kanal (Feature Flag `web_survey`). Die API prüft das Flag nicht selbst. |
 | `surveys.read` | Umfragedetails lesen (`GET /ext/v1/surveys…`) | |
+| `themes.read` | Web-Designs exportieren (`GET /ext/v1/web-themes`) | |
+| `themes.write` | Web-Designs importieren (`POST /ext/v1/web-themes/import`) | Nur bei aktivem Web-Kanal (Feature Flag `web_survey`), die API prüft das Flag nicht selbst. Der Scope erlaubt dasselbe wie die Rolle `polly_deploy` beim Pflegen der Designs, und zwar ohne Optimistic Locking (der Import überschreibt). |
 
-Nur die Scopes vergeben, die der Kunde braucht. `invitations.write` erlaubt dasselbe wie die Rolle `polly_deploy` beim Erzeugen von Einladungen.
+Nur die Scopes vergeben, die der Kunde braucht. `invitations.write` erlaubt dasselbe wie die Rolle `polly_deploy` beim Erzeugen von Einladungen. Bestehende Clients haben `themes.read` und `themes.write` nicht: dafür einen neuen Client anlegen (siehe „Scopes ändern“).
 
 ## 3. Client anlegen
 

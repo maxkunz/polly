@@ -18,8 +18,11 @@ import {
 	buildV1DataResponse,
 	MAX_LIMIT,
 	MAX_SUMMARY_RANGE_MS,
+	parseV1AggregatesParams,
 	parseV1DataParams,
 	parseV1SummaryParams,
+	toV1Aggregate,
+	toV1Aggregates,
 	toV1Record,
 	toV1Summary
 } from "../amplify/functions/reporting_api/v1";
@@ -37,7 +40,15 @@ import {
 	toV1SurveyDetail,
 	toV1SurveySummary
 } from "../amplify/functions/surveys_api/v1";
-import { defaultWebThemeTokens } from "../src/domain/webTheme/webTheme";
+import { defaultWebThemeTokens, sanitizeWebThemeTokens } from "../src/domain/webTheme/webTheme";
+import type { WebTheme } from "../src/domain/webTheme/webTheme";
+import {
+	buildV1ImportResponse,
+	buildV1Response as buildV1ThemesResponse,
+	parseV1ImportRequest,
+	toV1Theme
+} from "../amplify/functions/web_themes/ext_v1";
+import { handler as webThemesHandler } from "../amplify/functions/web_themes/handler";
 import type { FlowSurvey } from "../src/domain/survey/flowTypes";
 import { createInvitationKey, signInvitation } from "../amplify/functions/shared/invitation_token";
 import { BASE_URL_MAX_CHARS, buildInvitationUrl, INVITATION_COUNT_MAX } from "../src/domain/survey/invitationLinks";
@@ -56,7 +67,7 @@ function test(name: string, fn: () => void | Promise<void>): void {
 
 test("Scopes sind fest und haben das Präfix polly-api/", () => {
 	assert.equal(API_RESOURCE_SERVER, "polly-api");
-	assert.deepEqual([...API_SCOPES], ["reporting.read", "invitations.write", "surveys.read"]);
+	assert.deepEqual([...API_SCOPES], ["reporting.read", "invitations.write", "surveys.read", "themes.read", "themes.write"]);
 	assert.equal(toFullScope("reporting.read"), "polly-api/reporting.read");
 	for (const scope of API_SCOPES) assert.ok(API_SCOPE_DESCRIPTIONS[scope]);
 });
@@ -218,6 +229,10 @@ test("Reporting-Parameter: surveyId ist Pflicht und eine UUID", () => {
 	assert.match(parseError({ ...validQuery, surveyId: "abc" }), /UUID/);
 	assert.match(parseError({}), /surveyId/);
 	assert.match(parseError(null as never), /surveyId/);
+});
+
+test("Reporting-Parameter: surveyId kleingeschrieben wie bei /aggregates", () => {
+	assert.equal(parseOk({ ...validQuery, surveyId: ` ${SURVEY_ID.toUpperCase()} ` }).surveyId, SURVEY_ID);
 });
 
 test("Reporting-Parameter: strenges Datumsformat", () => {
@@ -447,6 +462,8 @@ test("Summary-Parameter: Pflichtfelder, Format, Reihenfolge und version", () => 
 	assert.ok(withVersion.ok);
 	assert.equal(withVersion.params.version, 3);
 	assert.ok(parseV1SummaryParams({ ...base, version: "" }).ok);
+	const upper = parseV1SummaryParams({ ...base, surveyId: SUMMARY_SURVEY_ID.toUpperCase() });
+	assert.ok(upper.ok && upper.params.surveyId === SUMMARY_SURVEY_ID);
 });
 
 test("addToSummary zählt den Kanal, fehlender Kanal ist flow", () => {
@@ -937,6 +954,222 @@ test("Umfragedetails-Handler: ohne Token ergibt 401", async () => {
 		assert.equal(result.statusCode, 401);
 		assert.equal(JSON.parse(result.body).error, "invalid_token");
 	}
+});
+
+// Aggregate (M8)
+test("Aggregate-Parameter: surveyId ist Pflicht und eine UUID, Ausgabe kleingeschrieben", () => {
+	assert.ok(!parseV1AggregatesParams({}).ok);
+	assert.ok(!parseV1AggregatesParams({ surveyId: "x" }).ok);
+	assert.ok(!parseV1AggregatesParams(undefined).ok);
+	const result = parseV1AggregatesParams({ surveyId: ` ${SUMMARY_SURVEY_ID.toUpperCase()} ` });
+	assert.ok(result.ok && result.surveyId === SUMMARY_SURVEY_ID);
+});
+
+test("Aggregate: feste Felder, interne Felder erscheinen nicht", () => {
+	const out = toV1Aggregate({
+		tenantId: "t", tenantSurveyId: "t#s", surveyName: "n", questionName: "q1", questionType: "yes_no",
+		totalResponses: 3, counts: { true: 2, false: 1 }, updatedAt: "2026-10-01T10:00:00.000Z"
+	});
+	assert.deepEqual(out, {
+		questionId: "q1", questionType: "yes_no", totalResponses: 3, counts: { true: 2, false: 1 },
+		sum: null, average: null, npsScore: null, updatedAt: "2026-10-01T10:00:00.000Z"
+	});
+});
+
+test("Aggregate: comment ohne counts, rating mit Durchschnitt, nps mit Score", () => {
+	const comment = toV1Aggregate({ questionName: "c", questionType: "comment", totalResponses: 2 });
+	assert.equal(comment.counts, null);
+	assert.equal(comment.sum, null);
+
+	const rating = toV1Aggregate({ questionName: "r", questionType: "rating", totalResponses: 3, sum: 10, counts: { "3": 1, "4": 1, "3.0": 1 } });
+	assert.equal(rating.sum, 10);
+	assert.equal(rating.average, 3.33);
+	assert.equal(rating.npsScore, null);
+
+	// 2 Promotoren (9, 10), 1 Passiver (8), 1 Kritiker (3): (2 − 1) / 4 = 25,0
+	const nps = toV1Aggregate({ questionName: "n", questionType: "nps", totalResponses: 4, sum: 30, counts: { "9": 1, "10": 1, "8": 1, "3": 1 } });
+	assert.equal(nps.npsScore, 25);
+	// 1 Promotor, 2 Kritiker: (1 − 2) / 3 = −33,3
+	assert.equal(toV1Aggregate({ questionName: "n", questionType: "nps", totalResponses: 3, sum: 12, counts: { "10": 1, "0": 1, "6": 1 } }).npsScore, -33.3);
+});
+
+test("Aggregate: average und npsScore nur über Zahlenwerte, ohne Eingabe zählt nicht mit", () => {
+	// 4, 5 und eine Antwort ohne Eingabe: totalResponses 3, Durchschnitt 4,5
+	const rating = toV1Aggregate({ questionName: "r", questionType: "rating", totalResponses: 3, sum: 9, counts: { "4": 1, "5": 1, empty: 1 } });
+	assert.equal(rating.totalResponses, 3);
+	assert.equal(rating.average, 4.5);
+	const nps = toV1Aggregate({ questionName: "n", questionType: "nps", totalResponses: 3, sum: 19, counts: { "10": 1, "9": 1, empty: 1 } });
+	assert.equal(nps.average, 9.5);
+	assert.equal(nps.npsScore, 100);
+	// Nur Antworten ohne Eingabe: kein Durchschnitt
+	assert.equal(toV1Aggregate({ questionName: "r", questionType: "rating", totalResponses: 2, sum: 0, counts: { empty: 2 } }).average, null);
+});
+
+test("Aggregate: ohne Antworten ist average und npsScore null, fehlende Felder werden abgefangen", () => {
+	const nps = toV1Aggregate({ questionName: "n", questionType: "nps" });
+	assert.equal(nps.totalResponses, 0);
+	assert.equal(nps.sum, 0);
+	assert.equal(nps.average, null);
+	assert.equal(nps.npsScore, null);
+	assert.equal(toV1Aggregate({ questionName: "x" }).questionType, "unknown");
+	assert.equal(toV1Aggregate({ questionName: "x", questionType: "single_choice" }).updatedAt, null);
+});
+
+test("Aggregate: Antwort ist nach questionId sortiert, ohne Daten leer", () => {
+	const out = toV1Aggregates(SUMMARY_SURVEY_ID, [
+		{ questionName: "b", questionType: "comment" },
+		{ questionName: "B", questionType: "comment" },
+		{ questionName: "a", questionType: "comment" }
+	]);
+	assert.deepEqual(out.questions.map((q) => q.questionId), ["B", "a", "b"]);
+	assert.deepEqual(toV1Aggregates(SUMMARY_SURVEY_ID, []), { surveyId: SUMMARY_SURVEY_ID, questions: [] });
+});
+
+test("Aggregate-Handler: ohne Token 401, ungültige Route 404", async () => {
+	const result = await reportingHandler({ routeKey: "GET /ext/v1/reporting/aggregates", headers: {} });
+	assert.equal(result.statusCode, 401);
+	assert.equal(JSON.parse(result.body).error, "invalid_token");
+	const unknown = await reportingHandler({ routeKey: "GET /ext/v1/reporting/aggregates/other", headers: {} });
+	assert.equal(unknown.statusCode, 404);
+	assert.equal(JSON.parse(unknown.body).error, "not_found");
+});
+
+// ---------------------------------------------------------------------------
+// Web-Designs exportieren und importieren (M9)
+// ---------------------------------------------------------------------------
+
+const THEME_ID_A = "11111111-1111-4111-8111-111111111111";
+const THEME_ID_B = "22222222-2222-4222-8222-222222222222";
+
+function themeEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return { themeId: THEME_ID_A, name: "CI Blau", isDefault: false, tokens: defaultWebThemeTokens(), ...overrides };
+}
+
+test("Theme-Import: Pflichtfelder und Aufbau des Bodys", () => {
+	for (const body of [null, [], "x", {}, { themes: [] }, { themes: "x" }]) {
+		assert.equal(parseV1ImportRequest(body).ok, false);
+	}
+	assert.equal(parseV1ImportRequest({ themes: Array.from({ length: 51 }, () => themeEntry()) }).ok, false);
+	for (const entry of [
+		null,
+		[],
+		themeEntry({ themeId: "abc" }),
+		themeEntry({ themeId: undefined }),
+		themeEntry({ name: "" }),
+		themeEntry({ name: "x".repeat(61) }),
+		themeEntry({ name: "a\nb" }),
+		themeEntry({ isDefault: "ja" }),
+		themeEntry({ tokens: undefined }),
+		themeEntry({ tokens: { fontFamily: "Comic" } })
+	]) {
+		assert.equal(parseV1ImportRequest({ themes: [entry] }).ok, false, JSON.stringify(entry));
+	}
+	const ok = parseV1ImportRequest({ themes: [themeEntry({ themeId: THEME_ID_A.toUpperCase(), name: "  CI  ", isDefault: undefined })] });
+	assert.ok(ok.ok);
+	if (ok.ok) {
+		assert.equal(ok.themes[0].themeId, THEME_ID_A);
+		assert.equal(ok.themes[0].name, "CI");
+		// Ohne Angabe entscheidet saveWebThemes (vorhandene Markierung bleibt erhalten)
+		assert.equal(ok.themes[0].isDefault, undefined);
+	}
+	const explicit = parseV1ImportRequest({ themes: [themeEntry({ isDefault: false })] });
+	assert.ok(explicit.ok && explicit.themes[0].isDefault === false);
+});
+
+test("Theme-Import: doppelte IDs und mehrere Standard-Designs", () => {
+	const duplicate = parseV1ImportRequest({ themes: [themeEntry(), themeEntry({ themeId: THEME_ID_A.toUpperCase() })] });
+	assert.equal(duplicate.ok, false);
+	if (!duplicate.ok) assert.match(duplicate.message, /themes\[1\]\.themeId/);
+
+	const twoDefaults = parseV1ImportRequest({
+		themes: [themeEntry({ isDefault: true }), themeEntry({ themeId: THEME_ID_B, isDefault: true })]
+	});
+	assert.equal(twoDefaults.ok, false);
+	assert.ok(parseV1ImportRequest({ themes: [themeEntry({ isDefault: true }), themeEntry({ themeId: THEME_ID_B })] }).ok);
+});
+
+test("Theme-Import: Tokens ohne unbekannte Felder, Fehler mit Index", () => {
+	const tokens = { ...defaultWebThemeTokens(), unknownField: 1, colors: { primary: "#0000FF" } };
+	const ok = parseV1ImportRequest({ themes: [themeEntry({ tokens })] });
+	assert.ok(ok.ok);
+	if (ok.ok) {
+		assert.equal("unknownField" in ok.themes[0].tokens, false);
+		assert.equal(ok.themes[0].tokens.colors.primary, "#0000ff");
+	}
+	const bad = parseV1ImportRequest({
+		themes: [themeEntry(), themeEntry({ themeId: THEME_ID_B, tokens: { colors: { primary: "rot" } } })]
+	});
+	assert.equal(bad.ok, false);
+	if (!bad.ok) assert.equal(bad.message, "themes[1].tokens are invalid");
+	const badName = parseV1ImportRequest({ themes: [themeEntry({ name: "" })] });
+	if (!badName.ok) assert.match(badName.message, /^themes\[0\]\.name must be/);
+});
+
+function storedTheme(overrides: Partial<WebTheme> = {}): WebTheme {
+	return {
+		id: THEME_ID_A,
+		name: "CI Blau",
+		isDefault: true,
+		tokens: defaultWebThemeTokens(),
+		updatedAt: "2026-10-26T10:00:00.000Z",
+		updatedBy: "Erika Muster",
+		...overrides
+	};
+}
+
+test("toV1Theme: feste Feldliste, updatedBy und interne Felder fehlen", () => {
+	const out = toV1Theme({ ...storedTheme(), tenantId: "t1", extra: 1 } as WebTheme);
+	assert.deepEqual(Object.keys(out), ["themeId", "name", "isDefault", "updatedAt", "tokens"]);
+	assert.equal(out.themeId, THEME_ID_A);
+	assert.equal(toV1Theme(storedTheme({ updatedAt: "" })).updatedAt, null);
+});
+
+test("Theme-Export: nach Name und ID sortiert, Import-Antwort mit Zählern", () => {
+	const themes = [
+		storedTheme({ id: THEME_ID_B, name: "b", isDefault: false }),
+		storedTheme({ id: THEME_ID_A, name: "B", isDefault: false }),
+		storedTheme({ id: "33333333-3333-4333-8333-333333333333", name: "a", isDefault: false })
+	];
+	assert.deepEqual(buildV1ThemesResponse(themes).themes.map((t) => t.themeId), [
+		"33333333-3333-4333-8333-333333333333",
+		THEME_ID_A,
+		THEME_ID_B
+	]);
+	assert.deepEqual(buildV1ThemesResponse([]), { themes: [] });
+	const imported = buildV1ImportResponse(themes, { created: 2, updated: 1 });
+	assert.deepEqual(Object.keys(imported), ["created", "updated", "themes"]);
+	assert.equal(imported.created, 2);
+});
+
+test("Theme-Rundlauf: Export lässt sich ohne Verlust wieder importieren", () => {
+	const themes = [
+		storedTheme({ id: THEME_ID_A, name: "Eins", isDefault: true }),
+		storedTheme({
+			id: THEME_ID_B,
+			name: "Zwei",
+			isDefault: false,
+			tokens: sanitizeWebThemeTokens({ fontFamily: "serif", colors: { primary: "#112233" }, transparentBackground: true })!
+		})
+	];
+	const exported = JSON.parse(JSON.stringify(buildV1ThemesResponse(themes)));
+	const parsed = parseV1ImportRequest(exported);
+	assert.ok(parsed.ok);
+	if (!parsed.ok) return;
+	assert.deepEqual(
+		parsed.themes.map(({ themeId, name, isDefault, tokens }) => ({ themeId, name, isDefault, tokens })),
+		themes.map(({ id, name, isDefault, tokens }) => ({ themeId: id, name, isDefault, tokens }))
+	);
+});
+
+test("Theme-Handler (Kunden-API): ohne Token 401, unbekannte Route 404", async () => {
+	for (const routeKey of ["GET /ext/v1/web-themes", "POST /ext/v1/web-themes/import"]) {
+		const result = await webThemesHandler({ routeKey, headers: {} });
+		assert.equal(result.statusCode, 401, routeKey);
+		assert.equal(JSON.parse(result.body).error, "invalid_token");
+	}
+	const unknown = await webThemesHandler({ routeKey: "GET /ext/v1/web-themes/other", headers: {} });
+	assert.equal(unknown.statusCode, 404);
+	assert.equal(JSON.parse(unknown.body).error, "not_found");
 });
 
 async function main(): Promise<void> {

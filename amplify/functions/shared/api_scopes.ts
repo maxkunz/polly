@@ -8,7 +8,7 @@
 export const API_RESOURCE_SERVER = "polly-api";
 
 /** Fachliche Scopes, ohne Mandant (den Mandanten findet die Lambda über die client_id). */
-export const API_SCOPES = ["reporting.read", "invitations.write", "surveys.read"] as const;
+export const API_SCOPES = ["reporting.read", "invitations.write", "surveys.read", "themes.read", "themes.write"] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];
 export type ApiFullScope = `${typeof API_RESOURCE_SERVER}/${ApiScope}`;
@@ -18,6 +18,8 @@ export const API_SCOPE_DESCRIPTIONS: Record<ApiScope, string> = {
   "reporting.read": "Read survey responses",
   "invitations.write": "Create web survey invitations",
   "surveys.read": "Read survey details",
+  "themes.read": "Export web themes",
+  "themes.write": "Import web themes",
 };
 
 export function isApiScope(value: unknown): value is ApiScope {

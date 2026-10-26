@@ -622,6 +622,11 @@ surveyResponsesTable.grantReadData(reportingApiLambda);
 reportingApiLambda.addEnvironment("SURVEY_RESPONSES_TABLE_NAME", surveyResponsesTable.tableName);
 apiClientsTable.grantReadData(reportingApiLambda);
 reportingApiLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+// Aggregate und die Prüfung auf laufende Löschungen (nur lesend)
+surveyAggregatesTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("SURVEY_AGGREGATES_TABLE_NAME", surveyAggregatesTable.tableName);
+surveyDeletionJobsTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("SURVEY_DELETION_JOBS_TABLE_NAME", surveyDeletionJobsTable.tableName);
 attachApiClientAuth(reportingApiLambda);
 
 const reportingApiInteg = new integrations.HttpLambdaIntegration("ReportingApiInteg", reportingApiLambda);
@@ -634,6 +639,11 @@ const reportingApiRoutes = [
   }),
   ...httpApi.addRoutes({
     path: "/ext/v1/reporting/summary",
+    methods: [apigw.HttpMethod.GET],
+    integration: reportingApiInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/reporting/aggregates",
     methods: [apigw.HttpMethod.GET],
     integration: reportingApiInteg,
   }),
@@ -675,6 +685,9 @@ const REPORTING_SUMMARY_THROTTLE = { rateLimit: 10, burstLimit: 20 };
 const EXT_INVITATIONS_THROTTLE = { rateLimit: 5, burstLimit: 10 };
 // Jeder Aufruf der Liste liest die Zeilen der Data Table bei Genesys (Antworten werden 60 s gecacht)
 const EXT_SURVEYS_THROTTLE = { rateLimit: 10, burstLimit: 20 };
+// Export liest alle Designs des Mandanten, der Import schreibt bis zu 50 in einer Transaktion
+const EXT_THEMES_EXPORT_THROTTLE = { rateLimit: 10, burstLimit: 20 };
+const EXT_THEMES_IMPORT_THROTTLE = { rateLimit: 5, burstLimit: 10 };
 
 // Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
 const defaultStage = httpApi.defaultStage;
@@ -697,6 +710,10 @@ if (defaultStage) {
       ThrottlingRateLimit: REPORTING_SUMMARY_THROTTLE.rateLimit,
       ThrottlingBurstLimit: REPORTING_SUMMARY_THROTTLE.burstLimit,
     },
+    "GET /ext/v1/reporting/aggregates": {
+      ThrottlingRateLimit: REPORTING_API_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: REPORTING_API_THROTTLE.burstLimit,
+    },
     "POST /ext/v1/invitations": {
       ThrottlingRateLimit: EXT_INVITATIONS_THROTTLE.rateLimit,
       ThrottlingBurstLimit: EXT_INVITATIONS_THROTTLE.burstLimit,
@@ -709,6 +726,14 @@ if (defaultStage) {
       ThrottlingRateLimit: EXT_SURVEYS_THROTTLE.rateLimit,
       ThrottlingBurstLimit: EXT_SURVEYS_THROTTLE.burstLimit,
     },
+    "GET /ext/v1/web-themes": {
+      ThrottlingRateLimit: EXT_THEMES_EXPORT_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_THEMES_EXPORT_THROTTLE.burstLimit,
+    },
+    "POST /ext/v1/web-themes/import": {
+      ThrottlingRateLimit: EXT_THEMES_IMPORT_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_THEMES_IMPORT_THROTTLE.burstLimit,
+    },
   };
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
   defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes, ...surveysApiRoutes);
@@ -719,6 +744,9 @@ const webThemesLambda = backend.webThemes.resources.lambda as lambda.Function;
 
 webSurveyThemesTable.grantReadWriteData(webThemesLambda);
 webThemesLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
+// Kunden-API (Export/Import): Prüfung des API-Clients über resolveApiClient
+apiClientsTable.grantReadData(webThemesLambda);
+webThemesLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
 attachTenantAuth(webThemesLambda);
 
 const webThemesInteg = new integrations.HttpLambdaIntegration("WebThemesInteg", webThemesLambda);
@@ -734,6 +762,22 @@ httpApi.addRoutes({
   methods: [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
   integration: webThemesInteg,
 });
+
+// Kunden-API: Web-Designs exportieren und importieren (Scopes themes.read / themes.write)
+const extWebThemesRoutes = [
+  ...httpApi.addRoutes({
+    path: "/ext/v1/web-themes",
+    methods: [apigw.HttpMethod.GET],
+    integration: webThemesInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/web-themes/import",
+    methods: [apigw.HttpMethod.POST],
+    integration: webThemesInteg,
+  }),
+];
+// Die Stage verweist über routeSettings auf diese Routen (der Block steht weiter oben)
+defaultStage?.node.addDependency(...extWebThemesRoutes);
 
 const surveyCleanupLambda = backend.surveyCleanup.resources
   .lambda as lambda.Function;

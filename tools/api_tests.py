@@ -20,9 +20,10 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
   API_URL                 Pflicht: Basis-URL inkl. Präfix, z. B. https://<app>.amplifyapp.com/api
                           (ohne API_URL bricht das Skript ab)
   GENESYS_REGION          Default mypurecloud.de
-  API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen drei Scopes
+  API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen fünf Scopes
+                          (ohne themes.read/themes.write entfallen [C28]–[C34])
   API_CLIENT_SECRET       dazu das Client-Secret
-  API_TOKEN_URL           dazu die Token-URL (…/oauth2/token); ohne alle drei entfallen die Fälle [C1]–[C21]
+  API_TOKEN_URL           dazu die Token-URL (…/oauth2/token); ohne alle drei entfallen die Fälle [C1]–[C34]
 
 Optionen (jeweils auch per gleichnamiger Umgebungsvariable in Großbuchstaben):
   --survey-id             Umfrage für die Antworttests, muss in der Data Table DIESER Installation
@@ -575,7 +576,7 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
     """Kunden-API /ext/v1 mit Client Credentials. Braucht die Session aus tests_survey_responses."""
     suite.section("Kunden-API: /ext/v1")
     if not (cfg.api_client_id and cfg.api_client_secret and cfg.api_token_url):
-        suite.skip("[C1]–[C24]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
+        suite.skip("[C1]–[C34]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
         return
 
     basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
@@ -616,7 +617,7 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
     reporting_only = access_token(suite.case("[C2] Token nur mit reporting.read holen (200)",
                                              fetch_token("polly-api/reporting.read"), 200, json_has("access_token")))
     if not full or not reporting_only:
-        suite.skip("[C3]–[C24]", "kein Token erhalten")
+        suite.skip("[C3]–[C34]", "kein Token erhalten")
         return
 
     now = datetime.now(timezone.utc)
@@ -765,6 +766,109 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
                400, error_code("invalid_request"))
     suite.case("[C24] GET /reporting/summary ohne Token (401 invalid_token)",
                lambda: api.public("GET", "/ext/v1/reporting/summary", params=window), 401, error_code("invalid_token"))
+
+    def aggregates_ok(res: Response) -> Optional[str]:
+        body = res.json()
+        questions = body.get("questions") if isinstance(body, dict) else None
+        if not isinstance(questions, list):
+            return "questions ist keine Liste"
+        ids = [q.get("questionId") for q in questions if isinstance(q, dict)]
+        if ids != sorted(ids):
+            return "questions ist nicht nach questionId sortiert"
+        for q in questions:
+            if q.get("questionType") == "comment" and q.get("counts") is not None:
+                return f"counts bei comment ist nicht null ({q.get('questionId')})"
+            if "tenantId" in q or "tenantSurveyId" in q:
+                return "interne Felder in der Antwort"
+        return None
+
+    suite.case("[C25] GET /reporting/aggregates liefert Fragen sortiert, ohne interne Felder",
+               ext("GET", "/reporting/aggregates", full, params={"surveyId": cfg.survey_id}), 200, aggregates_ok)
+    suite.case("[C26] GET /reporting/aggregates ohne surveyId (400 invalid_request)",
+               ext("GET", "/reporting/aggregates", full), 400, error_code("invalid_request"))
+    suite.case("[C27] GET /reporting/aggregates ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/reporting/aggregates", params={"surveyId": cfg.survey_id}),
+               401, error_code("invalid_token"))
+
+    # Web-Designs: Export und Import mit fester Test-ID (Upsert, wiederholbar). Der Test löscht nichts,
+    # das Design "Polly API-Test" bleibt im Mandanten stehen und wird beim nächsten Lauf überschrieben.
+    def token_scopes(token: str) -> list:
+        try:
+            payload = token.split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+            return str(claims.get("scope", "")).split()
+        except (IndexError, ValueError):
+            return []
+
+    granted = token_scopes(full)
+    missing = [scope for scope in ("polly-api/themes.read", "polly-api/themes.write") if scope not in granted]
+    if missing:
+        suite.skip("[C28]–[C34]", f"dem Client fehlen die Scopes {', '.join(missing)}")
+        return
+
+    theme_id = "00000000-0000-4000-8000-00000000a9e1"
+    theme_name = "Polly API-Test"
+    theme_import = {"themes": [{"themeId": theme_id, "name": theme_name, "isDefault": False,
+                                "tokens": {"schemaVersion": 1}}]}
+
+    suite.case("[C28] GET /web-themes liefert eine Liste (200)", ext("GET", "/web-themes", full), 200, is_list("themes"))
+
+    def import_counts(created: int, updated: int) -> BodyCheck:
+        def check(res: Response) -> Optional[str]:
+            body = res.json()
+            if not isinstance(body, dict):
+                return "Antwort ist kein Objekt"
+            if (body.get("created"), body.get("updated")) != (created, updated):
+                return f"created/updated = {body.get('created')}/{body.get('updated')}, erwartet {created}/{updated}"
+            saved = [t for t in items(res, "themes") if t.get("themeId") == theme_id]
+            return None if saved and saved[0].get("name") == theme_name else "gespeichertes Design fehlt in der Antwort"
+        return check
+
+    def import_one_or_two(res: Response) -> Optional[str]:
+        # Erster Lauf legt an (1/0), jeder weitere überschreibt (0/1)
+        first = import_counts(1, 0)(res)
+        return None if first is None or import_counts(0, 1)(res) is None else first
+
+    suite.case("[C29] POST /web-themes/import legt das Test-Design an oder überschreibt es (200)",
+               ext("POST", "/web-themes/import", full, body=theme_import), 200, import_one_or_two)
+    suite.case("[C30] POST /web-themes/import wiederholt: Upsert überschreibt (200, created 0, updated 1)",
+               ext("POST", "/web-themes/import", full, body=theme_import), 200, import_counts(0, 1))
+
+    # Stand des Test-Designs aus [C31], [C33b] prüft damit, dass der abgelehnte Import nichts gespeichert hat
+    exported: dict = {}
+
+    def has_test_theme(res: Response) -> Optional[str]:
+        found = [t for t in items(res, "themes") if t.get("themeId") == theme_id]
+        if not found:
+            return "Test-Design fehlt im Export"
+        exported.update(found[0])
+        extra = set(found[0]) - {"themeId", "name", "isDefault", "updatedAt", "tokens"}
+        return f"unerwartete Felder im Export: {sorted(extra)}" if extra else None
+
+    def test_theme_unchanged(res: Response) -> Optional[str]:
+        if not exported:
+            return "kein Stand aus [C31]"
+        found = [t for t in items(res, "themes") if t.get("themeId") == theme_id]
+        if not found:
+            return "Test-Design fehlt im Export"
+        return None if found[0] == exported else f"Test-Design geändert: updatedAt {found[0].get('updatedAt')}"
+
+    suite.case("[C31] GET /web-themes enthält das importierte Design mit festen Feldern",
+               ext("GET", "/web-themes", full), 200, has_test_theme)
+    suite.case("[C32] POST /web-themes/import mit reporting.read-Token (403 insufficient_scope)",
+               ext("POST", "/web-themes/import", reporting_only, body=theme_import), 403,
+               error_code("insufficient_scope"))
+    suite.case("[C32b] GET /web-themes mit reporting.read-Token (403 insufficient_scope)",
+               ext("GET", "/web-themes", reporting_only), 403, error_code("insufficient_scope"))
+    suite.case("[C33] POST /web-themes/import mit ungültigen Tokens (400, Index in der Meldung)",
+               ext("POST", "/web-themes/import", full, body=
+                   {"themes": [{"themeId": theme_id, "name": "Polly API-Test geändert",
+                                "tokens": {"colors": {"primary": "rot"}}}]}),
+               400, json_field("message", "themes[0].tokens are invalid"))
+    suite.case("[C33b] GET /web-themes: Test-Design nach [C33] unverändert (nichts gespeichert)",
+               ext("GET", "/web-themes", full), 200, test_theme_unchanged)
+    suite.case("[C34] GET /web-themes ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/web-themes"), 401, error_code("invalid_token"))
 
 
 def tests_preview(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:

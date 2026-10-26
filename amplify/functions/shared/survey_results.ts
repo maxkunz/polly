@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { BatchGetCommand, DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { BatchGetCommand, DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 /**
  * Gemeinsame Schreib-/Prüflogik für Umfrage-Ergebnisse, genutzt von `survey_responses` (Architect Flow)
@@ -84,6 +84,43 @@ export async function findSurveysBeingDeleted(tenantId: string, surveyIds: reado
     }
   }
   return deleted;
+}
+
+/** Ein Aggregat-Item pro Frage, wie in `SurveyAggregatesTable` gespeichert. */
+export interface SurveyAggregateItem {
+  tenantId?: string;
+  tenantSurveyId?: string;
+  questionName: string;
+  surveyName?: string;
+  questionType?: string;
+  totalResponses?: number;
+  sum?: number;
+  counts?: Record<string, number>;
+  updatedAt?: string;
+}
+
+/**
+ * Liest alle Aggregate einer Umfrage und blättert über `LastEvaluatedKey` (anders als die App-Route
+ * `/survey-responses/aggregates`, die nur die erste Seite liest). Ohne Daten eine leere Liste.
+ */
+export async function loadSurveyAggregates(tenantId: string, surveyId: string): Promise<SurveyAggregateItem[]> {
+  if (!SURVEY_AGGREGATES_TABLE_NAME) throw new Error("SURVEY_AGGREGATES_TABLE_NAME not configured");
+  const items: SurveyAggregateItem[] = [];
+  let startKey: Record<string, any> | undefined;
+  do {
+    const result: any = await ddb.send(
+      new QueryCommand({
+        TableName: SURVEY_AGGREGATES_TABLE_NAME,
+        KeyConditionExpression: "#pk = :pk",
+        ExpressionAttributeNames: { "#pk": "tenantSurveyId" },
+        ExpressionAttributeValues: { ":pk": `${tenantId}#${surveyId}` },
+        ExclusiveStartKey: startKey,
+      })
+    );
+    items.push(...((result.Items ?? []) as SurveyAggregateItem[]));
+    startKey = result.LastEvaluatedKey;
+  } while (startKey);
+  return items;
 }
 
 /**

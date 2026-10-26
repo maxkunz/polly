@@ -1,8 +1,11 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DeleteCommand, DynamoDBDocumentClient, PutCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { POLLY_ROLE_DEPLOY } from "../../../src/constants/permissionConstants";
 import { WEB_THEME_MAX_PER_TENANT, type WebTheme } from "../../../src/domain/webTheme/webTheme";
+import { resolveApiClient } from "../shared/api_client_auth";
 import { requireCallerRole } from "../shared/caller_roles";
+import { dispatchExtRoute, extError as extErrorWith, extHeaders, extJson, isExtRouteKey } from "../shared/ext_http";
+import type { ExtRoute } from "../shared/ext_http";
 import { readRequestBody } from "../shared/http";
 import {
   getAuthorizationToken,
@@ -10,8 +13,9 @@ import {
   loadTenantCredentials,
   resolveTenantContext,
 } from "../shared/tenant_auth";
-import { isValidThemeId, parseWebThemeRequest, toWebTheme } from "../shared/web_themes";
-import { queryWebThemeItems } from "../shared/web_themes_table";
+import { compareWebThemes, isValidThemeId, parseWebThemeRequest, toWebTheme } from "../shared/web_themes";
+import { queryWebThemeItems, saveWebThemes } from "../shared/web_themes_table";
+import { buildV1ImportResponse, buildV1Response, IMPORT_MAX_BODY_BYTES, parseV1ImportRequest } from "./ext_v1";
 
 /**
  * Web-Designs der öffentlichen Umfrageseite pro Mandant (siehe `documentation/polly_web.md`, „Designs“):
@@ -19,6 +23,9 @@ import { queryWebThemeItems } from "../shared/web_themes_table";
  *  - PUT    /web-themes/{id}   → anlegen oder ändern (`polly_deploy`)
  *  - DELETE /web-themes/{id}   → löschen (`polly_deploy`)
  * Schreiben nur mit Genesys-Bearer und serverseitig geprüfter Rolle; Cognito-M2M-Tokens bekommen 403.
+ * Kunden-API (Anmeldung über `resolveApiClient`, siehe `documentation/polly_customer_api.md`):
+ *  - GET  /ext/v1/web-themes         → Export (Scope `themes.read`)
+ *  - POST /ext/v1/web-themes/import  → Import als Upsert nach `themeId` (Scope `themes.write`)
  */
 
 type AnyApiGwEvent = any;
@@ -57,7 +64,8 @@ function parseJson(text: string): unknown {
   }
 }
 
-async function listThemes(tenantId: string): Promise<AnyResult> {
+/** Alle gültigen Designs des Mandanten (ohne Cache); ungültige Einträge werden übersprungen. */
+async function loadThemes(tenantId: string): Promise<WebTheme[]> {
   const items = await queryWebThemeItems(WEB_THEMES_TABLE_NAME, tenantId);
   const themes: WebTheme[] = [];
   for (const item of items) {
@@ -65,7 +73,12 @@ async function listThemes(tenantId: string): Promise<AnyResult> {
     if (theme) themes.push(theme);
     else console.warn("[web_themes] skipping invalid item", { tenantId, themeId: item.themeId });
   }
-  themes.sort((a, b) => a.name.localeCompare(b.name, "de", { sensitivity: "base" }));
+  return themes;
+}
+
+async function listThemes(tenantId: string): Promise<AnyResult> {
+  const themes = await loadThemes(tenantId);
+  themes.sort(compareWebThemes);
   return jsonResponse(200, { themes });
 }
 
@@ -102,63 +115,30 @@ async function putTheme(event: AnyApiGwEvent, tenantId: string, region: string, 
   const access = await checkWriteAccess(event, tenantId, region);
   if (access.error) return access.error;
 
-  const existing = await queryWebThemeItems(WEB_THEMES_TABLE_NAME, tenantId, "themeId, isDefault");
-  const isNew = !existing.some((item) => item.themeId === themeId);
-  if (isNew && existing.length >= WEB_THEME_MAX_PER_TENANT) {
-    return jsonResponse(409, { code: "limit_reached", message: `At most ${WEB_THEME_MAX_PER_TENANT} themes per tenant` });
-  }
-
   const { name, isDefault, tokens, expectedUpdatedAt } = parsed.request;
-  const updatedAt = new Date().toISOString();
-  const item = { tenantId, themeId, name, isDefault, tokens, updatedAt, updatedBy: access.updatedBy };
-
-  // Optimistisches Sperren: Neu anlegen nur, wenn es die ID noch nicht gibt; Ändern nur auf dem Stand, den
-  // der Editor geladen hat. So überschreibt ein veralteter Editor keine fremde Änderung und holt ein
-  // zwischenzeitlich gelöschtes Design nicht zurück.
-  const put = {
-    TableName: WEB_THEMES_TABLE_NAME,
-    Item: item,
-    ...(expectedUpdatedAt === null
-      ? { ConditionExpression: "attribute_not_exists(themeId)" }
-      : { ConditionExpression: "updatedAt = :expected", ExpressionAttributeValues: { ":expected": expectedUpdatedAt } }),
-  };
-
-  // Neues Standard-Design: Die bisherigen verlieren die Markierung in derselben Transaktion
-  const previousDefaults = isDefault
-    ? existing.filter((entry) => entry.isDefault === true && entry.themeId !== themeId)
-    : [];
-  try {
-    if (previousDefaults.length === 0) {
-      await ddb.send(new PutCommand(put));
-    } else {
-      await ddb.send(
-        new TransactWriteCommand({
-          TransactItems: [
-            { Put: put },
-            ...previousDefaults.map((entry) => ({
-              Update: {
-                TableName: WEB_THEMES_TABLE_NAME,
-                Key: { tenantId, themeId: entry.themeId },
-                UpdateExpression: "SET isDefault = :false",
-                ConditionExpression: "attribute_exists(themeId)",
-                ExpressionAttributeValues: { ":false": false },
-              },
-            })),
-          ],
-        })
-      );
+  const saved = await saveWebThemes(
+    WEB_THEMES_TABLE_NAME,
+    tenantId,
+    [{ themeId, name, isDefault, tokens }],
+    access.updatedBy,
+    { expectedUpdatedAt }
+  );
+  if (!saved.ok) {
+    if (saved.reason === "limit_reached") {
+      return jsonResponse(409, { code: "limit_reached", message: `At most ${WEB_THEME_MAX_PER_TENANT} themes per tenant` });
     }
-  } catch (err: any) {
-    // Design zwischenzeitlich geändert/gelöscht oder bisheriges Standard-Design gerade gelöscht: App lädt neu
-    if (err?.name === "ConditionalCheckFailedException" || err?.name === "TransactionCanceledException") {
-      console.warn("[web_themes] conflict", { tenantId, themeId, expectedUpdatedAt });
-      return jsonResponse(409, { code: "conflict", message: "Theme changed concurrently, please reload" });
-    }
-    throw err;
+    console.warn("[web_themes] conflict", { tenantId, themeId, expectedUpdatedAt });
+    return jsonResponse(409, { code: "conflict", message: "Theme changed concurrently, please reload" });
   }
 
-  console.log("[web_themes] saved", { tenantId, themeId, isNew, isDefault, clearedDefaults: previousDefaults.length });
-  return jsonResponse(200, { theme: toWebTheme(item) });
+  console.log("[web_themes] saved", {
+    tenantId,
+    themeId,
+    isNew: saved.created > 0,
+    isDefault,
+    clearedDefaults: saved.clearedDefaults,
+  });
+  return jsonResponse(200, { theme: saved.themes[0] });
 }
 
 async function deleteTheme(event: AnyApiGwEvent, tenantId: string, region: string, themeId: string): Promise<AnyResult> {
@@ -178,9 +158,65 @@ async function deleteTheme(event: AnyApiGwEvent, tenantId: string, region: strin
   return jsonResponse(200, { ok: true });
 }
 
+const extResponseHeaders = extHeaders("GET,POST");
+
+function extError(statusCode: number, error: string, message: string): AnyResult {
+  return extErrorWith(extResponseHeaders, statusCode, error, message);
+}
+
+async function exportExtThemes(event: AnyApiGwEvent): Promise<AnyResult> {
+  const auth = await resolveApiClient(event, "polly-api/themes.read");
+  if (!auth.ok) return extError(auth.statusCode, auth.error, auth.message);
+
+  const themes = await loadThemes(auth.tenantId);
+  console.log("[web_themes] exported (ext v1)", { clientId: auth.clientId, tenantId: auth.tenantId, count: themes.length });
+  return extJson(extResponseHeaders, 200, buildV1Response(themes));
+}
+
+async function importExtThemes(event: AnyApiGwEvent): Promise<AnyResult> {
+  const auth = await resolveApiClient(event, "polly-api/themes.write");
+  if (!auth.ok) return extError(auth.statusCode, auth.error, auth.message);
+
+  const body = readRequestBody(event, IMPORT_MAX_BODY_BYTES);
+  if (!body.ok) return extError(413, "payload_too_large", "Request body too large");
+  const parsed = parseV1ImportRequest(parseJson(body.text));
+  if (!parsed.ok) return extError(400, "invalid_request", parsed.message);
+
+  const { tenantId, clientId } = auth;
+  // Der Import gewinnt: kein optimistisches Sperren, Bearbeiter ist der API-Client
+  const saved = await saveWebThemes(WEB_THEMES_TABLE_NAME, tenantId, parsed.themes, `api:${clientId}`);
+  if (!saved.ok) {
+    if (saved.reason === "limit_reached") {
+      return extError(409, "limit_reached", `At most ${WEB_THEME_MAX_PER_TENANT} themes per tenant`);
+    }
+    console.warn("[web_themes] conflict (ext v1)", { clientId, tenantId });
+    return extError(409, "conflict", "Themes changed concurrently, please retry");
+  }
+
+  console.log("[web_themes] imported (ext v1)", {
+    clientId,
+    tenantId,
+    created: saved.created,
+    updated: saved.updated,
+    clearedDefaults: saved.clearedDefaults,
+  });
+  return extJson(extResponseHeaders, 200, buildV1ImportResponse(saved.themes, saved));
+}
+
+/** Routing der Kunden-API: eine neue Version braucht nur einen weiteren Eintrag. */
+export const extRoutes: Record<string, ExtRoute> = {
+  "GET /ext/v1/web-themes": exportExtThemes,
+  "POST /ext/v1/web-themes/import": importExtThemes,
+};
+
 export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
   const method = event?.requestContext?.http?.method ?? "";
   const path: string = event?.requestContext?.http?.path ?? event?.rawPath ?? "";
+
+  // Kunden-API: nur nach routeKey, wie das Routing selbst, und vor der Mandantenauflösung der App
+  if (isExtRouteKey(event)) {
+    return dispatchExtRoute(extRoutes, event, undefined, extResponseHeaders, "[web_themes] (ext)");
+  }
 
   if (method === "OPTIONS") return jsonResponse(204, "");
   if (!WEB_THEMES_TABLE_NAME) {
@@ -189,8 +225,9 @@ export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
   }
 
   const isList = path === PATH_PREFIX;
-  // Design-IDs sind UUIDs, ein kodierter Pfad wird nicht dekodiert, sondern als ungültige ID abgelehnt
-  const themeId = path.startsWith(`${PATH_PREFIX}/`) ? path.slice(PATH_PREFIX.length + 1) : "";
+  // Design-IDs sind UUIDs, ein kodierter Pfad wird nicht dekodiert, sondern als ungültige ID abgelehnt.
+  // Kleingeschrieben wie beim Import, damit dieselbe ID nicht in zwei Schreibweisen gespeichert wird.
+  const themeId = path.startsWith(`${PATH_PREFIX}/`) ? path.slice(PATH_PREFIX.length + 1).toLowerCase() : "";
   if (!(isList && method === "GET") && !(themeId && (method === "PUT" || method === "DELETE"))) {
     return jsonResponse(404, { message: "Not found", method, path });
   }
