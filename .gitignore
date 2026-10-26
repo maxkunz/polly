@@ -40,3 +40,5 @@ amplify_outputs*
 amplifyconfiguration*
 
 .agents
+# Lokaler Wrapper mit Token (leere Vorlage ist eingecheckt, siehe tools/run_api_tests.sh)
+tools/run_api_tests.sh

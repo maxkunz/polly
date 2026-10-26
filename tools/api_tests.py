@@ -257,6 +257,20 @@ class Suite:
 # Testgruppen
 # -------------------------------------------------------------------
 
+def check_genesys_token(suite: Suite, cfg: argparse.Namespace, ssl_context: Optional[ssl.SSLContext]) -> bool:
+    """Prüft GENESYS_TOKEN direkt bei Genesys (GET /api/v2/users/me); bei Fehler bricht main() ab."""
+    suite.section(f"Genesys-Token: https://api.{cfg.region}/api/v2/users/me")
+    genesys = HttpClient(f"https://api.{cfg.region}", ssl_context)
+    res = suite.case("[G1] GET /api/v2/users/me (200, id)",
+                     lambda: genesys.request("GET", "/api/v2/users/me",
+                                             headers={"Authorization": f"Bearer {cfg.token}"}),
+                     200, json_has("id"))
+    body = res.json() if res is not None and res.status == 200 else None
+    if isinstance(body, dict) and body.get("name"):
+        print(f"Angemeldet als {body['name']}")
+    return res is not None and res.status == 200 and isinstance(body, dict) and bool(body.get("id"))
+
+
 def tests_web_public(suite: Suite, api: PollyApi) -> None:
     """Öffentliche Endpunkte, laufen ohne Genesys-Token."""
     suite.section(f"Web-Kanal: {api.base_url}/web-survey")
@@ -805,6 +819,11 @@ def main() -> int:
     conversation_id = f"test-conv-{int(time.time())}"
 
     print(f"API: {api.base_url}\nRegion: {cfg.region}\nConversationId: {conversation_id}")
+
+    if cfg.token and not check_genesys_token(suite, cfg, ssl_context):
+        print("\nAbbruch: Das Genesys-Token ist ungültig oder abgelaufen (GENESYS_TOKEN neu holen).")
+        suite.summary()
+        return 1
 
     tests_web_public(suite, api)
 
