@@ -1,8 +1,7 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { ddb, iterateSessions, SESSION_PAGE_SIZE, type SessionQueryParams } from "../shared/survey_sessions";
+import { iterateSessions, type SessionQueryParams } from "../shared/survey_sessions";
 import { resolveTenantContext } from "../shared/tenant_auth";
 import { CSV_HEADER, sessionToCsvRows, type ExportSession } from "./csv";
-import { addToSummary, createSummary, type ExportSummary } from "./summary";
+import { createSummary, openSlices, summarizeSlices, type SummarySlice } from "../shared/session_summary";
 
 type AnyApiGwEvent = any;
 type AnyLambdaContext = { getRemainingTimeInMillis: () => number };
@@ -151,56 +150,6 @@ async function exportCsv(
   return { statusCode: 200, headers, body };
 }
 
-// Anzahl paralleler Zeitabschnitte für die Vorschau (siehe exportSummary). Bei 100.000+ Sessions
-// dauerte die bisherige sequenzielle Abfrage ca. 16 s; mit parallelen Teilbereichen laufen die
-// Query-Aufrufe gleichzeitig statt nacheinander.
-const SUMMARY_SLICE_COUNT = Number(process.env.SUMMARY_SLICE_COUNT ?? 10);
-
-// Für die Vorschau genügen Status und Version (siehe addToSummary). Die answers-Maps werden bewusst
-// nicht gelesen: ihr Unmarshalling war bei 100.000+ Sessions der Hauptteil der Laufzeit.
-const SUMMARY_NAMES: Record<string, string> = {
-  "#tenantId": "tenantId",
-  "#sk": "surveyStartedAt",
-  "#status": "status",
-  "#surveyVersion": "surveyVersion",
-};
-const SUMMARY_PROJECTION = "#status, #surveyVersion";
-
-interface SummarySlice {
-  from: string;
-  to: string;
-  startKey?: Record<string, any>;
-  done: boolean;
-}
-
-/**
- * Teilt [fromIso, toIso] in bis zu `count` lückenlose, nicht überlappende Zeitabschnitte (auf
- * Millisekunden-Basis), damit die Vorschau mehrere Query-Aufrufe parallel statt nacheinander
- * ausführen kann. Bei sehr kurzen Zeiträumen (weniger Millisekunden als `count`) entstehen
- * entsprechend weniger, aber immer gültige (nicht-leere) Abschnitte.
- */
-export function buildTimeSlices(fromIso: string, toIso: string, count: number): { from: string; to: string }[] {
-  const fromMs = Date.parse(fromIso);
-  const toMs = Date.parse(toIso);
-  // Anzahl Millisekunden im (inklusiven) Zeitraum; exakte Integer-Aufteilung statt proportionaler
-  // Rundung, damit bei sehr kurzen Zeiträumen keine zwei Grenzen zusammenfallen (leerer/ungültiger
-  // Abschnitt mit from > to).
-  const totalMs = toMs - fromMs + 1;
-  const sliceCount = Math.max(1, Math.min(count, totalMs));
-  const baseLength = Math.floor(totalMs / sliceCount);
-  const remainder = totalMs % sliceCount;
-
-  const slices: { from: string; to: string }[] = [];
-  let start = fromMs;
-  for (let i = 0; i < sliceCount; i++) {
-    const length = baseLength + (i < remainder ? 1 : 0);
-    const end = start + length - 1;
-    slices.push({ from: new Date(start).toISOString(), to: new Date(end).toISOString() });
-    start = end + 1;
-  }
-  return slices;
-}
-
 function encodeSummaryCursor(tenantId: string, surveyId: string, slices: SummarySlice[]): string {
   return encodeCursor({ tenantId, surveyId, slices });
 }
@@ -222,54 +171,6 @@ function parseSummaryCursor(raw: string, tenantId: string, surveyId: string): Su
     }
   }
   return payload.slices as SummarySlice[];
-}
-
-/**
- * Liest einen Zeitabschnitt der Vorschau zu Ende (oder bis das Zeitbudget ausgeht) und zählt die
- * Sessions direkt in `summary` ein. `summary` wird parallel von mehreren Slices mutiert; das ist
- * unkritisch, weil addToSummary synchron läuft und zwischen den Items keine await-Punkte liegen –
- * die JS-Event-Loop unterbricht also nie mitten in einem Zähl-Durchlauf.
- */
-async function processSlice(
-  tenantId: string,
-  surveyId: string,
-  slice: SummarySlice,
-  summary: ExportSummary,
-  lambdaContext: AnyLambdaContext,
-): Promise<SummarySlice> {
-  if (slice.done) return slice;
-
-  let startKey = slice.startKey;
-  while (lambdaContext.getRemainingTimeInMillis() >= MIN_REMAINING_MS) {
-    const result = await ddb.send(
-      new QueryCommand({
-        TableName: SURVEY_RESPONSES_TABLE_NAME,
-        IndexName: "byTenantSurvey",
-        KeyConditionExpression: "#tenantId = :tenantId AND #sk BETWEEN :from AND :to",
-        ExpressionAttributeNames: SUMMARY_NAMES,
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId,
-          ":from": `${surveyId}#${slice.from}`,
-          ":to": `${surveyId}#${slice.to}`,
-        },
-        ProjectionExpression: SUMMARY_PROJECTION,
-        Limit: SESSION_PAGE_SIZE,
-        ScanIndexForward: true,
-        ExclusiveStartKey: startKey,
-      }),
-    );
-
-    for (const item of result.Items ?? []) {
-      addToSummary(summary, item as ExportSession);
-    }
-
-    startKey = result.LastEvaluatedKey;
-    if (!startKey) {
-      return { from: slice.from, to: slice.to, done: true };
-    }
-  }
-
-  return { from: slice.from, to: slice.to, startKey, done: false };
 }
 
 /**
@@ -309,18 +210,23 @@ async function exportSummary(
     if (!parsed) return jsonResponse(400, { message: "Invalid cursor" });
     slices = parsed;
   } else {
-    slices = buildTimeSlices(fromIso, toIsoValue, SUMMARY_SLICE_COUNT).map((range) => ({ ...range, done: false }));
+    slices = openSlices(fromIso, toIsoValue);
   }
 
+  const canContinue = () => lambdaContext.getRemainingTimeInMillis() >= MIN_REMAINING_MS;
   const summary = createSummary();
-  const updatedSlices = await Promise.all(
-    slices.map((slice) => processSlice(tenantId, surveyId, slice, summary, lambdaContext)),
-  );
+  const updatedSlices = await summarizeSlices(tenantId, surveyId, slices, summary, canContinue);
 
   const stillOpen = updatedSlices.some((slice) => !slice.done);
   const nextCursor = stillOpen ? encodeSummaryCursor(tenantId, surveyId, updatedSlices) : null;
 
-  return jsonResponse(200, { ...summary, nextCursor });
+  // Feste Felder: Kanäle zeigt die Vorschau nicht, sie werden hier auch nicht gelesen
+  return jsonResponse(200, {
+    sessions: summary.sessions,
+    statusCounts: summary.statusCounts,
+    versions: summary.versions,
+    nextCursor,
+  });
 }
 
 export const handler = async (

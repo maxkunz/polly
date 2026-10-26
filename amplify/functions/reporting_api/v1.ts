@@ -1,4 +1,5 @@
 import type { AnswerRecord } from "../shared/answer_records";
+import type { ExportSummary } from "../shared/session_summary";
 import { isValidSurveyId } from "../shared/survey_id";
 import type { PageInfo } from "./pagination";
 
@@ -11,6 +12,8 @@ export const MAX_LIMIT = 1000;
 export const DEFAULT_LIMIT = 1000;
 /** Größter erlaubter Zeitraum (`to − from`). */
 export const MAX_RANGE_MS = 24 * 60 * 60 * 1000;
+/** Größter erlaubter Zeitraum bei `/summary`: gezählt wird nur, die Antworten werden nicht gelesen. */
+export const MAX_SUMMARY_RANGE_MS = 31 * 24 * 60 * 60 * 1000;
 /** Mehr Sitzungen im Zeitraum werden nicht im Speicher aufgebaut (413). */
 export const MAX_SESSIONS = 10000;
 /** Lambda-Antworten hinter API Gateway sind auf 6 MB begrenzt; darüber 413 mit Hinweis auf ein kleineres `limit`. */
@@ -32,7 +35,8 @@ export interface V1DataParams {
 
 export type V1ParamsResult = { ok: true; params: V1DataParams } | { ok: false; message: string };
 
-function parseDate(raw: unknown, name: string): { ms: number } | { message: string } {
+/** Gemeinsam für `/data` und `/summary`. */
+export function parseDate(raw: unknown, name: string): { ms: number } | { message: string } {
   const text = typeof raw === "string" ? raw.trim() : "";
   if (!text) return { message: `${name} query parameter is required` };
   const ms = DATE_PATTERN.test(text) ? Date.parse(`${text}.000Z`) : Number.NaN;
@@ -56,9 +60,19 @@ function isPresent(value: unknown): boolean {
   return value !== undefined && String(value).trim() !== "";
 }
 
-export function parseV1DataParams(query: Record<string, unknown> | null | undefined): V1ParamsResult {
-  const q = query ?? {};
+interface RangeParams {
+  surveyId: string;
+  fromIso: string;
+  toIso: string;
+  version?: number;
+}
 
+/** `surveyId`, `from`/`to` und `version`: gemeinsam für `/data` und `/summary`, nur die größte Spanne unterscheidet sich. */
+function parseRangeParams(
+  q: Record<string, unknown>,
+  maxRangeMs: number,
+  maxRangeLabel: string,
+): { ok: true; range: RangeParams } | { ok: false; message: string } {
   const surveyId = typeof q.surveyId === "string" ? q.surveyId.trim() : "";
   if (!surveyId) return { ok: false, message: "surveyId query parameter is required" };
   if (!isValidSurveyId(surveyId)) return { ok: false, message: "surveyId must be a UUID" };
@@ -68,7 +82,9 @@ export function parseV1DataParams(query: Record<string, unknown> | null | undefi
   const to = parseDate(q.to, "to");
   if ("message" in to) return { ok: false, message: to.message };
   if (to.ms <= from.ms) return { ok: false, message: "to must be after from" };
-  if (to.ms - from.ms > MAX_RANGE_MS) return { ok: false, message: "The range between from and to must not exceed 24 hours" };
+  if (to.ms - from.ms > maxRangeMs) {
+    return { ok: false, message: `The range between from and to must not exceed ${maxRangeLabel}` };
+  }
 
   let version: number | undefined;
   if (isPresent(q.version)) {
@@ -76,6 +92,23 @@ export function parseV1DataParams(query: Record<string, unknown> | null | undefi
     if (typeof parsed !== "number") return { ok: false, message: parsed.message };
     version = parsed;
   }
+
+  return {
+    ok: true,
+    range: {
+      surveyId,
+      fromIso: new Date(from.ms).toISOString(),
+      toIso: new Date(to.ms - 1).toISOString(),
+      version,
+    },
+  };
+}
+
+export function parseV1DataParams(query: Record<string, unknown> | null | undefined): V1ParamsResult {
+  const q = query ?? {};
+
+  const parsedRange = parseRangeParams(q, MAX_RANGE_MS, "24 hours");
+  if (!parsedRange.ok) return parsedRange;
 
   let page = 1;
   if (isPresent(q.page)) {
@@ -91,17 +124,7 @@ export function parseV1DataParams(query: Record<string, unknown> | null | undefi
     limit = Math.min(parsed, MAX_LIMIT);
   }
 
-  return {
-    ok: true,
-    params: {
-      surveyId,
-      fromIso: new Date(from.ms).toISOString(),
-      toIso: new Date(to.ms - 1).toISOString(),
-      version,
-      page,
-      limit,
-    },
-  };
+  return { ok: true, params: { ...parsedRange.range, page, limit } };
 }
 
 /** Ein Datensatz in v1. Alle Felder einzeln, damit neue interne Felder nicht ungewollt erscheinen. */
@@ -133,5 +156,45 @@ export function buildV1DataResponse(records: AnswerRecord[], pageInfo: PageInfo)
       hasPreviousPage: pageInfo.hasPreviousPage,
       hasNextPage: pageInfo.hasNextPage,
     },
+  };
+}
+
+export interface V1SummaryParams {
+  surveyId: string;
+  /** Wie in der Anfrage, für die Antwort. */
+  from: string;
+  to: string;
+  /** Inklusive Untergrenze (ISO mit Millisekunden). */
+  fromIso: string;
+  /** Inklusive Obergrenze für `BETWEEN`: `to − 1 ms`, weil `to` exklusiv ist. */
+  toIso: string;
+  version?: number;
+}
+
+export type V1SummaryParamsResult = { ok: true; params: V1SummaryParams } | { ok: false; message: string };
+
+export function parseV1SummaryParams(query: Record<string, unknown> | null | undefined): V1SummaryParamsResult {
+  const q = query ?? {};
+
+  const parsedRange = parseRangeParams(q, MAX_SUMMARY_RANGE_MS, "31 days");
+  if (!parsedRange.ok) return parsedRange;
+
+  return {
+    ok: true,
+    params: { ...parsedRange.range, from: String(q.from).trim(), to: String(q.to).trim() },
+  };
+}
+
+/** Antwort von `/summary` in v1: feste Felder, die internen Namen der Zählung (`channels`, `versions`) erscheinen nicht. */
+export function toV1Summary(params: V1SummaryParams, summary: ExportSummary) {
+  return {
+    surveyId: params.surveyId,
+    from: params.from,
+    to: params.to,
+    version: params.version ?? null,
+    sessions: summary.sessions,
+    statusCounts: summary.statusCounts,
+    channelCounts: summary.channels,
+    versionCounts: summary.versions,
   };
 }

@@ -3,6 +3,7 @@ import type { AnswerRecord } from "../shared/answer_records";
 import { resolveApiClient } from "../shared/api_client_auth";
 import { dispatchExtRoute, extError, extHeaders } from "../shared/ext_http";
 import type { ExtResult, ExtRoute } from "../shared/ext_http";
+import { createSummary, openSlices, summarizeSlices } from "../shared/session_summary";
 import { iterateSessions, SessionReadAbortedError } from "../shared/survey_sessions";
 import { paginate } from "./pagination";
 import * as v1 from "./v1";
@@ -74,9 +75,48 @@ async function data(event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<A
   return { statusCode: 200, headers, body };
 }
 
+async function summary(event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> {
+  const auth = await resolveApiClient(event, "polly-api/reporting.read");
+  if (!auth.ok) return errorResponse(auth.statusCode, auth.error, auth.message);
+
+  const parsed = v1.parseV1SummaryParams(event?.queryStringParameters);
+  if (!parsed.ok) return errorResponse(400, "invalid_request", parsed.message);
+  const { params } = parsed;
+
+  const canContinue = () => !context || context.getRemainingTimeInMillis() >= MIN_REMAINING_MS;
+  const counts = createSummary();
+  const results = await summarizeSlices(
+    auth.tenantId,
+    params.surveyId,
+    openSlices(params.fromIso, params.toIso),
+    counts,
+    canContinue,
+    { version: params.version, withChannels: true },
+  );
+  // Ohne Cursor gibt es kein Fortsetzen: ein unfertiger Abschnitt hieße eine zu niedrige Zählung
+  if (results.some((slice) => !slice.done)) {
+    console.warn("[reporting_api] Zeitbudget erschöpft", { tenantId: auth.tenantId, surveyId: params.surveyId });
+    return errorResponse(413, "range_too_large", "The range could not be read in time, please choose a shorter range");
+  }
+
+  // Keine Antwortinhalte im Protokoll
+  console.log("[reporting_api] summary", {
+    clientId: auth.clientId,
+    tenantId: auth.tenantId,
+    surveyId: params.surveyId,
+    from: params.fromIso,
+    to: params.toIso,
+    version: params.version,
+    sessions: counts.sessions,
+  });
+
+  return { statusCode: 200, headers, body: JSON.stringify(v1.toV1Summary(params, counts)) };
+}
+
 /** Routing-Tabelle: eine neue Version braucht nur einen weiteren Eintrag. */
 export const routes: Record<string, ExtRoute<AnyLambdaContext>> = {
   "GET /ext/v1/reporting/data": data,
+  "GET /ext/v1/reporting/summary": summary,
 };
 
 export const handler = (event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> =>

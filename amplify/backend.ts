@@ -626,11 +626,18 @@ attachApiClientAuth(reportingApiLambda);
 
 const reportingApiInteg = new integrations.HttpLambdaIntegration("ReportingApiInteg", reportingApiLambda);
 
-const reportingApiRoutes = httpApi.addRoutes({
-  path: "/ext/v1/reporting/data",
-  methods: [apigw.HttpMethod.GET],
-  integration: reportingApiInteg,
-});
+const reportingApiRoutes = [
+  ...httpApi.addRoutes({
+    path: "/ext/v1/reporting/data",
+    methods: [apigw.HttpMethod.GET],
+    integration: reportingApiInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/reporting/summary",
+    methods: [apigw.HttpMethod.GET],
+    integration: reportingApiInteg,
+  }),
+];
 
 // Umfragedetails: liest den Prod-Stand über die Genesys-Credentials des Mandanten (attachTenantAuth), dazu Designs
 // und laufende Löschungen
@@ -662,6 +669,8 @@ const surveysApiRoutes = [
 // Drosselung der Kunden-API pro Route, für alle Mandanten und Clients zusammen (keine Grenze pro Client).
 // Ein Client in einer Schleife kann damit andere ausbremsen; dokumentiert in polly_customer_api.md, Abschnitt 3.
 const REPORTING_API_THROTTLE = { rateLimit: 20, burstLimit: 40 };
+// Jeder Aufruf zählt bis zu 31 Tage Sitzungen im Speicher
+const REPORTING_SUMMARY_THROTTLE = { rateLimit: 10, burstLimit: 20 };
 // Jeder Aufruf signiert bis zu 5000 Einladungen und ruft Genesys auf
 const EXT_INVITATIONS_THROTTLE = { rateLimit: 5, burstLimit: 10 };
 // Jeder Aufruf der Liste liest die Zeilen der Data Table bei Genesys (Antworten werden 60 s gecacht)
@@ -683,6 +692,10 @@ if (defaultStage) {
     "GET /ext/v1/reporting/data": {
       ThrottlingRateLimit: REPORTING_API_THROTTLE.rateLimit,
       ThrottlingBurstLimit: REPORTING_API_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/reporting/summary": {
+      ThrottlingRateLimit: REPORTING_SUMMARY_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: REPORTING_SUMMARY_THROTTLE.burstLimit,
     },
     "POST /ext/v1/invitations": {
       ThrottlingRateLimit: EXT_INVITATIONS_THROTTLE.rateLimit,

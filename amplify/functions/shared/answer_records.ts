@@ -16,7 +16,8 @@ export interface ExportSession {
   responseId: string;
   surveyId?: string;
   surveyName?: string;
-  surveyVersion?: number;
+  /** Kann in alten Sitzungen fehlen oder als String gespeichert sein, deshalb nur über `sessionVersion` lesen. */
+  surveyVersion?: number | string | null;
   status?: string;
   /** `web` (Web-Umfrage) oder fehlend (Architect Flow). */
   channel?: string;
@@ -31,7 +32,7 @@ export interface AnswerRecord {
   conversationId: string | null;
   surveyId?: string;
   surveyName?: string;
-  surveyVersion?: number;
+  surveyVersion: number;
   questionId: string;
   questionType?: string;
   answeredAt?: string;
@@ -39,6 +40,19 @@ export interface AnswerRecord {
   status?: string;
   channel: string;
   sessionStartedAt?: string;
+}
+
+/**
+ * Version einer Sitzung, gemeinsame Regel für Zählung und Filter (`/data`, `/summary`, CSV-Export):
+ * fehlend, `null` oder unlesbar zählt als 1, Ganzzahl-Strings (ältere Flow-Aufrufe) als Zahl.
+ */
+export function toSurveyVersion(value: unknown): number {
+  const version = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  return typeof version === "number" && Number.isSafeInteger(version) ? version : 1;
+}
+
+export function sessionVersion(session: Pick<ExportSession, "surveyVersion">): number {
+  return toSurveyVersion(session.surveyVersion);
 }
 
 /** Eine Sitzung ergibt einen Datensatz pro Antwort, aufsteigend nach answeredAt. Ohne Antworten: keine Datensätze. */
@@ -55,7 +69,7 @@ export function sessionToAnswerRecords(session: ExportSession): AnswerRecord[] {
     conversationId: channel === DEFAULT_CHANNEL ? session.responseId : null,
     surveyId: session.surveyId,
     surveyName: session.surveyName,
-    surveyVersion: session.surveyVersion,
+    surveyVersion: sessionVersion(session),
     questionId,
     questionType: answer.type,
     answeredAt: answer.answeredAt,

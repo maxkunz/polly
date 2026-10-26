@@ -575,7 +575,7 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
     """Kunden-API /ext/v1 mit Client Credentials. Braucht die Session aus tests_survey_responses."""
     suite.section("Kunden-API: /ext/v1")
     if not (cfg.api_client_id and cfg.api_client_secret and cfg.api_token_url):
-        suite.skip("[C1]–[C21]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
+        suite.skip("[C1]–[C24]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
         return
 
     basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
@@ -616,7 +616,7 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
     reporting_only = access_token(suite.case("[C2] Token nur mit reporting.read holen (200)",
                                              fetch_token("polly-api/reporting.read"), 200, json_has("access_token")))
     if not full or not reporting_only:
-        suite.skip("[C3]–[C21]", "kein Token erhalten")
+        suite.skip("[C3]–[C24]", "kein Token erhalten")
         return
 
     now = datetime.now(timezone.utc)
@@ -733,6 +733,38 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
                lambda: api.request("GET", "/survey-responses/aggregates", params={"surveyId": cfg.survey_id},
                                    headers={"Authorization": f"Bearer {full}", "x-genesys-region": api.region}),
                (401, 403))
+
+    def counts_of(name: str) -> BodyCheck:
+        def check(res: Response) -> Optional[str]:
+            body = res.json()
+            value = body.get(name) if isinstance(body, dict) else None
+            if not isinstance(value, dict):
+                return f"{name} ist kein Objekt"
+            return None
+        return check
+
+    def summary_matches(res: Response) -> Optional[str]:
+        body = res.json()
+        if not isinstance(body, dict):
+            return "Antwort ist kein Objekt"
+        sessions = body.get("sessions")
+        if not isinstance(sessions, int) or sessions < 1:
+            return f"sessions ist {sessions!r}, erwartet mindestens 1 (Session des Testlaufs)"
+        for name in ("statusCounts", "channelCounts", "versionCounts"):
+            total = sum(v for v in (body.get(name) or {}).values() if isinstance(v, int))
+            if total != sessions:
+                return f"Summe von {name} ist {total}, sessions ist {sessions}"
+        return None if (body.get("channelCounts") or {}).get("flow", 0) >= 1 else "channelCounts enthält keinen flow"
+
+    suite.case("[C22] GET /reporting/summary zählt die Session des Testlaufs (Summen stimmen)",
+               ext("GET", "/reporting/summary", full, params=window), 200,
+               counts_of("statusCounts"), counts_of("channelCounts"), counts_of("versionCounts"), summary_matches)
+    suite.case("[C23] GET /reporting/summary mit Zeitraum über 31 Tage (400 invalid_request)",
+               ext("GET", "/reporting/summary", full, params={
+                   **window, "from": (now - timedelta(days=40)).strftime(stamp)}),
+               400, error_code("invalid_request"))
+    suite.case("[C24] GET /reporting/summary ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/reporting/summary", params=window), 401, error_code("invalid_token"))
 
 
 def tests_preview(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:

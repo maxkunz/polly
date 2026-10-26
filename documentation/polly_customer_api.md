@@ -7,6 +7,9 @@ Mit der Kunden-API rufen Sie Daten aus Polly maschinell ab, ohne Genesys-Login:
 | Reporting | Antworten der Umfragen abrufen (dieselben Daten wie der CSV-Export der App) | `polly-api/reporting.read` | verfügbar |
 | Einladungen | Einladungslinks für Web-Umfragen erzeugen | `polly-api/invitations.write` | verfügbar |
 | Umfragedetails | Fragetexte, Optionen und Skalen der veröffentlichten Umfragen lesen | `polly-api/surveys.read` | verfügbar |
+| Reporting-Summary | Anzahl und Verteilung der Sitzungen eines Zeitraums | `polly-api/reporting.read` | verfügbar |
+| Reporting-Aggregate | Zählung pro Frage über die ganze Laufzeit | `polly-api/reporting.read` | geplant |
+| Web-Designs | Designs der Umfrageseite exportieren und importieren | `polly-api/themes.read`, `polly-api/themes.write` | geplant |
 
 Alle Anfragen und Antworten sind JSON in UTF-8. Zeitangaben sind UTC.
 
@@ -177,6 +180,62 @@ Die Datensätze sind nach `sessionStartedAt`, `responseId`, `answeredAt` und `qu
 | `500` | `internal_error` | siehe Abschnitt 3 |
 
 **Hinweis:** Fragen Sie nur Zeiträume ab, die **mindestens eine Stunde zurückliegen**. Offene Sitzungen bekommen noch Antworten, und der Status `timed_out` wird erst nach etwa 45 Minuten gesetzt. Bei laufenden Zeiträumen können sich sonst die Seiten verschieben. Rufen Sie alle Seiten eines Zeitraums nacheinander ab, bis `hasNextPage` `false` ist.
+
+### 5.2 `GET [API_URL]/summary`
+
+Zählt die Sitzungen einer Umfrage in einem Zeitraum und verteilt sie nach Status, Kanal und Version, ohne die Antworten zu laden. Geeignet für Dashboards und Monitoring.
+
+| Parameter | Pflicht | Format / Standard | Hinweis |
+|---|---|---|---|
+| `surveyId` | ja | UUID der Umfrage | |
+| `from` | ja | `YYYY-MM-DDTHH:mm:ss` (UTC, ohne `Z`) | Inklusiv, bezogen auf den Start der Sitzung. |
+| `to` | ja | wie `from` | Exklusiv, muss nach `from` liegen. `to − from` darf höchstens **31 Tage** betragen. |
+| `version` | nein | Ganzzahl | Nur Sitzungen dieser Umfrageversion. |
+
+```bash
+curl "[API_URL]/summary?surveyId=123e4567-e89b-12d3-a456-426614174000&from=2026-10-01T00:00:00&to=2026-11-01T00:00:00" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+**Antwort `200`:**
+
+```json
+{
+  "surveyId": "123e4567-e89b-12d3-a456-426614174000",
+  "from": "2026-10-01T00:00:00",
+  "to": "2026-11-01T00:00:00",
+  "version": null,
+  "sessions": 120,
+  "statusCounts": { "completed": 90, "partial": 10, "timed_out": 20 },
+  "channelCounts": { "flow": 100, "web": 20 },
+  "versionCounts": { "2": 40, "3": 80 }
+}
+```
+
+| Feld | Beschreibung |
+|---|---|
+| `from`, `to` | Wie angefragt. |
+| `version` | Der Parameter `version`, `null` ohne Angabe. |
+| `sessions` | Anzahl der Sitzungen im Zeitraum, **auch Sitzungen ohne Antwort** (z. B. aufgelegt vor der ersten Frage). |
+| `statusCounts` | Anzahl pro Status der Sitzung, z. B. `partial`, `completed`, `timed_out`. |
+| `channelCounts` | Anzahl pro Kanal, `flow` (Telefon/Architect) oder `web`. |
+| `versionCounts` | Anzahl pro Umfrageversion. Mit `version` enthält sie nur diese Version. |
+
+Ohne Sitzungen antwortet die Route mit `200`, `sessions` `0` und leeren Objekten.
+
+**Abgleich mit `/data`:** `/data` liefert nur Sitzungen mit mindestens einer Antwort. `sessions` kann deshalb größer sein als die Anzahl verschiedener `responseId` in `/data` für denselben Zeitraum. Der Filter `version` wirkt in beiden Routen gleich.
+
+**Antwortcodes:**
+
+| HTTP | `error` | Bedeutung |
+|---|---|---|
+| `200` | | Erfolg, auch bei leerem Ergebnis. |
+| `400` | `invalid_request` | Ungültiger oder fehlender Parameter (`message` nennt ihn), ungültiger Zeitraum, Zeitraum über 31 Tage. |
+| `401`, `403` | | siehe Abschnitt 3 |
+| `413` | `range_too_large` | Der Zeitraum konnte nicht rechtzeitig gelesen werden. Kürzeren Zeitraum wählen. |
+| `500` | `internal_error` | siehe Abschnitt 3 |
+
+**Hinweis:** Wie bei `/data` nur Zeiträume abfragen, die **mindestens eine Stunde zurückliegen**, weil offene Sitzungen noch ihren Status ändern.
 
 ## 6. API 2: Einladungen
 

@@ -55,6 +55,25 @@ Kunden bekommen eine eigene, versionierte API für Reporting-Daten, Einladungsto
   - [ ] Prüfung nach „Prüfung“ in einer Branch-Umgebung vollständig durchlaufen (braucht Deploy und Zugangsdaten, nicht in der Sandbox möglich).
   - [x] Doku abschließend geprüft: `polly_customer_api.md` (auch der Entwicklerabschnitt „So entsteht eine v2“), `betrieb_api_zugaenge.md` und `CLAUDE.md`.
 
+- [x] **M7 API 4: Summary `GET /ext/v1/reporting/summary`** (siehe „API 4“)
+  - [x] `buildTimeSlices` und `processSlice` aus `survey_responses_export/handler.ts` nach `shared/session_summary.ts`; beide Handler nutzen `openSlices`/`summarizeSlices` von dort, die Tests importieren direkt aus `shared/`.
+  - [x] `ExportSummary` um `channels` erweitern (`channel` nur für die Kunden-Route in der Projektion, `withChannels`).
+  - [x] Zeitraumprüfung (`parseRangeParams` mit `parseDate`) in `reporting_api/v1.ts` für beide Routen gemeinsam; `parseV1SummaryParams`, `toV1Summary`, `MAX_SUMMARY_RANGE_MS` (31 Tage).
+  - [x] Handler-Route, `backend.ts` (Route, Drosselung 10/20), Tests, Doku (Abschnitt in `polly_customer_api.md`), E2E-Fall.
+
+- [ ] **M8 API 5: Aggregate `GET /ext/v1/reporting/aggregates`** (siehe „API 5“)
+  - [ ] `loadSurveyAggregates` in `shared/survey_results.ts` (mit Blättern), Prüfung auf laufende Löschung (`404 not_found`).
+  - [ ] `toV1Aggregates` (`average`, `npsScore`, `counts` ohne `comment`) in `reporting_api/v1.ts` bzw. eigener Datei.
+  - [ ] `backend.ts`: Leserechte auf `SurveyAggregatesTable` und `SurveyDeletionJobsTable`, Umgebungsvariablen, Route, Drosselung 20/40.
+  - [ ] Tests, Doku (Grenzen der Näherung), E2E-Fall.
+
+- [ ] **M9 API 6: Web-Designs exportieren und importieren** (siehe „API 6“)
+  - [ ] Scopes `themes.read` und `themes.write` in `shared/api_scopes.ts`.
+  - [ ] Schreiblogik aus `web_themes/handler.ts` als `saveWebThemes` nach `shared/web_themes_table.ts`; App-Route unverändert.
+  - [ ] `web_themes/ext_v1.ts` (`parseV1ImportRequest`, `toV1Theme`, `buildV1Response`), Routing-Tabelle `extRoutes` im Handler.
+  - [ ] `backend.ts`: `API_CLIENTS_TABLE_NAME`, Leserechte, zwei Routen, Drosselung 10/20 bzw. 5/10.
+  - [ ] Tests, Doku (`polly_customer_api.md`, `betrieb_api_zugaenge.md`, `polly_web.md`, `CLAUDE.md`), E2E-Fälle.
+
 ## Abweichungen vom Plan
 
 Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und warum. Außerdem was nach dem Meilenstein neu testbar ist, falls das vom Plan abweicht.
@@ -112,14 +131,29 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Nicht geprüft werden die Sperre eines gelöschten Clients mit noch gültigem Token und der `backend/invoke`-Client (Prüfung 2.7 per Hand), weil das Skript dafür den Admin-Token bräuchte. Ebenso nicht: Vergleich mit dem CSV-Export und das Öffnen von `fullLink` im Browser (Prüfung 2.3/2.4).
 - Der Python-Lauf selbst ist nicht gegen eine echte Umgebung gelaufen, nur Syntax geprüft.
 
+### M7
+- `ExportSummary`, `createSummary` und `addToSummary` liegen jetzt ebenfalls in `shared/session_summary.ts` (der Kern darf nicht aus dem Export-Ordner importieren); `survey_responses_export/summary.ts` ist entfallen, `test/surveyResponsesExport.test.ts` importiert direkt aus `shared/`.
+- `processSlice` heißt `summarizeSlice` und bekommt statt des Lambda-Kontexts `canContinue` (der Export-Handler übergibt `restzeit >= 9000 ms`, die Kunden-Route `>= 6000 ms`) und Optionen `version`/`withChannels`. `summarizeSlices` liest alle Abschnitte parallel und stoppt die übrigen, sobald einer einen Fehler wirft; `openSlices` legt sie mit `SUMMARY_SLICE_COUNT` an (ungültiger Env-Wert → 10). `channel` liest nur die Kunden-Route; `/export/summary` liefert weiter nur `sessions`, `statusCounts`, `versions`, `nextCursor`.
+- Version: eine Regel für Zählung und Filter, `sessionVersion` in `shared/answer_records.ts` (fehlend, `null` oder unlesbar → 1, Ganzzahl-String → Zahl). `iterateSessions` filtert deshalb im Speicher statt per `FilterExpression`, sonst fehlten in `/data` und im CSV-Export Sitzungen, die `/summary` mitzählt. `surveyVersion` in `/data` und im CSV ist damit immer gesetzt. `/summary` zählt auch Sitzungen ohne Antwort, `/data` liefert sie nicht (Kunden-Doku 5.2).
+- `parseDate` ist exportiert, ohne Verschiebung der Prüfungen. `/summary` hat keinen Cursor: bleibt ein Abschnitt unfertig, antwortet die Route mit `413 range_too_large`, weil sonst die Zählung zu niedrig wäre. `from`/`to` in der Antwort sind die Eingabewerte.
+- Drosselung `REPORTING_SUMMARY_THROTTLE` 10/20; die Route nutzt Lambda und Berechtigungen von `reporting_api`, in `backend.ts` ist nichts weiter nötig.
+- E2E-Fälle [C22]–[C24] (Summen von Status/Kanal/Version = `sessions`, 31-Tage-Grenze, ohne Token). Nicht per Test geprüft: der Ablauf mit DynamoDB und der 413 bei Zeitüberschreitung (braucht den Deploy).
+
+### M8
+(noch leer)
+
+### M9
+(noch leer)
+
 ---
 
 ## Kontext und Entscheidungen
 
-Kunden sollen drei Dinge maschinell erledigen können:
+Kunden sollen vier Dinge maschinell erledigen können:
 1. **Ergebnisse abrufen**, also dieselben Daten wie im CSV-Export. Die Bedienung lehnt sich an die ORA-API an: `GET …/data` mit `from`/`to` (UTC, ohne `Z`, max. 24 h), `page`/`limit` und demselben `pagination`-Objekt.
 2. **Einladungstokens für den Web-Kanal erzeugen**, so wie es die App auf der Einladungs-Unterseite über `POST /invitations` tut, aber ohne Genesys-Login. Die Antwort enthält fertige Links.
 3. **Umfragedetails lesen** (Fragetexte, Optionen, Skalen), um die Reporting-Daten auszuwerten und die Umfragen z. B. im CMS darzustellen.
+4. **Kennzahlen abrufen** (Summary pro Zeitraum, Aggregate pro Frage) für Dashboards und Monitoring, ohne alle Rohantworten zu laden. Außerdem **Web-Designs exportieren und importieren** (M9).
 
 Abgestimmte Entscheidungen:
 - Die API-Clients legt das **Betriebsteam** über Admin-Routen mit Admin-Token an, keine Selbstbedienung in der App.
@@ -130,6 +164,8 @@ Abgestimmte Entscheidungen:
 - Der Mandant wird **nicht aus dem Scope** gelesen. Bei ORA steht der Mandant im Scope (`<prefix>/<tenant>/read`). In Polly regeln fachliche Scopes die Berechtigung, den Mandanten findet die Lambda über die `client_id` in `ApiClientsTable`. Dadurch braucht es keine Scopes pro Mandant; Cognito erlaubt höchstens 100 pro Resource Server.
 - Umfragedetails: **nur der Prod-Stand**, mit Auswertungs-, Web-/CMS- und Telefonfeldern sowie dem Web-Design. **Keine Versionsgeschichte**, eine Speicherung pro Version wäre eine spätere Erweiterung.
 - Eine **v2 lässt sich ohne Eingriff in v1** neben v1 bauen (siehe „Versionierung“).
+- Aggregate (M8) kommen aus der vorhandenen `SurveyAggregatesTable`, nicht aus den Sitzungen berechnet. Sie sind eine laufende Näherung über die ganze Laufzeit und alle Versionen, nicht nach Zeitraum oder Version filterbar.
+- Neue Routen `summary` und `aggregates` sind zusätzliche Routen in v1 (Scope `reporting.read`), eine v2 ist dafür nicht nötig. Web-Designs bekommen eigene Scopes `themes.read` / `themes.write`.
 
 ## Versionierung
 
@@ -165,9 +201,11 @@ Eine v2 bekommt eigene Dateien daneben, v1 bleibt dabei unverändert.
 ### Scopes (Resource Server `polly-api`)
 | Scope | Route |
 |---|---|
-| `polly-api/reporting.read` | `GET /ext/v1/reporting/data` |
+| `polly-api/reporting.read` | `GET /ext/v1/reporting/data`, `GET /ext/v1/reporting/summary`, `GET /ext/v1/reporting/aggregates` |
 | `polly-api/invitations.write` | `POST /ext/v1/invitations` |
 | `polly-api/surveys.read` | `GET /ext/v1/surveys`, `GET /ext/v1/surveys/{surveyId}` |
+| `polly-api/themes.read` (M9) | `GET /ext/v1/web-themes` |
+| `polly-api/themes.write` (M9) | `POST /ext/v1/web-themes/import` |
 
 ### `amplify/functions/shared/api_client_auth.ts` (neu)
 `resolveApiClient(event, requiredScope)` prüft in dieser Reihenfolge:
@@ -328,6 +366,69 @@ Grundlage sind `requireAdmin` (Header `x-admin-token`) und der vorhandene Cognit
   - `handler.ts`: Routing-Tabelle, Pfadparameter aus `event.pathParameters`, Ablauf `resolveApiClient(event, "polly-api/surveys.read")` → Kern → v1.
 - Cache: Liste und Details werden pro Mandant 60 s im Lambda-Speicher gehalten, um das Genesys-Rate-Limit zu schonen. Nach einem Deploy liefert die API den neuen Stand deshalb bis zu 1 min später; das steht in der Kunden-Doku.
 
+## API 4: `GET /ext/v1/reporting/summary` (M7)
+
+Kennzahlen eines Zeitraums ohne die Rohantworten: Anzahl der Sitzungen und ihre Verteilung nach Status, Kanal und Version. Scope `polly-api/reporting.read`, Lambda `reporting_api`.
+
+- **Parameter:**
+  - `surveyId` (Pflicht, UUID)
+  - `from`, `to` im Format von `/data`, aber höchstens **31 Tage** (`MAX_SUMMARY_RANGE_MS`)
+  - `version` (optional, wird im Speicher gefiltert)
+  - Die Prüfung von `surveyId`, Zeitraum und `version` (`parseRangeParams`) in `reporting_api/v1.ts` wird für beide Routen gemeinsam genutzt.
+- **Antwort (`toV1Summary`, feste Felder):** `{ surveyId, from, to, version, sessions, statusCounts, channelCounts, versionCounts }`
+  - `version` ist `null`, wenn der Parameter fehlt.
+  - Die Counts sind Objekte `Wert → Anzahl`. Fehlt der Kanal, zählt die Sitzung als `flow` (`DEFAULT_CHANNEL`).
+- **Kern:**
+  - `buildTimeSlices` und `processSlice` wandern aus `survey_responses_export/handler.ts` nach `amplify/functions/shared/session_summary.ts` (`summarizeSlice`, `summarizeSlices`, `openSlices`). Der Export-Handler importiert sie von dort und behält seinen Cursor.
+  - `ExportSummary` bekommt zusätzlich `channels`; `channel` kommt nur mit `withChannels` (Kunden-Route) in die Projektion. Die App bekommt das Feld nicht.
+- **Ablauf:** parallele Zeitabschnitte wie in der App (`SUMMARY_SLICE_COUNT`), aber ohne Cursor. Reicht das Zeitbudget nicht (Rest unter 6 s), antwortet die Route mit `413 range_too_large`.
+- **Fehler:** `400 invalid_request`, `401`/`403`, `413 range_too_large`, `500`.
+- **Hinweis für die Kunden-Doku:** Zeiträume mindestens 1 h zurück abfragen, wie bei `/data`.
+
+## API 5: `GET /ext/v1/reporting/aggregates` (M8)
+
+Zählung pro Frage aus `SurveyAggregatesTable`. Scope `polly-api/reporting.read`, Lambda `reporting_api`.
+
+- **Parameter:** nur `surveyId` (Pflicht, UUID).
+- **Kern:**
+  - neu `loadSurveyAggregates(tenantId, surveyId)` in `shared/survey_results.ts`: Query auf `tenantSurveyId` mit Blättern über `LastEvaluatedKey` (die App-Route `/survey-responses/aggregates` blättert nicht)
+  - läuft gerade eine Löschung (`isSurveyBeingDeleted`), antwortet die Route mit `404 not_found`
+- **Antwort (`toV1Aggregates`, sortiert nach `questionId`):** `{ surveyId, questions: [{ questionId, questionType, totalResponses, counts, sum, average, npsScore, updatedAt }] }`
+  - `counts` ist `null` bei `comment`; die Schlüssel sind Strings, wie gespeichert (`"true"`/`"false"`, Labels, Zahlen).
+  - `sum` und `average` nur bei `rating`/`nps`, sonst `null`.
+  - `npsScore` nur bei `nps`: (Anzahl 9–10 − Anzahl 0–6) / Anzahl gezählter Werte × 100, gerundet auf eine Nachkommastelle; `null` ohne Antworten.
+  - Interne Felder (`tenantId`, `tenantSurveyId`, `surveyName`) werden nicht ausgegeben.
+  - Ohne Daten `200` mit leerem `questions`; eine unbekannte Umfrage lässt sich davon ohne Genesys-Aufruf nicht unterscheiden.
+- **Grenzen (in die Kunden-Doku):** laufende Zählung seit Beginn, über alle Versionen; Fragen älterer Versionen bleiben enthalten; Näherung (erneut gesendete Antworten zählen doppelt, fehlgeschlagene Updates fehlen). Genaue Zahlen liefert `/data`.
+
+## API 6: Web-Designs exportieren und importieren (M9)
+
+**Zweck:** Designs maschinell sichern, zwischen Umgebungen oder Mandanten übertragen (z. B. Test → Prod) und aus einem CI-/CMS-System pflegen. Export und Import haben dasselbe Format, ein Export lässt sich unverändert wieder importieren.
+
+- **Neue Scopes** `themes.read` und `themes.write`:
+  - in `API_SCOPES` und `API_SCOPE_DESCRIPTIONS` (`shared/api_scopes.ts`); Resource Server und `onboarding` übernehmen sie automatisch
+  - bestehende Clients haben die Scopes nicht, dafür einen neuen Client anlegen (Betriebsdoku „Scopes ändern“)
+  - `themes.write` vergibt das Betriebsteam nur an Mandanten mit Web-Kanal; das Feature Flag wird serverseitig nicht geprüft, wie bei den Einladungen
+- **`GET /ext/v1/web-themes`** (Scope `themes.read`):
+  - Antwort `{ themes: [{ themeId, name, isDefault, updatedAt, tokens }] }`, sortiert nach Name und ID
+  - `tokens` mit `schemaVersion`, wie in den Umfragedetails (`webTheme`); feste Abbildung `toV1Theme`, `updatedBy` wird nicht ausgegeben
+  - Quelle: `queryWebThemeItems` und `toWebTheme`, ohne Cache
+- **`POST /ext/v1/web-themes/import`** (Scope `themes.write`):
+  - Body `{ themes: [{ themeId, name, isDefault?, tokens }] }`, 1–50 Einträge, Body höchstens 128 KB
+  - **Upsert nach `themeId`:** Gleiche ID überschreibt das Design, neue ID legt es an. Nicht genannte Designs bleiben erhalten, die API löscht nichts. Über die gleiche ID passt `web_theme_id` in den Umfragen weiterhin.
+  - Prüfung vorab für alle Einträge, alles oder nichts:
+    - UUID (`isValidThemeId`), keine doppelten IDs
+    - Name wie in `parseWebThemeRequest` (Prüfung des Namens herauslösen)
+    - `tokens` über `sanitizeWebThemeTokens`: Unbekannte Felder fallen weg, ungültige Werte ergeben 400 mit Index, z. B. `themes[3].tokens`
+    - höchstens ein `isDefault: true`
+    - Gesamtzahl nach dem Import höchstens `WEB_THEME_MAX_PER_TENANT` (sonst `409 limit_reached`)
+  - Schreiben in **einer** `TransactWriteCommand`: Puts plus Entfernen der bisherigen Standard-Markierung (höchstens 100 Einträge, im Limit von DynamoDB).
+  - Kein optimistisches Sperren: Der Import gewinnt. `updatedBy` wird `api:<clientId>`. Bei abgebrochener Transaktion `409 conflict`, erneut versuchen.
+  - Antwort `{ created, updated, themes: [...] }` mit dem gespeicherten Stand, gleiches Format wie beim Export.
+- **Kern:** Die Schreiblogik aus `web_themes/handler.ts` (`putTheme`: Limit, Standard-Markierung, Transaktion) wird als `saveWebThemes(tenantId, themes, updatedBy, options)` nach `shared/web_themes_table.ts` herausgelöst. Die App-Route `PUT /web-themes/{id}` nutzt sie mit `expectedUpdatedAt`, der Import ohne; das Verhalten der App bleibt gleich.
+- **Lambda:** im vorhandenen `web_themes`-Handler. Routing-Tabelle `extRoutes` und `isExtRouteKey` stehen vor `resolveTenantContext`, wie bei `invitations`; neue Datei `web_themes/ext_v1.ts` (rein) mit `parseV1ImportRequest`, `toV1Theme`, `buildV1Response`.
+- **Hinweise für die Kunden-Doku:** Importierte Designs wirken auf der Umfrageseite nach höchstens 30 s, in den Umfragedetails nach höchstens ca. 90 s (Caches). Kontrastwarnungen der App (`checkThemeContrast`) gibt es per API nicht; der Import prüft nur Format und Grenzen.
+
 ## `amplify/backend.ts`
 - **`ApiClientsTable` (M2):** Schlüssel `clientId`, GSI `byTenantId` (`tenantId`, `clientId`), `PAY_PER_REQUEST`, `RETAIN`.
 - **Resource Server (M2):** neuer `cognito.UserPoolResourceServer` `PollyApiResourceServer` mit der Kennung `polly-api` und den Scopes `reporting.read`, `invitations.write` und `surveys.read`. Der bestehende Server `backend` bleibt unverändert.
@@ -344,6 +445,13 @@ Grundlage sind `requireAdmin` (Header `x-admin-token`) und der vorhandene Cognit
 - **`surveys_api` (M5):**
   - Rechte und Variablen: Lesezugriff auf `apiClientsTable`, `surveyDeletionJobsTable` und `webSurveyThemesTable`, die Umgebungsvariablen dazu und `attachTenantAuth`.
   - Routen `GET /ext/v1/surveys` und `GET /ext/v1/surveys/{surveyId}`, Drosselung z. B. 10/20.
+- **`reporting_api` (M7, M8):**
+  - Route `GET /ext/v1/reporting/summary`, Drosselung z. B. 10/20 (`REPORTING_SUMMARY_THROTTLE`)
+  - Route `GET /ext/v1/reporting/aggregates`, Drosselung z. B. 20/40; dafür `surveyAggregatesTable.grantReadData` und `surveyDeletionJobsTable.grantReadData` sowie die Umgebungsvariablen `SURVEY_AGGREGATES_TABLE_NAME` und `SURVEY_DELETION_JOBS_TABLE_NAME`
+- **`web_themes` (M9):**
+  - `apiClientsTable.grantReadData` und `API_CLIENTS_TABLE_NAME`
+  - Routen `GET /ext/v1/web-themes` (Drosselung z. B. 10/20) und `POST /ext/v1/web-themes/import` (z. B. 5/10)
+  - die App-Routen bleiben unverändert
 - Drosselung jeweils in `defaultStageCfn.routeSettings`; die neuen Routen kommen in `addDependency`.
 
 ## Doku
@@ -387,6 +495,8 @@ Schritt-für-Schritt-Anleitung, wie API-Zugänge für Kunden eingerichtet werden
   - M2: Kunden-API, `ApiClientsTable`, Verweis auf diesen Plan, neue Testdatei.
   - M3 und M5: neue Lambdas in der Architektur.
   - M4: Die serverseitige Prüfung, wer Einladungen erzeugen darf, kennt jetzt zusätzlich den Scope `invitations.write`.
+  - M7/M8: neue Routen der Lambda `reporting_api`.
+  - M9: Web-Designs lassen sich auch per Scope `themes.write` schreiben (Abschnitt Web-Designs); neue Scopes in `betrieb_api_zugaenge.md`, Hinweis in `polly_web.md` (Designs).
 
 ## Tests
 
@@ -404,6 +514,9 @@ Schritt-für-Schritt-Anleitung, wie API-Zugänge für Kunden eingerichtet werden
 - M5:
   - v1-Abbildung mit Fixtures aus `survey_translator_for_flow.md`, für alle fünf Fragetypen: feste Feldlisten, `questionId` gleich `name`, Platzhalter-Bedingungen werden herausgefiltert, Synonyme als Array, `webTheme` ist `null` ohne Design
   - Liste: übersprungene Sonderzeilen und ungültige Prod-Zellen
+- M7: Parameter (31-Tage-Grenze, Format, `version`), feste Feldliste von `toV1Summary`, Versionsfilter, Default-Kanal.
+- M8: feste Feldliste von `toV1Aggregates`, `average`/`npsScore` (auch bei 0 Antworten → `null`), `comment` ohne `counts`, Sortierung.
+- M9: Import-Prüfung (Pflichtfelder, doppelte IDs, zwei Standard-Designs, Tokens mit unbekanntem Feld, Index in der Meldung), feste Feldliste von `toV1Theme`, Rundlauf Export → Import-Parser ohne Verlust; `test/webSurveyBackend.test.ts` bleibt grün.
 - Alle: Routing-Tabelle, unbekannte Routen ergeben 404.
 
 **Weiterhin grün:** `surveyResponsesExport.test.ts` und `webSurveyBackend.test.ts` bleiben unverändert.
@@ -417,6 +530,9 @@ Schritt-für-Schritt-Anleitung, wie API-Zugänge für Kunden eingerichtet werden
   - `/surveys` enthält die Testumfrage, und die `questionId` passen zum Reporting
   - Token ohne passenden Scope führt zu 403
   - Fehlerfälle mit 400 und 404
+  - (M7) `summary` zählt die Session des Testlaufs
+  - (M8) `aggregates` enthält die `questionId` aus `/data`
+  - (M9) Export, Import eines Designs mit fester Test-ID (Upsert, wiederholbar), danach erscheint es im Export; Import ohne Scope ergibt 403
 
 ## Prüfung (M6, Teile davon schon nach M2 bis M5)
 1. `npm test` (in der Sandbox ggf. `node --import tsx test/<datei>.ts`) und `npx vue-tsc --noEmit`.

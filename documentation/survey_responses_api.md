@@ -107,7 +107,7 @@ interface SubmitSurveyAnswerBody {
   conversationId: string;    // Genesys Conversation ID (Pflicht)
   surveyId: string;          // Eindeutige ID der Umfrage (Pflicht)
   surveyName?: string;       // Technischer Name der Umfrage
-  surveyVersion?: number;    // Version der Umfrage (Standard: 1)
+  surveyVersion?: number;    // Version der Umfrage (Standard: 1; Ganzzahl-Strings werden als Zahl gespeichert, Unlesbares als 1)
   questionName?: string;     // Technischer Name der Frage (Pflicht, falls isCompleted nicht true)
   questionType?: "rating" | "nps" | "choice" | "yes_no" | "comment";
   value?: any;               // Antwortwert (boolean, number oder string)

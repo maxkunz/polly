@@ -11,10 +11,19 @@ import {
 } from "../amplify/functions/shared/api_scopes";
 import { authorizeApiClient } from "../amplify/functions/shared/api_client_auth";
 import type { ApiClientAuthDeps } from "../amplify/functions/shared/api_client_auth";
-import { compareAnswerRecords, sessionToAnswerRecords } from "../amplify/functions/shared/answer_records";
+import { compareAnswerRecords, sessionToAnswerRecords, toSurveyVersion } from "../amplify/functions/shared/answer_records";
 import type { AnswerRecord } from "../amplify/functions/shared/answer_records";
 import { paginate } from "../amplify/functions/reporting_api/pagination";
-import { buildV1DataResponse, MAX_LIMIT, parseV1DataParams, toV1Record } from "../amplify/functions/reporting_api/v1";
+import {
+	buildV1DataResponse,
+	MAX_LIMIT,
+	MAX_SUMMARY_RANGE_MS,
+	parseV1DataParams,
+	parseV1SummaryParams,
+	toV1Record,
+	toV1Summary
+} from "../amplify/functions/reporting_api/v1";
+import { addToSummary, createSummary, openSlices, SUMMARY_SLICE_COUNT, summarizeSlice, summarizeSlices } from "../amplify/functions/shared/session_summary";
 import { handler as reportingHandler } from "../amplify/functions/reporting_api/handler";
 import { buildV1Response, parseV1InvitationRequest, toV1InviteUrl } from "../amplify/functions/invitations/ext_v1";
 import { handler as invitationsHandler } from "../amplify/functions/invitations/handler";
@@ -398,6 +407,119 @@ test("Reporting-Handler: unbekannte Routen ergeben 404 im Fehlerformat", async (
 
 test("Reporting-Handler: ohne Token ergibt 401", async () => {
 	const result = await reportingHandler({ routeKey: "GET /ext/v1/reporting/data", headers: {} });
+	assert.equal(result.statusCode, 401);
+	assert.equal(JSON.parse(result.body).error, "invalid_token");
+});
+
+// ---------------------------------------------------------------------------
+// Summary (M7)
+// ---------------------------------------------------------------------------
+
+const SUMMARY_SURVEY_ID = "123e4567-e89b-42d3-a456-426614174000";
+
+test("Summary-Parameter: gültige Anfrage, to ist exklusiv, from/to wie angefragt", () => {
+	const result = parseV1SummaryParams({ surveyId: SUMMARY_SURVEY_ID, from: "2026-10-01T00:00:00", to: "2026-10-02T00:00:00" });
+	assert.ok(result.ok);
+	assert.equal(result.params.fromIso, "2026-10-01T00:00:00.000Z");
+	assert.equal(result.params.toIso, "2026-10-01T23:59:59.999Z");
+	assert.equal(result.params.from, "2026-10-01T00:00:00");
+	assert.equal(result.params.version, undefined);
+});
+
+test("Summary-Parameter: bis 31 Tage, darüber 400", () => {
+	const ok = parseV1SummaryParams({ surveyId: SUMMARY_SURVEY_ID, from: "2026-09-01T00:00:00", to: "2026-10-02T00:00:00" });
+	assert.ok(ok.ok);
+	assert.equal(MAX_SUMMARY_RANGE_MS, 31 * 24 * 60 * 60 * 1000);
+	const tooLong = parseV1SummaryParams({ surveyId: SUMMARY_SURVEY_ID, from: "2026-09-01T00:00:00", to: "2026-10-02T00:00:01" });
+	assert.ok(!tooLong.ok);
+	assert.match(tooLong.message, /31 days/);
+});
+
+test("Summary-Parameter: Pflichtfelder, Format, Reihenfolge und version", () => {
+	const base = { surveyId: SUMMARY_SURVEY_ID, from: "2026-10-01T00:00:00", to: "2026-10-02T00:00:00" };
+	assert.ok(!parseV1SummaryParams({ ...base, surveyId: undefined }).ok);
+	assert.ok(!parseV1SummaryParams({ ...base, surveyId: "x" }).ok);
+	assert.ok(!parseV1SummaryParams({ ...base, from: "2026-10-01" }).ok);
+	assert.ok(!parseV1SummaryParams({ ...base, to: undefined }).ok);
+	assert.ok(!parseV1SummaryParams({ ...base, to: base.from }).ok);
+	assert.ok(!parseV1SummaryParams({ ...base, version: "1.5" }).ok);
+	const withVersion = parseV1SummaryParams({ ...base, version: "3" });
+	assert.ok(withVersion.ok);
+	assert.equal(withVersion.params.version, 3);
+	assert.ok(parseV1SummaryParams({ ...base, version: "" }).ok);
+});
+
+test("addToSummary zählt den Kanal, fehlender Kanal ist flow", () => {
+	const summary = createSummary();
+	addToSummary(summary, { responseId: "1", channel: "web" });
+	addToSummary(summary, { responseId: "2" });
+	addToSummary(summary, { responseId: "3", channel: "" });
+	assert.deepEqual(summary.channels, { web: 1, flow: 2 });
+});
+
+test("Version: fehlend, null und Unlesbares zählen als 1, Ganzzahl-Strings als Zahl", () => {
+	assert.equal(toSurveyVersion(undefined), 1);
+	assert.equal(toSurveyVersion(null), 1);
+	assert.equal(toSurveyVersion(""), 1);
+	assert.equal(toSurveyVersion("abc"), 1);
+	assert.equal(toSurveyVersion(1.5), 1);
+	assert.equal(toSurveyVersion("3"), 3);
+	assert.equal(toSurveyVersion(" 4 "), 4);
+	assert.equal(toSurveyVersion(0), 0);
+	assert.equal(toSurveyVersion(7), 7);
+
+	const summary = createSummary();
+	addToSummary(summary, { responseId: "1", surveyVersion: "3" });
+	addToSummary(summary, { responseId: "2", surveyVersion: null });
+	addToSummary(summary, { responseId: "3" });
+	assert.deepEqual(summary.versions, { "3": 1, "1": 2 });
+
+	const [record] = sessionToAnswerRecords({ responseId: "4", surveyVersion: null, answers: { q: { value: 1 } } });
+	assert.equal(record.surveyVersion, 1);
+});
+
+test("toV1Summary gibt feste Felder aus, version ohne Parameter ist null", () => {
+	const summary = createSummary();
+	addToSummary(summary, { responseId: "1", status: "completed", surveyVersion: 2, channel: "web" });
+	const params = { surveyId: SUMMARY_SURVEY_ID, from: "a", to: "b", fromIso: "", toIso: "" };
+	const response = toV1Summary(params, summary);
+	assert.deepEqual(Object.keys(response), [
+		"surveyId",
+		"from",
+		"to",
+		"version",
+		"sessions",
+		"statusCounts",
+		"channelCounts",
+		"versionCounts"
+	]);
+	assert.equal(response.version, null);
+	assert.deepEqual(response.channelCounts, { web: 1 });
+	assert.deepEqual(response.versionCounts, { "2": 1 });
+	assert.equal(toV1Summary({ ...params, version: 2 }, summary).version, 2);
+});
+
+test("summarizeSlice: fertiger Abschnitt bleibt unberührt, ohne Zeitbudget kein Lesen und nicht fertig", async () => {
+	const summary = createSummary();
+	const done = { from: "a", to: "b", done: true };
+	assert.equal(await summarizeSlice("t", SUMMARY_SURVEY_ID, done, summary, () => true), done);
+	const open = { from: "a", to: "b", done: false };
+	const result = await summarizeSlice("t", SUMMARY_SURVEY_ID, open, summary, () => false);
+	assert.equal(result.done, false);
+	assert.equal(summary.sessions, 0);
+});
+
+test("openSlices legt SUMMARY_SLICE_COUNT offene Abschnitte an, summarizeSlices lässt fertige unberührt", async () => {
+	assert.ok(Number.isInteger(SUMMARY_SLICE_COUNT) && SUMMARY_SLICE_COUNT > 0);
+	const slices = openSlices("2026-10-01T00:00:00.000Z", "2026-10-31T23:59:59.999Z");
+	assert.equal(slices.length, SUMMARY_SLICE_COUNT);
+	assert.ok(slices.every((slice) => !slice.done));
+	const done = slices.map((slice) => ({ ...slice, done: true }));
+	assert.deepEqual(await summarizeSlices("t", SUMMARY_SURVEY_ID, done, createSummary(), () => true), done);
+});
+
+test("Reporting-Handler: /summary ohne Token ergibt 401", async () => {
+	const result = await reportingHandler({ routeKey: "GET /ext/v1/reporting/summary", headers: {} });
 	assert.equal(result.statusCode, 401);
 	assert.equal(JSON.parse(result.body).error, "invalid_token");
 });

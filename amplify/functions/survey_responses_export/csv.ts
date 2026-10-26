@@ -44,9 +44,7 @@ export function sessionToCsvRows(session: ExportSession): string[] {
     [
       formatCsvText(record.responseId),
       formatCsvText(record.surveyName),
-      record.surveyVersion === undefined || record.surveyVersion === null
-        ? ""
-        : String(record.surveyVersion),
+      String(record.surveyVersion),
       formatCsvText(record.questionId),
       formatCsvText(record.questionType),
       formatCsvText(record.answeredAt),
