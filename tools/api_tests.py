@@ -20,13 +20,19 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
   API_URL                 Pflicht: Basis-URL inkl. Präfix, z. B. https://<app>.amplifyapp.com/api
                           (ohne API_URL bricht das Skript ab)
   GENESYS_REGION          Default mypurecloud.de
+  API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen fünf Scopes
+                          (ohne themes.read/themes.write entfallen [C28]–[C34])
+  API_CLIENT_SECRET       dazu das Client-Secret
+  API_TOKEN_URL           dazu die Token-URL (…/oauth2/token); ohne alle drei entfallen die Fälle [C1]–[C34]
 
 Optionen (jeweils auch per gleichnamiger Umgebungsvariable in Großbuchstaben):
   --survey-id             Umfrage für die Antworttests, muss in der Data Table DIESER Installation
                           existieren, sonst liefern [1]–[5] 404
-  --survey-name           Name der Umfrage (Default mini_1718e427)
-  --survey-version        Version der Umfrage (Default 5)
-  --datatable-id          Data Table der Umfragen; ohne sie entfallen die Lösch-Tests [D1]–[D4]
+  --survey-name           Name der Umfrage (Default mini_1718e427; mit --datatable-id aus Prod gelesen)
+  --survey-version        Version der Umfrage (Default 5; mit --datatable-id aus Prod gelesen)
+  --datatable-id          Data Table der Umfragen: Name, Version und Fragen der Antworttests kommen aus der
+                          Spalte Prod von survey_<id> (Fehler [S2], wenn nicht deployt); ohne sie gelten die
+                          festen Fragen von mini_1718e427, und die Lösch-Tests [D1]–[D4] entfallen
   --existing-survey-id    Umfrage, die in dieser Data Table existiert ([D1], erwartet 409)
   --preview-survey-id     Umfrage mit Stage-Stand für die Webvorschau (Default: --survey-id)
   --web-token             vorhandene Einladung (JWT) für [W6]/[W7]; ohne sie wird über POST /invitations
@@ -252,6 +258,20 @@ class Suite:
 # Testgruppen
 # -------------------------------------------------------------------
 
+def check_genesys_token(suite: Suite, cfg: argparse.Namespace, ssl_context: Optional[ssl.SSLContext]) -> bool:
+    """Prüft GENESYS_TOKEN direkt bei Genesys (GET /api/v2/users/me); bei Fehler bricht main() ab."""
+    suite.section(f"Genesys-Token: https://api.{cfg.region}/api/v2/users/me")
+    genesys = HttpClient(f"https://api.{cfg.region}", ssl_context)
+    res = suite.case("[G1] GET /api/v2/users/me (200, id)",
+                     lambda: genesys.request("GET", "/api/v2/users/me",
+                                             headers={"Authorization": f"Bearer {cfg.token}"}),
+                     200, json_has("id"))
+    body = res.json() if res is not None and res.status == 200 else None
+    if isinstance(body, dict) and body.get("name"):
+        print(f"Angemeldet als {body['name']}")
+    return res is not None and res.status == 200 and isinstance(body, dict) and bool(body.get("id"))
+
+
 def tests_web_public(suite: Suite, api: PollyApi) -> None:
     """Öffentliche Endpunkte, laufen ohne Genesys-Token."""
     suite.section(f"Web-Kanal: {api.base_url}/web-survey")
@@ -338,6 +358,64 @@ def tests_web_expired(suite: Suite, api: PollyApi, token: str, exp: int) -> None
                403, json_field("status", "expired"))
 
 
+DEFAULT_QUESTIONS = [
+    ("ja_oder_nein_46d4db2f", "yes_no", False),
+    ("nps_ce9b05b7", "nps", 9),
+    ("bewertung_3557a5bf", "rating", 5),
+    ("auswahl_frucht_58bd0bde", "choice", "Äpfel"),
+    ("kommentar_e80f5583", "comment", "Wartezeit war etwas lang, aber der Support sehr freundlich."),
+]
+
+
+def sample_answer(question: dict) -> Any:
+    """Gültiger Beispielwert zu einer Frage aus dem Prod-Flow-JSON."""
+    qtype = question.get("type")
+    if qtype == "yes_no":
+        return False
+    if qtype == "nps":
+        return 9
+    if qtype == "rating":
+        values = (question.get("options") or {}).get("values") or []
+        return values[-1] if values else 1
+    if qtype == "choice":
+        labels = question.get("labels") or []
+        return labels[0] if labels else ""
+    return "Testantwort aus api_tests.py"
+
+
+def load_prod_questions(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
+    """Liest Name, Version und Fragen aus der Spalte Prod der Umfragezeile (Genesys) in cfg.
+
+    Ohne --datatable-id bleiben die festen Vorgaben (mini_1718e427); mit ihr ist ein fehlender
+    Prod-Stand ein Fehler, und die Antworttests verwenden die echten Fragen der Umfrage."""
+    cfg.questions = DEFAULT_QUESTIONS
+    suite.section("Umfrage: Prod-Stand aus der Data Table")
+    if not cfg.datatable_id:
+        suite.skip("[S1]", "DATATABLE_ID nicht gesetzt, feste Fragen von --survey-name")
+        return
+    genesys = HttpClient(f"https://api.{cfg.region}", api.ssl_context)
+    res = suite.case("[S1] Zeile survey_<id> aus der Data Table lesen",
+                     lambda: genesys.request("GET", f"/api/v2/flows/datatables/{cfg.datatable_id}/rows/"
+                                             f"survey_{cfg.survey_id}", params={"showbrief": "false"},
+                                             headers={"Authorization": f"Bearer {cfg.token}"}),
+                     200)
+    row = res.json() if res is not None and res.status == 200 else None
+    try:
+        prod = json.loads(row.get("Prod") or "") if isinstance(row, dict) else None
+    except ValueError:
+        prod = None
+    questions = prod.get("questions") if isinstance(prod, dict) else None
+    suite.case("[S2] Prod-Stand vorhanden und nicht leer (sonst nicht deployt)",
+               lambda: Response(200 if questions else 404, {}, ""), 200)
+    if not questions:
+        return
+    cfg.survey_name = prod.get("name", cfg.survey_name)
+    cfg.survey_version = prod.get("version", cfg.survey_version)
+    cfg.questions = [(q["name"], q["type"], sample_answer(q)) for q in questions
+                     if isinstance(q, dict) and q.get("name") and q.get("type")]
+    print(f"Umfrage {cfg.survey_name} Version {cfg.survey_version}, {len(cfg.questions)} Fragen")
+
+
 def tests_survey_responses(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     suite.section("Antworten: POST /survey-responses")
 
@@ -354,13 +432,10 @@ def tests_survey_responses(suite: Suite, api: PollyApi, cfg: argparse.Namespace,
         }
         return lambda: api.genesys("POST", "/survey-responses", body=body)
 
-    suite.case("[1] POST /survey-responses – yes_no Antwort", answer("ja_oder_nein_46d4db2f", "yes_no", False, False))
-    suite.case("[2] POST /survey-responses – nps Antwort", answer("nps_ce9b05b7", "nps", 9, False))
-    suite.case("[3] POST /survey-responses – rating Antwort", answer("bewertung_3557a5bf", "rating", 5, False))
-    suite.case("[4] POST /survey-responses – choice Antwort", answer("auswahl_frucht_58bd0bde", "choice", "Äpfel", False))
-    suite.case("[5] POST /survey-responses – comment Antwort, Session abschließen",
-               answer("kommentar_e80f5583", "comment",
-                      "Wartezeit war etwas lang, aber der Support sehr freundlich.", True))
+    for number, (name, qtype, value) in enumerate(cfg.questions, start=1):
+        last = number == len(cfg.questions)
+        suite.case(f"[{number}] POST /survey-responses – {qtype} Antwort" + (", Session abschließen" if last else ""),
+                   answer(name, qtype, value, last))
 
     suite.section("Auswertung")
     suite.case("[7] GET /survey-responses/session",
@@ -409,7 +484,8 @@ def tests_survey_responses(suite: Suite, api: PollyApi, cfg: argparse.Namespace,
 
 def tests_survey_responses_errors(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     suite.section("Fehlerfälle: POST /survey-responses")
-    nps = {"surveyId": cfg.survey_id, "questionName": "nps_ce9b05b7", "questionType": "nps", "value": 5}
+    first_name, first_type, first_value = cfg.questions[0]
+    nps = {"surveyId": cfg.survey_id, "questionName": first_name, "questionType": first_type, "value": first_value}
     unknown_survey_id = str(uuid.uuid4())
 
     suite.case("[13] fehlende conversationId (400)",
@@ -496,6 +572,305 @@ def tests_web_themes(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> No
         suite.skip("[T6]/[T7]", "WEB_THEME_WRITE nicht gesetzt")
 
 
+def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
+    """Kunden-API /ext/v1 mit Client Credentials. Braucht die Session aus tests_survey_responses."""
+    suite.section("Kunden-API: /ext/v1")
+    if not (cfg.api_client_id and cfg.api_client_secret and cfg.api_token_url):
+        suite.skip("[C1]–[C34]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
+        return
+
+    basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
+    token_endpoint = HttpClient(cfg.api_token_url, api.ssl_context)
+
+    def fetch_token(scope: Optional[str] = None) -> Callable[[], Response]:
+        form = {"grant_type": "client_credentials", **({"scope": scope} if scope else {})}
+        return lambda: token_endpoint.request(
+            "POST", "", body=urllib.parse.urlencode(form),
+            headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"})
+
+    def access_token(res: Optional[Response]) -> str:
+        body = res.json() if res is not None and res.status == 200 else None
+        return body.get("access_token", "") if isinstance(body, dict) else ""
+
+    def ext(method: str, path: str, token: str, **kwargs) -> Callable[[], Response]:
+        return lambda: api.request(method, f"/ext/v1{path}", headers={"Authorization": f"Bearer {token}"}, **kwargs)
+
+    def is_list(name: str, minimum: int = 0) -> BodyCheck:
+        def check(res: Response) -> Optional[str]:
+            body = res.json()
+            value = body.get(name) if isinstance(body, dict) else None
+            if not isinstance(value, list):
+                return f"{name} ist keine Liste"
+            return None if len(value) >= minimum else f"{name} hat {len(value)} Einträge, erwartet mindestens {minimum}"
+        return check
+
+    def items(res: Response, name: str) -> list:
+        body = res.json()
+        value = body.get(name) if isinstance(body, dict) else None
+        return value if isinstance(value, list) else []
+
+    def error_code(code: str) -> BodyCheck:
+        return json_field("error", code)
+
+    full = access_token(suite.case("[C1] Token mit allen Scopes holen (200, access_token)", fetch_token(),
+                                   200, json_has("access_token")))
+    reporting_only = access_token(suite.case("[C2] Token nur mit reporting.read holen (200)",
+                                             fetch_token("polly-api/reporting.read"), 200, json_has("access_token")))
+    if not full or not reporting_only:
+        suite.skip("[C3]–[C34]", "kein Token erhalten")
+        return
+
+    now = datetime.now(timezone.utc)
+    stamp = "%Y-%m-%dT%H:%M:%S"
+    window = {"surveyId": cfg.survey_id, "from": (now - timedelta(hours=1)).strftime(stamp),
+              "to": (now + timedelta(hours=1)).strftime(stamp)}
+
+    def has_session(res: Response) -> Optional[str]:
+        body = res.json()
+        data = body.get("data") if isinstance(body, dict) else None
+        if not isinstance(data, list):
+            return "data ist keine Liste"
+        mine = [r for r in data if isinstance(r, dict) and r.get("responseId") == conversation_id]
+        if not mine:
+            return f"keine Antwort der Session {conversation_id} im Zeitraum (insgesamt {len(data)} Datensätze)"
+        wrong = [r for r in mine if r.get("conversationId") != conversation_id or r.get("channel") != "flow"]
+        return "conversationId/channel der Flow-Session stimmt nicht" if wrong else None
+
+    data = suite.case("[C3] GET /reporting/data liefert die Session des Testlaufs", ext("GET", "/reporting/data", full,
+                      params={**window, "limit": 1000}), 200, json_has("pagination"), has_session)
+    reported = [r for r in items(data, "data") if isinstance(r, dict)] if data is not None and data.status == 200 else []
+
+    suite.case("[C4] GET /reporting/data ohne surveyId (400 invalid_request)",
+               ext("GET", "/reporting/data", full, params={k: v for k, v in window.items() if k != "surveyId"}),
+               400, error_code("invalid_request"))
+    suite.case("[C5] GET /reporting/data mit Zeitraum über 24 h (400 invalid_request)",
+               ext("GET", "/reporting/data", full, params={
+                   **window, "from": (now - timedelta(hours=30)).strftime(stamp)}),
+               400, error_code("invalid_request"))
+    suite.case("[C6] GET /reporting/data mit Z am Datum (400 invalid_request)",
+               ext("GET", "/reporting/data", full, params={**window, "to": window["to"] + "Z"}),
+               400, error_code("invalid_request"))
+    suite.case("[C7] GET /reporting/data hinter der letzten Seite (200, data leer)",
+               ext("GET", "/reporting/data", full, params={**window, "page": 9999}), 200, lambda res: None
+               if isinstance(res.json(), dict) and res.json().get("data") == [] else "data ist nicht leer")
+
+    expiration = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    invites = suite.case("[C8] POST /invitations erzeugt amount Links (200, inviteUrls)",
+                         ext("POST", "/invitations", full, body={
+                             "survey_uuid": cfg.survey_id, "amount": 2, "is_multi": True,
+                             "expiration_date": expiration}),
+                         200, is_list("inviteUrls", 2),
+                         lambda res: None if len(items(res, "inviteUrls")) == 2 else "nicht genau 2 Einträge")
+    invite_token = ""
+    if invites is not None and invites.status == 200:
+        first = (items(invites, "inviteUrls") or [{}])[0]
+        invite_token = first.get("inviteToken", "") if isinstance(first, dict) else ""
+        first = first if isinstance(first, dict) else {}
+        if first.get("expiration_date") != expiration or first.get("is_multi") is not True:
+            print(f"      Hinweis: erster Eintrag hat expiration_date/is_multi {first.get('expiration_date')!r}/"
+                  f"{first.get('is_multi')!r}, erwartet {expiration!r}/True")
+        if invite_token and invite_token not in first.get("fullLink", ""):
+            print("      Hinweis: fullLink enthält den inviteToken nicht")
+    if invite_token:
+        suite.case("[C9] GET /web-survey akzeptiert einen erzeugten Token (status ok)",
+                   lambda: api.public("GET", "/web-survey", params={"token": invite_token}),
+                   200, json_field("status", "ok"))
+    else:
+        suite.skip("[C9]", "kein Einladungstoken erhalten")
+
+    suite.case("[C10] POST /invitations mit amount 0 (400 invalid_request)",
+               ext("POST", "/invitations", full, body={"survey_uuid": cfg.survey_id, "amount": 0, "is_multi": True}),
+               400, error_code("invalid_request"))
+    suite.case("[C11] POST /invitations mit vergangenem Ablaufdatum (400 invalid_request)",
+               ext("POST", "/invitations", full, body={
+                   "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True, "expiration_date": "2020-01-01"}),
+               400, error_code("invalid_request"))
+    suite.case("[C12] POST /invitations für unbekannte Umfrage (409 no_prod)",
+               ext("POST", "/invitations", full, body={
+                   "survey_uuid": str(uuid.uuid4()), "amount": 1, "is_multi": True}),
+               409, error_code("no_prod"))
+
+    suite.case("[C13] GET /surveys enthält die Testumfrage", ext("GET", "/surveys", full), 200,
+                         is_list("surveys", 1),
+                         lambda res: None if any(isinstance(s, dict) and s.get("surveyId") == cfg.survey_id
+                                                 for s in items(res, "surveys"))
+                         else f"Umfrage {cfg.survey_id} fehlt in der Liste")
+    detail = suite.case("[C14] GET /surveys/{surveyId} liefert Fragen",
+                        ext("GET", f"/surveys/{cfg.survey_id}", full), 200, is_list("questions", 1))
+    survey = detail.json() if detail is not None and detail.status == 200 else None
+    if isinstance(survey, dict):
+        # Nur Antworten zum Prod-Stand vergleichen: [1]–[5] schreiben feste Fragennamen von --survey-name,
+        # die zu einer anderen --survey-id nicht passen müssen
+        matching = {r.get("questionId") for r in reported
+                    if r.get("surveyName") == survey.get("name") and r.get("surveyVersion") == survey.get("version")}
+        if survey.get("name") != cfg.survey_name:
+            print(f"      Hinweis: Umfrage heißt {survey.get('name')!r}, --survey-name ist {cfg.survey_name!r}; "
+                  "die Antworten aus [1]–[5] zählen für [C14b] nicht")
+        if matching:
+            known = {q.get("questionId") for q in items(detail, "questions") if isinstance(q, dict)}
+            suite.case("[C14b] questionId aus dem Reporting passen zu den Umfragedetails", lambda: detail, 200,
+                       lambda res: None if matching <= known
+                       else f"questionId fehlen in den Details: {sorted(matching - known)}")
+        else:
+            suite.skip("[C14b]", f"keine Antworten zu {survey.get('name')} Version {survey.get('version')} im Zeitraum")
+    else:
+        suite.skip("[C14b]", "keine Umfragedetails erhalten")
+    suite.case("[C15] GET /surveys/{surveyId} unbekannt (404 not_found)",
+               ext("GET", f"/surveys/{uuid.uuid4()}", full), 404, error_code("not_found"))
+    suite.case("[C16] GET /surveys/kein-uuid (400 invalid_request)",
+               ext("GET", "/surveys/kein-uuid", full), 400, error_code("invalid_request"))
+
+    suite.case("[C17] GET /reporting/data ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/reporting/data", params=window), 401, error_code("invalid_token"))
+    suite.case("[C18] POST /invitations mit reporting.read-Token (403 insufficient_scope)",
+               ext("POST", "/invitations", reporting_only, body={
+                   "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True}),
+               403, error_code("insufficient_scope"))
+    suite.case("[C19] GET /surveys mit reporting.read-Token (403 insufficient_scope)",
+               ext("GET", "/surveys", reporting_only), 403, error_code("insufficient_scope"))
+    suite.case("[C20] GET /reporting/data mit reporting.read-Token (200)",
+               ext("GET", "/reporting/data", reporting_only, params=window), 200)
+    suite.case("[C21] Kunden-Token an App-Route /survey-responses/aggregates (401 oder 403)",
+               lambda: api.request("GET", "/survey-responses/aggregates", params={"surveyId": cfg.survey_id},
+                                   headers={"Authorization": f"Bearer {full}", "x-genesys-region": api.region}),
+               (401, 403))
+
+    def counts_of(name: str) -> BodyCheck:
+        def check(res: Response) -> Optional[str]:
+            body = res.json()
+            value = body.get(name) if isinstance(body, dict) else None
+            if not isinstance(value, dict):
+                return f"{name} ist kein Objekt"
+            return None
+        return check
+
+    def summary_matches(res: Response) -> Optional[str]:
+        body = res.json()
+        if not isinstance(body, dict):
+            return "Antwort ist kein Objekt"
+        sessions = body.get("sessions")
+        if not isinstance(sessions, int) or sessions < 1:
+            return f"sessions ist {sessions!r}, erwartet mindestens 1 (Session des Testlaufs)"
+        for name in ("statusCounts", "channelCounts", "versionCounts"):
+            total = sum(v for v in (body.get(name) or {}).values() if isinstance(v, int))
+            if total != sessions:
+                return f"Summe von {name} ist {total}, sessions ist {sessions}"
+        return None if (body.get("channelCounts") or {}).get("flow", 0) >= 1 else "channelCounts enthält keinen flow"
+
+    suite.case("[C22] GET /reporting/summary zählt die Session des Testlaufs (Summen stimmen)",
+               ext("GET", "/reporting/summary", full, params=window), 200,
+               counts_of("statusCounts"), counts_of("channelCounts"), counts_of("versionCounts"), summary_matches)
+    suite.case("[C23] GET /reporting/summary mit Zeitraum über 31 Tage (400 invalid_request)",
+               ext("GET", "/reporting/summary", full, params={
+                   **window, "from": (now - timedelta(days=40)).strftime(stamp)}),
+               400, error_code("invalid_request"))
+    suite.case("[C24] GET /reporting/summary ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/reporting/summary", params=window), 401, error_code("invalid_token"))
+
+    def aggregates_ok(res: Response) -> Optional[str]:
+        body = res.json()
+        questions = body.get("questions") if isinstance(body, dict) else None
+        if not isinstance(questions, list):
+            return "questions ist keine Liste"
+        ids = [q.get("questionId") for q in questions if isinstance(q, dict)]
+        if ids != sorted(ids):
+            return "questions ist nicht nach questionId sortiert"
+        for q in questions:
+            if q.get("questionType") == "comment" and q.get("counts") is not None:
+                return f"counts bei comment ist nicht null ({q.get('questionId')})"
+            if "tenantId" in q or "tenantSurveyId" in q:
+                return "interne Felder in der Antwort"
+        return None
+
+    suite.case("[C25] GET /reporting/aggregates liefert Fragen sortiert, ohne interne Felder",
+               ext("GET", "/reporting/aggregates", full, params={"surveyId": cfg.survey_id}), 200, aggregates_ok)
+    suite.case("[C26] GET /reporting/aggregates ohne surveyId (400 invalid_request)",
+               ext("GET", "/reporting/aggregates", full), 400, error_code("invalid_request"))
+    suite.case("[C27] GET /reporting/aggregates ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/reporting/aggregates", params={"surveyId": cfg.survey_id}),
+               401, error_code("invalid_token"))
+
+    # Web-Designs: Export und Import mit fester Test-ID (Upsert, wiederholbar). Der Test löscht nichts,
+    # das Design "Polly API-Test" bleibt im Mandanten stehen und wird beim nächsten Lauf überschrieben.
+    def token_scopes(token: str) -> list:
+        try:
+            payload = token.split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+            return str(claims.get("scope", "")).split()
+        except (IndexError, ValueError):
+            return []
+
+    granted = token_scopes(full)
+    missing = [scope for scope in ("polly-api/themes.read", "polly-api/themes.write") if scope not in granted]
+    if missing:
+        suite.skip("[C28]–[C34]", f"dem Client fehlen die Scopes {', '.join(missing)}")
+        return
+
+    theme_id = "00000000-0000-4000-8000-00000000a9e1"
+    theme_name = "Polly API-Test"
+    theme_import = {"themes": [{"themeId": theme_id, "name": theme_name, "isDefault": False,
+                                "tokens": {"schemaVersion": 1}}]}
+
+    suite.case("[C28] GET /web-themes liefert eine Liste (200)", ext("GET", "/web-themes", full), 200, is_list("themes"))
+
+    def import_counts(created: int, updated: int) -> BodyCheck:
+        def check(res: Response) -> Optional[str]:
+            body = res.json()
+            if not isinstance(body, dict):
+                return "Antwort ist kein Objekt"
+            if (body.get("created"), body.get("updated")) != (created, updated):
+                return f"created/updated = {body.get('created')}/{body.get('updated')}, erwartet {created}/{updated}"
+            saved = [t for t in items(res, "themes") if t.get("themeId") == theme_id]
+            return None if saved and saved[0].get("name") == theme_name else "gespeichertes Design fehlt in der Antwort"
+        return check
+
+    def import_one_or_two(res: Response) -> Optional[str]:
+        # Erster Lauf legt an (1/0), jeder weitere überschreibt (0/1)
+        first = import_counts(1, 0)(res)
+        return None if first is None or import_counts(0, 1)(res) is None else first
+
+    suite.case("[C29] POST /web-themes/import legt das Test-Design an oder überschreibt es (200)",
+               ext("POST", "/web-themes/import", full, body=theme_import), 200, import_one_or_two)
+    suite.case("[C30] POST /web-themes/import wiederholt: Upsert überschreibt (200, created 0, updated 1)",
+               ext("POST", "/web-themes/import", full, body=theme_import), 200, import_counts(0, 1))
+
+    # Stand des Test-Designs aus [C31], [C33b] prüft damit, dass der abgelehnte Import nichts gespeichert hat
+    exported: dict = {}
+
+    def has_test_theme(res: Response) -> Optional[str]:
+        found = [t for t in items(res, "themes") if t.get("themeId") == theme_id]
+        if not found:
+            return "Test-Design fehlt im Export"
+        exported.update(found[0])
+        extra = set(found[0]) - {"themeId", "name", "isDefault", "updatedAt", "tokens"}
+        return f"unerwartete Felder im Export: {sorted(extra)}" if extra else None
+
+    def test_theme_unchanged(res: Response) -> Optional[str]:
+        if not exported:
+            return "kein Stand aus [C31]"
+        found = [t for t in items(res, "themes") if t.get("themeId") == theme_id]
+        if not found:
+            return "Test-Design fehlt im Export"
+        return None if found[0] == exported else f"Test-Design geändert: updatedAt {found[0].get('updatedAt')}"
+
+    suite.case("[C31] GET /web-themes enthält das importierte Design mit festen Feldern",
+               ext("GET", "/web-themes", full), 200, has_test_theme)
+    suite.case("[C32] POST /web-themes/import mit reporting.read-Token (403 insufficient_scope)",
+               ext("POST", "/web-themes/import", reporting_only, body=theme_import), 403,
+               error_code("insufficient_scope"))
+    suite.case("[C32b] GET /web-themes mit reporting.read-Token (403 insufficient_scope)",
+               ext("GET", "/web-themes", reporting_only), 403, error_code("insufficient_scope"))
+    suite.case("[C33] POST /web-themes/import mit ungültigen Tokens (400, Index in der Meldung)",
+               ext("POST", "/web-themes/import", full, body=
+                   {"themes": [{"themeId": theme_id, "name": "Polly API-Test geändert",
+                                "tokens": {"colors": {"primary": "rot"}}}]}),
+               400, json_field("message", "themes[0].tokens are invalid"))
+    suite.case("[C33b] GET /web-themes: Test-Design nach [C33] unverändert (nichts gespeichert)",
+               ext("GET", "/web-themes", full), 200, test_theme_unchanged)
+    suite.case("[C34] GET /web-themes ohne Token (401 invalid_token)",
+               lambda: api.public("GET", "/ext/v1/web-themes"), 401, error_code("invalid_token"))
+
+
 def tests_preview(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
     """Webvorschau des Stage-Stands (POST /invitations/preview, braucht polly_deploy)."""
     suite.section("Webvorschau: /invitations/preview")
@@ -562,6 +937,9 @@ def parse_args() -> argparse.Namespace:
     cfg.region = env_default("GENESYS_REGION", DEFAULT_REGION)
     cfg.token = env_default("GENESYS_TOKEN", "")
     cfg.token_no_deploy = env_default("GENESYS_TOKEN_NO_DEPLOY", "")
+    cfg.api_client_id = env_default("API_CLIENT_ID", "")
+    cfg.api_client_secret = env_default("API_CLIENT_SECRET", "")
+    cfg.api_token_url = env_default("API_TOKEN_URL", "")
     return cfg
 
 
@@ -578,6 +956,11 @@ def main() -> int:
 
     print(f"API: {api.base_url}\nRegion: {cfg.region}\nConversationId: {conversation_id}")
 
+    if cfg.token and not check_genesys_token(suite, cfg, ssl_context):
+        print("\nAbbruch: Das Genesys-Token ist ungültig oder abgelaufen (GENESYS_TOKEN neu holen).")
+        suite.summary()
+        return 1
+
     tests_web_public(suite, api)
 
     if not cfg.token:
@@ -586,10 +969,12 @@ def main() -> int:
         suite.summary()
         return 1
 
+    load_prod_questions(suite, api, cfg)
     prepare_invitations(suite, api, cfg)
     tests_web_invitation(suite, api, cfg.web_token)
     tests_survey_responses(suite, api, cfg, conversation_id)
     tests_survey_responses_errors(suite, api, cfg, conversation_id)
+    tests_customer_api(suite, api, cfg, conversation_id)
     tests_delete(suite, api, cfg, conversation_id)
     tests_web_themes(suite, api, cfg)
     tests_preview(suite, api, cfg)

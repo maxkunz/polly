@@ -21,7 +21,7 @@ In der App ist der Web-Kanal nur sichtbar, wenn das Feature Flag `web_survey` ak
 ## Änderungen im Editor
 
 * **Labels bei rating und nps:** Pro Frage gibt es ein optionales Label für den minimalen und den maximalen Wert (`min_label`, `max_label` in `options`, höchstens 100 Zeichen). Sie werden nicht vorgelesen und sind nur im Web (und in der Skalenvorschau des Editors) sichtbar.
-* **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}`.
+* **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}` und höchstens 200 Zeichen (`BASE_URL_MAX_CHARS`, hält die Antwort der Kunden-API bei 5000 Links unter dem Lambda-Limit). Die Kunden-API prüft den Wert serverseitig mit derselben Funktion (`baseUrlError`) und nimmt bei einem ungültigen Wert den Fallback.
 * **Sprache der Umfrage** (`language`): siehe oben. Neue Umfragen starten mit `de`.
 * **Design der Umfrage** (`web_theme_id`, optional): Auswahl „Standard des Mandanten“ (Feld fehlt) oder eines der Designs aus `GET /web-themes`. Ein inzwischen gelöschtes Design bleibt mit Hinweis sichtbar; die Seite zeigt dann das Standard-Design.
 
@@ -136,6 +136,8 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 | `429` | `genesys_error` | Genesys hat gedrosselt |
 | `502` | `no_credentials`, `genesys_error` | Keine Backend-Credentials des Mandanten oder Genesys-Fehler |
 
+**`POST /api/ext/v1/invitations`** (Kunden-API, Scope `invitations.write` statt Genesys-Bearer): erzeugt dieselben Einladungen mit fertigen Links, ohne Genesys-Login und ohne Rollenprüfung. Request, Antwort und Fehler: [polly_customer_api.md](polly_customer_api.md#6-api-2-einladungen). Die Signatur teilt sich die Lambda mit der App-Route (`signInvitations`).
+
 **`POST /api/invitations/preview`** (Genesys-Bearer, Lambda `invitations`)
 
 * Request: `{ "surveyId": "<uuid>" }`. Weitere Felder werden ignoriert; Laufzeit (7 Tage) und `multi: true` setzt der Server.
@@ -150,7 +152,7 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
   * `{ "status": "invalid" | "expired" | "used" | "unavailable" }`
   * Zusätzlich optional `"theme": { … }` (bereinigte Tokens, siehe „Designs“): bei `ok` und `used` das Design der Umfrage (bei `used` aus dem gecachten Prod-Stand; ist er nicht ladbar, das Standard-Design), bei `unavailable` das Standard-Design des Mandanten. So erscheinen auch diese Meldungen im iframe im CI. `invalid`/`expired` haben kein Design. Fehlt ein passendes Design, fehlt das Feld.
 * Weitere Antworten: `429 { "status": "throttled" }` (Drosselung der API oder von Genesys), `502 { "status": "error" }` (Genesys nicht erreichbar).
-* **Webvorschau** (`stage` im Token): Statt Prod wird die Spalte `Stage` gelesen, die Antwort `ok` enthält zusätzlich `"preview": true`; `unavailable` bedeutet dann „kein Stage-Stand“. Das Design kommt aus dem Stage-Stand.
+* **Webvorschau** (`stage` im Token): Statt Prod wird die Spalte `Stage` gelesen, die Antwort `ok` enthält zusätzlich `"preview": true`; `unavailable` bedeutet dann „kein Stage-Stand“. Das Design kommt aus dem Stage-Stand. Die Lambda liest Stage-Stand und Designs bei jedem GET ohne Cache (bei echten Links gilt der Cache von 30 s), damit ein neuer Stand sofort sichtbar ist.
 * Der Prod-Stand wird pro Lambda-Container **30 Sekunden** zwischengespeichert (Stage getrennt davon ebenso), damit große Kampagnen das Genesys-Rate-Limit des Mandanten nicht ausschöpfen. Ein neuer Prod-Deploy ist deshalb beim Laden der Seite spätestens nach 30 s sichtbar; beim Absenden wird immer frisch gelesen.
 
 **`POST /api/web-survey/submit`** (öffentlich)
@@ -183,6 +185,7 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 * `PUT`: Body `{ "name": "1–60 Zeichen", "isDefault": true|false, "tokens": { … }, "expectedUpdatedAt": "<ISO>"|null }` (höchstens 8 KB), legt an oder ändert. **Optimistisches Sperren:** `expectedUpdatedAt` ist das `updatedAt` des Stands, den der Editor geladen hat; `null` bzw. fehlend bedeutet „neues Design“. Weicht der gespeicherte Stand ab (zwischenzeitlich geändert oder gelöscht, bzw. ID schon vergeben), kommt `409 conflict` und nichts wird gespeichert. Die App lädt dann die Liste neu, behält die Eingaben, und erst ein erneutes Speichern überschreibt den neuen Stand (bzw. legt ein gelöschtes Design neu an). `{id}` ist eine UUID (von der App erzeugt). Die Tokens laufen durch `sanitizeWebThemeTokens`. Mit `isDefault: true` verliert das bisherige Standard-Design die Markierung in derselben Transaktion. Antwort `200 { "theme": { … } }`.
 * `DELETE`: `200 { "ok": true }`. Umfragen mit diesem Design fallen auf das Standard-Design zurück.
 * Schreiben erfordert serverseitig `polly_deploy` (gleiche Prüfung wie `POST /invitations`, `shared/caller_roles.ts`). `updatedBy` ist der Name des Genesys-Users.
+* **Kunden-API:** Designs lassen sich auch per Cognito Client Credentials exportieren (`GET /ext/v1/web-themes`, Scope `themes.read`) und importieren (`POST /ext/v1/web-themes/import`, Scope `themes.write`, Upsert nach `themeId`, ohne optimistisches Sperren, `updatedBy` = `api:<clientId>`). Dieselbe Schreiblogik (`saveWebThemes` in `shared/web_themes_table.ts`: Limit, Standard-Markierung, Transaktion), Format und Fehler siehe `polly_customer_api.md`, Abschnitt 8. Kontrastwarnungen gibt es dort nicht.
 * Fehler (Body `{ "code", "message" }`): `400 invalid_request` (ID keine UUID, Name, Tokens ungültig), `401 unauthorized`, `403 forbidden_m2m` (Schreiben mit Cognito-M2M-Token), `403 missing_role`, `404 not_found` (Löschen eines unbekannten Designs), `409 limit_reached` (mehr als 50 Designs), `409 conflict` (Design zwischenzeitlich geändert oder gelöscht, oder bisheriges Standard-Design gleichzeitig gelöscht), `413 payload_too_large`, `429`/`502 genesys_error`, `502 no_credentials`.
 
 ### Tabelle `WebSurveyThemesTable`

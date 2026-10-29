@@ -4,6 +4,7 @@ import { SURVEY_LANGUAGES } from "./flowTypes";
 import { isWebThemeId } from "../webTheme/webTheme";
 import type { ConditionOperator } from "./flowTypes";
 import { surveyFieldIds, questionFieldIds } from "./surveyFieldIds";
+import { baseUrlError, BASE_URL_MAX_CHARS } from "./invitationLinks";
 import { i18n, currentLocaleTag } from "@/i18n";
 import {
 	TTS_TEXT_MAX_CHARS,
@@ -111,23 +112,6 @@ export function findDuplicateFollowUpValues(
 		}
 	});
 	return duplicates;
-}
-
-/**
- * Prüft die Basis-URL der Einladungslinks: leer ist erlaubt, sonst eine absolute https://-URL
- * mit höchstens einem Platzhalter {token}. Liefert den Fehlerschlüssel unter `validation.*`.
- */
-export function baseUrlError(baseUrl: string | null | undefined): "baseUrlTokenCount" | "baseUrlInvalid" | null {
-	const value = baseUrl?.trim();
-	if (!value) return null;
-	if (value.split(BASE_URL_TOKEN_PLACEHOLDER).length - 1 > 1) return "baseUrlTokenCount";
-	if (/\s/.test(value)) return "baseUrlInvalid";
-	try {
-		const url = new URL(value.replace(BASE_URL_TOKEN_PLACEHOLDER, "token"));
-		return url.protocol === "https:" && url.hostname ? null : "baseUrlInvalid";
-	} catch {
-		return "baseUrlInvalid";
-	}
 }
 
 /** true, wenn ein per TTS gesprochener Text das Genesys-Limit pro TTS-Anfrage überschreitet. */
@@ -428,7 +412,7 @@ export function validateSurvey(survey: Survey, { webSurvey = true }: ValidateSur
 		if (baseUrlKey) {
 			errors.push({
 				field: "survey.base_url",
-				message: t(`validation.${baseUrlKey}`, { placeholder: BASE_URL_TOKEN_PLACEHOLDER }),
+				message: t(`validation.${baseUrlKey}`, { placeholder: BASE_URL_TOKEN_PLACEHOLDER, max: BASE_URL_MAX_CHARS }),
 				fieldId: surveyFieldIds.baseUrl
 			});
 		}

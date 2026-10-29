@@ -40,3 +40,5 @@ amplify_outputs*
 amplifyconfiguration*
 
 .agents
+# Lokale Werte mit Token für tools/run_api_tests.sh (Vorlage: tools/run_api_tests.env.sample)
+tools/run_api_tests.env

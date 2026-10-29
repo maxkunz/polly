@@ -353,6 +353,7 @@ export const tlh: MessageSchema = {
 		ttsTextTooLong: "„{field}“ tIq law'qu' ({length} / {max} ngutlh law'qu'). TTS ghItlh {max} ngutlh law'qu' ghajlaH. ghItlh yIHabmoH.",
 		baseUrlInvalid: "URL https vaj. {placeholder}.",
 		baseUrlTokenCount: "{placeholder} wa'logh neH.",
+		baseUrlTooLong: "URL tIq law' {max} tIq puS.",
 		languageInvalid: "Hol Dayaj.",
 		webThemeInvalid: "HablI' lI' yIwIv.",
 		scaleLabelTooLong: "„{field}“ tIq law'qu' ({max} ngutlh law')."

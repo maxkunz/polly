@@ -92,7 +92,8 @@ export function surveyLanguageOf(survey: FlowSurvey): SurveyLanguage {
     : DEFAULT_SURVEY_LANGUAGE;
 }
 
-function text(value: unknown): string {
+/** Text eines optionalen Felds, `""` bei fehlendem oder falschem Typ. */
+export function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 

@@ -353,6 +353,7 @@ export const la: MessageSchema = {
 		ttsTextTooLong: "„{field}“ nimis longum est ({length} ex maximo {max} litteris). Textus voce synthetica recitati maxime {max} litteras longi esse possunt. Quaeso, textum contrahe.",
 		baseUrlInvalid: "URL basis debet esse URL https absoluta et valida, e. g. https://www.exemplum.de/quaestio/{placeholder}.",
 		baseUrlTokenCount: "URL basis signum {placeholder} semel tantum continere potest.",
+		baseUrlTooLong: "URL basis non plus quam {max} litteras continere potest.",
 		languageInvalid: "Linguam validam elige.",
 		webThemeInvalid: "Formam validam elige.",
 		scaleLabelTooLong: "„{field}“ nimis longum est (maximum {max} litterae)."

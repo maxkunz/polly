@@ -17,11 +17,14 @@ import { onboarding } from "./functions/onboarding/resource";
 import { surveyResponses } from "./functions/survey_responses/resource";
 import { surveyCleanup } from "./functions/survey_cleanup/resource";
 import { surveyResponsesExport } from "./functions/survey_responses_export/resource";
+import { reportingApi } from "./functions/reporting_api/resource";
+import { surveysApi } from "./functions/surveys_api/resource";
 import { surveyResponsesDelete } from "./functions/survey_responses_delete/resource";
 import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 import { invitations } from "./functions/invitations/resource";
 import { webSurvey } from "./functions/web_survey/resource";
 import { webThemes } from "./functions/web_themes/resource";
+import { API_RESOURCE_SERVER, API_SCOPES, API_SCOPE_DESCRIPTIONS } from "./functions/shared/api_scopes";
 
 const rawBranchName = (
   process.env.AWS_BRANCH ||
@@ -41,6 +44,18 @@ const appId = (
   "app"
 ).toLowerCase();
 const envSuffix = `${appId}-${safeBranchName}`;
+// Ursprung der Polly-Umfrageseite für Einladungslinks der Kunden-API ohne base_url. Amplify-Hosting-Domain:
+// Branch mit "-" statt Zeichen, die im Hostnamen nicht erlaubt sind ("/", "_", "." …), nicht gekürzt
+// (anders als safeBranchName). Eigene Domain oder abweichender Branch-Name: Variable WEB_SURVEY_ORIGIN setzen.
+const webSurveyOriginFromEnv = process.env.WEB_SURVEY_ORIGIN?.trim();
+const webSurveyOrigin = (
+  webSurveyOriginFromEnv ||
+  `https://${rawBranchName.replace(/[^a-z0-9-]/g, "-")}.${appId}.amplifyapp.com`
+).replace(/\/+$/, "");
+if (!webSurveyOriginFromEnv && appId === "app") {
+  // Sandbox ohne Amplify-Hosting: abgeleitete Domain existiert nicht
+  console.warn(`[backend] WEB_SURVEY_ORIGIN fehlt, Links der Kunden-API ohne base_url zeigen auf ${webSurveyOrigin}`);
+}
 const tenantSecretsPrefix = `gc-clients/${envSuffix}`;
 // Optionale Genesys-Region (Amplify-Hosting-Umgebungsvariable), Default liegt in shared/tenant_auth.ts.
 const genesysRegion = (process.env.GENESYS_REGION ?? "").trim();
@@ -67,6 +82,8 @@ const backend = defineBackend({
   invitations,
   webSurvey,
   webThemes,
+  reportingApi,
+  surveysApi,
 });
 
 const stack = Stack.of(backend.onboarding.resources.lambda);
@@ -177,6 +194,23 @@ const webSurveyThemesTable = new dynamodb.Table(stack, "WebSurveyThemesTable", {
   removalPolicy: RemovalPolicy.RETAIN,
 });
 
+// API-Clients der Kunden-API (/ext/v1): Cognito-Client (Client Credentials) → Mandant und Status.
+// Legt das Betriebsteam über /onboarding/api-clients/* an; ohne Eintrag mit Status ACTIVE wird jedes
+// Token abgelehnt (resolveApiClient in shared/api_client_auth.ts).
+const apiClientsTable = new dynamodb.Table(stack, "ApiClientsTable", {
+  partitionKey: { name: "clientId", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Clients eines Mandanten (Liste, Aufräumen beim Löschen des Mandanten)
+apiClientsTable.addGlobalSecondaryIndex({
+  indexName: "byTenantId",
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "clientId", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.ALL,
+});
+
 // Signaturschlüssel der Einladungen (HS256), ein Schlüssel pro Umgebung. Verlässt AWS nie: Die Lambdas
 // bekommen nur den ARN. RETAIN, weil ein neuer Schlüssel alle verschickten Links ungültig machen würde.
 const webSurveyJwtSecret = new secretsmanager.Secret(stack, "WebSurveyJwtSecret", {
@@ -198,11 +232,16 @@ const tenantSecretsArn = stack.formatArn({
   arnFormat: cdk.ArnFormat.COLON_RESOURCE_NAME,
 });
 
-function attachTenantAuth(fn: lambda.Function) {
+// Nur Cognito-Prüfung und Mandanteneintrag, ohne Zugriff auf die Genesys-Secrets (Kunden-API über resolveApiClient)
+function attachApiClientAuth(fn: lambda.Function) {
   tenantsTable.grantReadData(fn);
   fn.addEnvironment("TENANTS_TABLE_NAME", tenantsTable.tableName);
   fn.addEnvironment("USER_POOL_ID", backend.auth.resources.userPool.userPoolId);
   fn.addEnvironment("COGNITO_ISSUER", tenantAuthIssuer);
+}
+
+function attachTenantAuth(fn: lambda.Function) {
+  attachApiClientAuth(fn);
   fn.addEnvironment("SECRETS_PREFIX", tenantSecretsPrefix);
   if (genesysRegion) {
     fn.addEnvironment("GENESYS_REGION", genesysRegion);
@@ -251,10 +290,26 @@ onboardingCfn.addPropertyOverride(
   tenantSecretsPrefix,
 );
 
+apiClientsTable.grantReadWriteData(onboardingLambda);
+onboardingCfn.addPropertyOverride(
+  "Environment.Variables.API_CLIENTS_TABLE_NAME",
+  apiClientsTable.tableName,
+);
+
 new cognito.UserPoolResourceServer(stack, "BackendResourceServer", {
   userPool: backend.auth.resources.userPool,
   identifier: "backend",
   scopes: [{ scopeName: "invoke", scopeDescription: "Invoke backend APIs" }],
+});
+
+// Fachliche Scopes der Kunden-API, ohne Mandant und ohne Version (siehe shared/api_scopes.ts)
+new cognito.UserPoolResourceServer(stack, "PollyApiResourceServer", {
+  userPool: backend.auth.resources.userPool,
+  identifier: API_RESOURCE_SERVER,
+  scopes: API_SCOPES.map((scopeName) => ({
+    scopeName,
+    scopeDescription: API_SCOPE_DESCRIPTIONS[scopeName],
+  })),
 });
 
 new cognito.CfnUserPoolDomain(stack, "UserPoolDomain", {
@@ -323,6 +378,15 @@ httpApi.addRoutes({
   methods: [apigw.HttpMethod.POST],
   integration: onboardingHttpIntegration,
 });
+
+// API-Clients der Kunden-API verwalten (Admin-Token), Anleitung: documentation/betrieb_api_zugaenge.md
+for (const action of ["create", "list", "delete"]) {
+  httpApi.addRoutes({
+    path: `/onboarding/api-clients/${action}`,
+    methods: [apigw.HttpMethod.POST],
+    integration: onboardingHttpIntegration,
+  });
+}
 
 const surveyResponsesLambda = backend.surveyResponses.resources
   .lambda as lambda.Function;
@@ -476,6 +540,10 @@ invitationsLambda.addEnvironment(
   surveyDeletionJobsTable.tableName,
 );
 attachTenantAuth(invitationsLambda);
+// Kunden-API: Anmeldung über resolveApiClient, Links ohne base_url zeigen auf die Polly-Umfrageseite
+apiClientsTable.grantReadData(invitationsLambda);
+invitationsLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+invitationsLambda.addEnvironment("WEB_SURVEY_ORIGIN", webSurveyOrigin);
 
 const invitationsInteg = new integrations.HttpLambdaIntegration("InvitationsInteg", invitationsLambda);
 
@@ -487,6 +555,12 @@ httpApi.addRoutes({
 // Webvorschau des Stage-Stands (Token mit stage: true, 7 Tage gültig)
 httpApi.addRoutes({
   path: "/invitations/preview",
+  methods: [apigw.HttpMethod.POST],
+  integration: invitationsInteg,
+});
+
+const extInvitationsRoutes = httpApi.addRoutes({
+  path: "/ext/v1/invitations",
   methods: [apigw.HttpMethod.POST],
   integration: invitationsInteg,
 });
@@ -541,6 +615,80 @@ const webSurveyRoutes = [
   }),
 ];
 
+// Kunden-API (/ext/v1), Anmeldung über resolveApiClient (Cognito Client Credentials + ApiClientsTable)
+const reportingApiLambda = backend.reportingApi.resources.lambda as lambda.Function;
+
+surveyResponsesTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("SURVEY_RESPONSES_TABLE_NAME", surveyResponsesTable.tableName);
+apiClientsTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+// Aggregate und die Prüfung auf laufende Löschungen (nur lesend)
+surveyAggregatesTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("SURVEY_AGGREGATES_TABLE_NAME", surveyAggregatesTable.tableName);
+surveyDeletionJobsTable.grantReadData(reportingApiLambda);
+reportingApiLambda.addEnvironment("SURVEY_DELETION_JOBS_TABLE_NAME", surveyDeletionJobsTable.tableName);
+attachApiClientAuth(reportingApiLambda);
+
+const reportingApiInteg = new integrations.HttpLambdaIntegration("ReportingApiInteg", reportingApiLambda);
+
+const reportingApiRoutes = [
+  ...httpApi.addRoutes({
+    path: "/ext/v1/reporting/data",
+    methods: [apigw.HttpMethod.GET],
+    integration: reportingApiInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/reporting/summary",
+    methods: [apigw.HttpMethod.GET],
+    integration: reportingApiInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/reporting/aggregates",
+    methods: [apigw.HttpMethod.GET],
+    integration: reportingApiInteg,
+  }),
+];
+
+// Umfragedetails: liest den Prod-Stand über die Genesys-Credentials des Mandanten (attachTenantAuth), dazu Designs
+// und laufende Löschungen
+const surveysApiLambda = backend.surveysApi.resources.lambda as lambda.Function;
+
+apiClientsTable.grantReadData(surveysApiLambda);
+surveysApiLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
+surveyDeletionJobsTable.grantReadData(surveysApiLambda);
+surveysApiLambda.addEnvironment("SURVEY_DELETION_JOBS_TABLE_NAME", surveyDeletionJobsTable.tableName);
+webSurveyThemesTable.grantReadData(surveysApiLambda);
+surveysApiLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
+attachTenantAuth(surveysApiLambda);
+
+const surveysApiInteg = new integrations.HttpLambdaIntegration("SurveysApiInteg", surveysApiLambda);
+
+const surveysApiRoutes = [
+  ...httpApi.addRoutes({
+    path: "/ext/v1/surveys",
+    methods: [apigw.HttpMethod.GET],
+    integration: surveysApiInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/surveys/{surveyId}",
+    methods: [apigw.HttpMethod.GET],
+    integration: surveysApiInteg,
+  }),
+];
+
+// Drosselung der Kunden-API pro Route, für alle Mandanten und Clients zusammen (keine Grenze pro Client).
+// Ein Client in einer Schleife kann damit andere ausbremsen; dokumentiert in polly_customer_api.md, Abschnitt 3.
+const REPORTING_API_THROTTLE = { rateLimit: 20, burstLimit: 40 };
+// Jeder Aufruf zählt bis zu 31 Tage Sitzungen im Speicher
+const REPORTING_SUMMARY_THROTTLE = { rateLimit: 10, burstLimit: 20 };
+// Jeder Aufruf signiert bis zu 5000 Einladungen und ruft Genesys auf
+const EXT_INVITATIONS_THROTTLE = { rateLimit: 5, burstLimit: 10 };
+// Jeder Aufruf der Liste liest die Zeilen der Data Table bei Genesys (Antworten werden 60 s gecacht)
+const EXT_SURVEYS_THROTTLE = { rateLimit: 10, burstLimit: 20 };
+// Export liest alle Designs des Mandanten, der Import schreibt bis zu 50 in einer Transaktion
+const EXT_THEMES_EXPORT_THROTTLE = { rateLimit: 10, burstLimit: 20 };
+const EXT_THEMES_IMPORT_THROTTLE = { rateLimit: 5, burstLimit: 10 };
+
 // Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
 const defaultStage = httpApi.defaultStage;
 if (defaultStage) {
@@ -554,9 +702,41 @@ if (defaultStage) {
       ThrottlingRateLimit: WEB_SURVEY_SUBMIT_THROTTLE.rateLimit,
       ThrottlingBurstLimit: WEB_SURVEY_SUBMIT_THROTTLE.burstLimit,
     },
+    "GET /ext/v1/reporting/data": {
+      ThrottlingRateLimit: REPORTING_API_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: REPORTING_API_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/reporting/summary": {
+      ThrottlingRateLimit: REPORTING_SUMMARY_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: REPORTING_SUMMARY_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/reporting/aggregates": {
+      ThrottlingRateLimit: REPORTING_API_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: REPORTING_API_THROTTLE.burstLimit,
+    },
+    "POST /ext/v1/invitations": {
+      ThrottlingRateLimit: EXT_INVITATIONS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_INVITATIONS_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/surveys": {
+      ThrottlingRateLimit: EXT_SURVEYS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_SURVEYS_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/surveys/{surveyId}": {
+      ThrottlingRateLimit: EXT_SURVEYS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_SURVEYS_THROTTLE.burstLimit,
+    },
+    "GET /ext/v1/web-themes": {
+      ThrottlingRateLimit: EXT_THEMES_EXPORT_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_THEMES_EXPORT_THROTTLE.burstLimit,
+    },
+    "POST /ext/v1/web-themes/import": {
+      ThrottlingRateLimit: EXT_THEMES_IMPORT_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: EXT_THEMES_IMPORT_THROTTLE.burstLimit,
+    },
   };
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
-  defaultStage.node.addDependency(...webSurveyRoutes);
+  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes, ...surveysApiRoutes);
 }
 
 // Pflege der Web-Designs (lesen: jeder App-Nutzer, schreiben: Genesys-User mit polly_deploy)
@@ -564,6 +744,9 @@ const webThemesLambda = backend.webThemes.resources.lambda as lambda.Function;
 
 webSurveyThemesTable.grantReadWriteData(webThemesLambda);
 webThemesLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
+// Kunden-API (Export/Import): Prüfung des API-Clients über resolveApiClient
+apiClientsTable.grantReadData(webThemesLambda);
+webThemesLambda.addEnvironment("API_CLIENTS_TABLE_NAME", apiClientsTable.tableName);
 attachTenantAuth(webThemesLambda);
 
 const webThemesInteg = new integrations.HttpLambdaIntegration("WebThemesInteg", webThemesLambda);
@@ -579,6 +762,22 @@ httpApi.addRoutes({
   methods: [apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
   integration: webThemesInteg,
 });
+
+// Kunden-API: Web-Designs exportieren und importieren (Scopes themes.read / themes.write)
+const extWebThemesRoutes = [
+  ...httpApi.addRoutes({
+    path: "/ext/v1/web-themes",
+    methods: [apigw.HttpMethod.GET],
+    integration: webThemesInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/ext/v1/web-themes/import",
+    methods: [apigw.HttpMethod.POST],
+    integration: webThemesInteg,
+  }),
+];
+// Die Stage verweist über routeSettings auf diese Routen (der Block steht weiter oben)
+defaultStage?.node.addDependency(...extWebThemesRoutes);
 
 const surveyCleanupLambda = backend.surveyCleanup.resources
   .lambda as lambda.Function;

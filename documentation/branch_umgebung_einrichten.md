@@ -22,10 +22,13 @@ Mandanten lassen sich **nicht** aus einer anderen Umgebung in die Tenants-Tabell
 4. Optionale Branch-Umgebungsvariablen (Hosting → Environment variables, als Override für den Branch):
    - `GENESYS_REGION`, falls die Test-Org nicht in `mypurecloud.de` liegt
    - `WEB_SURVEY_RESERVED_CONCURRENCY`, siehe [polly_web.md](polly_web.md)
+   - `WEB_SURVEY_ORIGIN`, falls die Umfrageseite unter einer eigenen Domain erreichbar ist (Links der Kunden-API ohne `base_url`); ohne sie `https://<branch>.<appId>.amplifyapp.com`, siehe [betrieb_api_zugaenge.md](betrieb_api_zugaenge.md#10-umgebungsvariable-web_survey_origin)
 
 Der Branchname wird für die Ressourcennamen bereinigt (Kleinbuchstaben, Sonderzeichen → `-`) und auf 20 Zeichen gekürzt. Aus `feature/websurveys` wird `feature-websurveys`.
 
 Für Repos in einer GitHub-Organisation muss die GitHub App „AWS Amplify“ für das Repo freigegeben sein. Das ist bei einer bestehenden Amplify-App bereits der Fall, sonst muss ein Owner der Organisation sie freigeben.
+
+**Vor dem nächsten Schritt den Backend-Deploy des Branches abwarten.** Das API Gateway entsteht erst durch diesen Deploy, nicht durch das Onboarding. Das Onboarding ist selbst ein Aufruf an dieses Gateway.
 
 ## 2. API Gateway des Branches ermitteln
 
@@ -110,7 +113,7 @@ Alle angelegten Ressourcen stehen danach in `meta.setup` der `__meta`-Zeile. Der
 
 ## 6. Mandant freigeben
 
-Das Backend nimmt Anfragen eines Mandanten erst an, wenn sein Eintrag in der Tenants-Tabelle den Status `APPROVED` hat. Nach dem Setup steht er auf `PENDING`.
+Das Backend nimmt Anfragen eines Mandanten erst an, wenn sein Eintrag in der Tenants-Tabelle den Status `APPROVED` hat. Sobald das Backend den ersten Frontend Request erhält steht er auf `PENDING`.
 
 **Variante A: direkt in DynamoDB**
 DynamoDB Console → Tabelle `TenantsTable` des neuen Stacks (Name enthält den Stack des Branches) → den neuen Eintrag öffnen → `status` auf `APPROVED` setzen.
@@ -143,6 +146,7 @@ curl -X POST "https://<branch>.<appId>.amplifyapp.com/api_websurveys/onboarding/
 | Aufrufe gehen auf `/api` statt auf das Branch-Präfix | Override für `VITE_API_PREFIX` fehlt oder Branch nach dem Setzen nicht neu gebaut |
 | `Tenant not approved` bzw. 401/403 nach dem Setup | Mandant steht noch auf `PENDING` (Schritt 6) |
 | Antworten landen im Backend von `main` | Data Action wurde vor dem Präfix angelegt und zeigt noch auf `/api/survey-responses`. In Genesys anpassen oder Setup neu ausführen |
+| Mandant (`PENDING`) steht in der Tenants-Tabelle von `main` statt im Branch | Setup lief gegen `/api`: Build ohne `VITE_API_PREFIX`-Override oder Branch nach dem Setzen nicht neu gebaut. Eintrag und Secret in `main` von Hand löschen, Branch neu bauen, Setup wiederholen |
 
 ## Lokal entwickeln
 

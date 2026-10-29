@@ -4,6 +4,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 import { createHash, createPublicKey, verify } from "crypto";
 import { isGenesysRegion, normalizeGenesysRegion } from "./genesys_regions";
 import { fetchWithTimeout } from "./http";
+import { TtlCache } from "./ttl_cache";
 
 type AnyApiGwEvent = any;
 
@@ -24,15 +25,11 @@ const TENANTS_TABLE_NAME = process.env.TENANTS_TABLE_NAME ?? "";
 const COGNITO_ISSUER = (process.env.COGNITO_ISSUER ?? "").trim();
 const USER_POOL_ID = (process.env.USER_POOL_ID ?? "").trim();
 
-const JWKS_TTL_MS = 10 * 60 * 1000;
-const SECRET_TTL_MS = 5 * 60 * 1000;
-const GENESYS_TOKEN_TTL_MS = 5 * 60 * 1000;
-const GENESYS_TOKEN_CACHE_MAX = 500;
-
-const jwksCache = new Map<string, { expiresAt: number; jwks: any }>();
-const secretCache = new Map<string, { expiresAt: number; value: any }>();
+const jwksCache = new TtlCache<any>({ ttlMs: 10 * 60 * 1000 });
+const secretCache = new TtlCache<any>({ ttlMs: 5 * 60 * 1000 });
+type GenesysTokenCheck = { clientId?: string; error?: string };
 // Erfolgreich validierte Genesys-Tokens (Schlüssel = Hash aus Region + Token), schont das Genesys-Rate-Limit
-const genesysTokenCache = new Map<string, { expiresAt: number; clientId: string }>();
+const genesysTokenCache = new TtlCache<GenesysTokenCheck>({ ttlMs: 5 * 60 * 1000 });
 
 function jsonParseSafe(raw: string): any | null {
   try {
@@ -94,12 +91,7 @@ async function fetchJson(url: string, timeoutMs = 3000): Promise<any> {
 }
 
 async function loadJwks(issuer: string): Promise<any> {
-  const cached = jwksCache.get(issuer);
-  if (cached && cached.expiresAt > Date.now()) return cached.jwks;
-
-  const jwks = await fetchJson(`${issuer}/.well-known/jwks.json`);
-  jwksCache.set(issuer, { jwks, expiresAt: Date.now() + JWKS_TTL_MS });
-  return jwks;
+  return jwksCache.getOrLoad(issuer, async () => ({ value: await fetchJson(`${issuer}/.well-known/jwks.json`) }));
 }
 
 function getClientIdFromClaims(claims: Record<string, any>): string {
@@ -113,7 +105,7 @@ function getClientIdFromClaims(claims: Record<string, any>): string {
   return "";
 }
 
-async function verifyCognitoJwt(token: string): Promise<{ claims?: Record<string, any>; error?: string }> {
+export async function verifyCognitoJwt(token: string): Promise<{ claims?: Record<string, any>; error?: string }> {
   const issuer = getIssuer();
   if (!issuer) return { error: "COGNITO_ISSUER or USER_POOL_ID/AWS_REGION not configured" };
 
@@ -154,14 +146,10 @@ async function verifyCognitoJwt(token: string): Promise<{ claims?: Record<string
 }
 
 async function loadGenesysSecret(secretArn: string): Promise<{ genesysClientId?: string; genesysClientSecret?: string }> {
-  const cached = secretCache.get(secretArn);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-
-  const res = await sm.send(new GetSecretValueCommand({ SecretId: secretArn }));
-  const parsed = jsonParseSafe(res.SecretString ?? "") ?? {};
-
-  secretCache.set(secretArn, { value: parsed, expiresAt: Date.now() + SECRET_TTL_MS });
-  return parsed;
+  return secretCache.getOrLoad(secretArn, async () => {
+    const res = await sm.send(new GetSecretValueCommand({ SecretId: secretArn }));
+    return { value: jsonParseSafe(res.SecretString ?? "") ?? {} };
+  });
 }
 
 async function loadTenantByBackendClientId(backendClientId: string) {
@@ -174,7 +162,7 @@ async function loadTenantByBackendClientId(backendClientId: string) {
   return res.Item as Record<string, any> | undefined;
 }
 
-async function loadTenantByTenantId(tenantId: string) {
+export async function loadTenantByTenantId(tenantId: string) {
   let lastEvaluatedKey: Record<string, any> | undefined;
   do {
     const res = await ddb.send(new QueryCommand({
@@ -206,11 +194,16 @@ function pickGenesysClientId(data: any): string {
 async function validateGenesysToken(
   region: string,
   token: string
-): Promise<{ clientId?: string; error?: string }> {
+): Promise<GenesysTokenCheck> {
   const cacheKey = createHash("sha256").update(`${region}:${token}`).digest("hex");
-  const cached = genesysTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return { clientId: cached.clientId };
+  return genesysTokenCache.getOrLoad(cacheKey, async () => {
+    const result = await requestGenesysTokenCheck(region, token);
+    // Nur Erfolge cachen
+    return { value: result, ttlMs: result.clientId ? undefined : 0 };
+  });
+}
 
+async function requestGenesysTokenCheck(region: string, token: string): Promise<GenesysTokenCheck> {
   const url = `https://api.${region}/api/v2/tokens/me`;
   const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
@@ -228,14 +221,6 @@ async function validateGenesysToken(
     });
     return { error: "Genesys token missing clientId" };
   }
-
-  // Nur Erfolge cachen; abgelaufene Einträge verwerfen, Größe begrenzen
-  const now = Date.now();
-  if (genesysTokenCache.size >= GENESYS_TOKEN_CACHE_MAX) {
-    for (const [k, v] of genesysTokenCache) if (v.expiresAt <= now) genesysTokenCache.delete(k);
-    if (genesysTokenCache.size >= GENESYS_TOKEN_CACHE_MAX) genesysTokenCache.clear();
-  }
-  genesysTokenCache.set(cacheKey, { clientId: actualClientId, expiresAt: now + GENESYS_TOKEN_TTL_MS });
 
   console.log("[tenant_auth] Genesys token validated", { region, clientId: actualClientId });
   return { clientId: actualClientId };
@@ -380,9 +365,13 @@ export type TenantCredentials = {
 
 /**
  * Lädt die hinterlegten Genesys-Backend-Credentials eines Mandanten (für Hintergrundjobs ohne User-Token).
+ * `tenantItem`: bereits geladener Eintrag aus `loadTenantByTenantId` (spart den zweiten Lesezugriff).
  */
-export async function loadTenantCredentials(tenantId: string): Promise<TenantCredentials | undefined> {
-  const item = await loadTenantByTenantId(tenantId);
+export async function loadTenantCredentials(
+  tenantId: string,
+  tenantItem?: Record<string, any>
+): Promise<TenantCredentials | undefined> {
+  const item = tenantItem ?? (await loadTenantByTenantId(tenantId));
   if (!item?.genesysSecretArn || item.status !== "APPROVED") return undefined;
 
   const secret = await loadGenesysSecret(item.genesysSecretArn);

@@ -352,6 +352,7 @@ export const en: MessageSchema = {
 		ttsTextTooLong: "“{field}” is too long ({length} of max. {max} characters). Texts read out by text-to-speech may be at most {max} characters long. Please shorten the text.",
 		baseUrlInvalid: "The base URL must be a valid, absolute https URL, e.g. https://www.example.com/survey/{placeholder}.",
 		baseUrlTokenCount: "The base URL may contain the placeholder {placeholder} at most once.",
+		baseUrlTooLong: "The base URL may be at most {max} characters long.",
 		languageInvalid: "Please choose a valid language.",
 		webThemeInvalid: "Please choose a valid web design.",
 		scaleLabelTooLong: "“{field}” is too long (max. {max} characters)."

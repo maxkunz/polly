@@ -1,4 +1,4 @@
-import { CONDITION_OPERATOR_ORDER } from "@/domain/survey/flowTypes";
+import { CONDITION_OPERATOR_ORDER, CONDITION_PLACEHOLDER_VALUES } from "@/domain/survey/flowTypes";
 import type {
 	ConditionOperator,
 	FlowCondition,
@@ -36,12 +36,6 @@ export class SurveyFlowTranslationError extends Error {
 
 const SYNONYM_SEPARATOR = "; ";
 
-
-const CONDITIONAL_PLACEHOLDER_VALUE: Record<ConditionOperator, number> = {
-	equals: -1,
-	less_than: -1000,
-	greater_than: 1000
-};
 
 function buildBaseQuestion(question: SurveyQuestion, defaultNextQuestionId: string | null): FlowQuestionBase {
 	return {
@@ -235,7 +229,7 @@ function buildConditionalNextQuestion(
 		}
 		return {
 			operator,
-			value: CONDITIONAL_PLACEHOLDER_VALUE[operator],
+			value: CONDITION_PLACEHOLDER_VALUES[operator],
 			next_question_id: null
 		};
 	});
