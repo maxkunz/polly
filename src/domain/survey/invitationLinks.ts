@@ -19,6 +19,31 @@ export const INVITATION_TOKEN_PLACEHOLDER = "{token}";
 /** Pfad der Polly-Umfrageseite, wenn die Umfrage keine Basis-URL hat. */
 export const WEB_SURVEY_PATH_PREFIX = "/s/";
 
+/**
+ * Maximale Länge der Basis-URL. Begrenzt die Antwort von `POST /ext/v1/invitations`: 5000 Links mit
+ * je zweimal dem Token (~370 Zeichen) müssen unter dem Limit der Lambda-Antwort (6 MB) bleiben.
+ */
+export const BASE_URL_MAX_CHARS = 200;
+
+/**
+ * Prüft die Basis-URL der Einladungslinks: leer ist erlaubt, sonst eine absolute https://-URL
+ * mit höchstens einem Platzhalter {token} und höchstens `BASE_URL_MAX_CHARS` Zeichen.
+ * Liefert den Fehlerschlüssel unter `validation.*`. Auch serverseitig genutzt (Kunden-API).
+ */
+export function baseUrlError(baseUrl: string | null | undefined): "baseUrlTokenCount" | "baseUrlInvalid" | "baseUrlTooLong" | null {
+	const value = baseUrl?.trim();
+	if (!value) return null;
+	if (value.length > BASE_URL_MAX_CHARS) return "baseUrlTooLong";
+	if (value.split(INVITATION_TOKEN_PLACEHOLDER).length - 1 > 1) return "baseUrlTokenCount";
+	if (/\s/.test(value)) return "baseUrlInvalid";
+	try {
+		const url = new URL(value.replace(INVITATION_TOKEN_PLACEHOLDER, "token"));
+		return url.protocol === "https:" && url.hostname ? null : "baseUrlInvalid";
+	} catch {
+		return "baseUrlInvalid";
+	}
+}
+
 export const INVITATION_CSV_HEADER = ["Expiration", "Multi use", "Complete URL"].join(CSV_SEPARATOR);
 
 export interface InvitationCsvRow {

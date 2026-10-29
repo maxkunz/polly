@@ -350,6 +350,7 @@ export const de = {
 		ttsTextTooLong: "„{field}“ ist zu lang ({length} von maximal {max} Zeichen). Texte, die per Sprachausgabe vorgelesen werden, dürfen höchstens {max} Zeichen lang sein. Bitte kürzen Sie den Text.",
 		baseUrlInvalid: "Die Basis-URL muss eine gültige, absolute https-URL sein, z. B. https://www.beispiel.de/umfrage/{placeholder}.",
 		baseUrlTokenCount: "Die Basis-URL darf den Platzhalter {placeholder} höchstens einmal enthalten.",
+		baseUrlTooLong: "Die Basis-URL darf höchstens {max} Zeichen lang sein.",
 		languageInvalid: "Bitte eine gültige Sprache wählen.",
 		webThemeInvalid: "Bitte ein gültiges Web-Design wählen.",
 		scaleLabelTooLong: "„{field}“ ist zu lang (maximal {max} Zeichen)."

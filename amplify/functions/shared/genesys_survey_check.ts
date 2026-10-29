@@ -1,8 +1,10 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
+import { baseUrlError } from "../../../src/domain/survey/invitationLinks";
 import { fetchWithTimeout } from "./http";
 import { isValidSurveyId } from "./survey_id";
-import { isSurveyBeingDeleted } from "./survey_results";
+import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "./survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "./tenant_auth";
+import { TtlCache, type CacheLoad } from "./ttl_cache";
 import { parseProdSurvey } from "./web_survey_format";
 
 /**
@@ -13,7 +15,7 @@ import { parseProdSurvey } from "./web_survey_format";
  * nachweislich nicht (mehr) existiert. Im Zweifel (Fehler, fehlender Zugriff,
  * unlesbare Antwort) wird NICHT gelöscht.
  *
- * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage, `loadProjectTag` den Projekt-Tag
+ * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage (`listProdSurveys` alle), `loadProjectTag` den Projekt-Tag
  * der Installation aus der Zeile `__meta`.
  *
  * Antworten aus dem Flow: `checkSurveyExists` prüft (mit Cache), dass die Zeile `survey_<id>` in der
@@ -27,7 +29,8 @@ export type SurveyAbsenceResult =
   | { status: "exists"; reason: string }
   | { status: "error"; reason: string };
 
-const clientTokenCache = new Map<string, { token: string; expiresAt: number }>();
+/** Lebensdauer pro Token aus `expires_in` (Standard 300 s) abzüglich `TOKEN_REFRESH_MARGIN_MS`. */
+const clientTokenCache = new TtlCache<string>({ ttlMs: 300 * 1000 - TOKEN_REFRESH_MARGIN_MS });
 
 export { isValidSurveyId };
 
@@ -36,10 +39,10 @@ export async function getClientCredentialsToken(
   clientId: string,
   clientSecret: string
 ): Promise<string> {
-  const cacheKey = `${region}:${clientId}`;
-  const cached = clientTokenCache.get(cacheKey);
-  if (cached && cached.expiresAt - TOKEN_REFRESH_MARGIN_MS > Date.now()) return cached.token;
+  return clientTokenCache.getOrLoad(`${region}:${clientId}`, () => requestClientCredentialsToken(region, clientId, clientSecret));
+}
 
+async function requestClientCredentialsToken(region: string, clientId: string, clientSecret: string): Promise<CacheLoad<string>> {
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const res = await fetchWithTimeout(`https://login.${region}/oauth/token`, {
     method: "POST",
@@ -56,11 +59,7 @@ export async function getClientCredentialsToken(
   const data: any = await res.json();
   if (!data?.access_token) throw new Error("Genesys token response without access_token");
 
-  clientTokenCache.set(cacheKey, {
-    token: data.access_token,
-    expiresAt: Date.now() + Number(data.expires_in ?? 300) * 1000,
-  });
-  return data.access_token;
+  return { value: data.access_token, ttlMs: Number(data.expires_in ?? 300) * 1000 - TOKEN_REFRESH_MARGIN_MS };
 }
 
 export async function getRow(
@@ -166,9 +165,8 @@ const SURVEY_EXISTS_TTL_MS = 30 * 60 * 1000;
 const SURVEY_ABSENT_TTL_MS = 5 * 60 * 1000;
 // Auch unklare Ergebnisse kurz merken, damit eine Störung bei Genesys nicht mit jeder Antwort weiter angefragt wird
 const SURVEY_CHECK_ERROR_TTL_MS = 60 * 1000;
-const SURVEY_EXISTENCE_CACHE_MAX = 1000;
 
-const surveyExistenceCache = new Map<string, { result: SurveyExistenceResult; expiresAt: number }>();
+const surveyExistenceCache = new TtlCache<SurveyExistenceResult>({ ttlMs: SURVEY_CHECK_ERROR_TTL_MS, maxEntries: 1000 });
 
 const CONFIG_ERROR_HTTP_STATUS = new Set([400, 401, 403]);
 
@@ -214,23 +212,15 @@ export async function checkSurveyExists(
   surveyId: string,
   credentials?: TenantCredentials
 ): Promise<SurveyExistenceResult & { cached: boolean }> {
-  const cacheKey = `${tenantId}:${surveyId}`;
-  const now = Date.now();
-  const cached = surveyExistenceCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) return { ...cached.result, cached: true };
-
-  const result = await querySurveyExists(tenantId, surveyId, credentials);
-  const ttl =
-    result.status === "exists" ? SURVEY_EXISTS_TTL_MS : result.status === "absent" ? SURVEY_ABSENT_TTL_MS : SURVEY_CHECK_ERROR_TTL_MS;
-
-  // Abgelaufene Einträge verwerfen, Größe begrenzen
-  const storedAt = Date.now();
-  if (surveyExistenceCache.size >= SURVEY_EXISTENCE_CACHE_MAX) {
-    for (const [k, v] of surveyExistenceCache) if (v.expiresAt <= storedAt) surveyExistenceCache.delete(k);
-    if (surveyExistenceCache.size >= SURVEY_EXISTENCE_CACHE_MAX) surveyExistenceCache.clear();
-  }
-  surveyExistenceCache.set(cacheKey, { result, expiresAt: storedAt + ttl });
-  return { ...result, cached: false };
+  let cached = true;
+  const result = await surveyExistenceCache.getOrLoad(`${tenantId}:${surveyId}`, async () => {
+    cached = false;
+    const result = await querySurveyExists(tenantId, surveyId, credentials);
+    const ttlMs =
+      result.status === "exists" ? SURVEY_EXISTS_TTL_MS : result.status === "absent" ? SURVEY_ABSENT_TTL_MS : SURVEY_CHECK_ERROR_TTL_MS;
+    return { value: result, ttlMs };
+  });
+  return { ...result, cached };
 }
 
 /** Nur für Tests. */
@@ -250,7 +240,8 @@ export type SurveyTableAccess = {
 };
 
 export type ProdSurveyResult =
-  | { status: "ok"; survey: FlowSurvey }
+  /** `baseUrl`: gültige `base_url` aus dem Draft (steht nicht im Flow-JSON), nur mit `withBaseUrl` und wenn gesetzt. */
+  | { status: "ok"; survey: FlowSurvey; baseUrl?: string }
   /** Kein Prod- bzw. Stage-Stand, Umfrage gelöscht oder Löschung läuft. */
   | { status: "unavailable"; reason: string }
   /** Genesys nicht erreichbar oder Zugriff fehlt; `throttled` bei HTTP 429 von Genesys. */
@@ -268,8 +259,34 @@ export async function getSurveyTableAccess(credentials: TenantCredentials): Prom
   return { region: credentials.region, token, dataTableId };
 }
 
+/**
+ * `base_url` aus dem Draft der Zeile. Unlesbare Drafts, fehlende oder ungültige Werte (`baseUrlError`, wie im
+ * Editor) ergeben `undefined`, dann gilt der Fallback. Der Draft wird ohne Deploy gespeichert, deshalb hier prüfen.
+ */
+function readDraftBaseUrl(raw: unknown, surveyId: string): string | undefined {
+  let draft: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      draft = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  const baseUrl = (draft as { base_url?: unknown } | null)?.base_url;
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) return undefined;
+  const error = baseUrlError(baseUrl);
+  if (error) {
+    console.warn("[genesys_survey_check] Ignoring invalid base_url in Draft", { surveyId, error, length: baseUrl.length });
+    return undefined;
+  }
+  return baseUrl.trim();
+}
+
 /** Spalte der Zeile `survey_<id>`, aus der ein Flow-Stand gelesen wird. */
 export type FlowSurveyColumn = "Prod" | "Stage";
+
+/** `withBaseUrl`: zusätzlich `base_url` aus dem Draft lesen (parst den ganzen Draft, nur für Links der Kunden-API). */
+export type FlowSurveyOptions = { withBaseUrl?: boolean };
 
 /**
  * Lädt den Prod-Stand der Umfrage aus der Data Table des Mandanten. Liegt ein Lösch-Job vor
@@ -279,9 +296,10 @@ export type FlowSurveyColumn = "Prod" | "Stage";
 export function loadProdSurvey(
   tenantId: string,
   surveyId: string,
-  credentials?: TenantCredentials
+  credentials?: TenantCredentials,
+  options?: FlowSurveyOptions
 ): Promise<ProdSurveyResult> {
-  return loadFlowSurvey(tenantId, surveyId, credentials, "Prod");
+  return loadFlowSurvey(tenantId, surveyId, credentials, "Prod", options);
 }
 
 /** Wie `loadProdSurvey`, liest aber die angegebene Spalte (`Stage` für die Webvorschau). */
@@ -289,7 +307,8 @@ export async function loadFlowSurvey(
   tenantId: string,
   surveyId: string,
   credentials: TenantCredentials | undefined,
-  column: FlowSurveyColumn
+  column: FlowSurveyColumn,
+  options: FlowSurveyOptions = {}
 ): Promise<ProdSurveyResult> {
   if (!isValidSurveyId(surveyId)) return { status: "unavailable", reason: "Invalid surveyId" };
   if (await isSurveyBeingDeleted(tenantId, surveyId)) return { status: "unavailable", reason: "Survey is being deleted" };
@@ -305,9 +324,78 @@ export async function loadFlowSurvey(
 
     const survey = parseProdSurvey(row.body?.[column], surveyId);
     if (!survey) return { status: "unavailable", reason: `No valid ${column} version` };
-    return { status: "ok", survey };
+    const baseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
+    return { status: "ok", survey, ...(baseUrl ? { baseUrl } : {}) };
   } catch (err: any) {
     return errorResult(err?.message ?? "request failed", err?.status);
+  }
+}
+
+/** Zeilen pro Seite beim Lesen aller Umfragen: Eine Zeile hat bis zu vier Zellen mit je max. 32.000 Zeichen. */
+const SURVEY_ROWS_PAGE_SIZE = 25;
+/** Obergrenze gegen endlose Schleifen (25 × 80 = 2000 Zeilen). */
+const SURVEY_ROWS_MAX_PAGES = 80;
+
+const SURVEY_ROW_KEY_PREFIX = "survey_";
+
+export type ProdSurveyListResult =
+  | { status: "ok"; surveys: FlowSurvey[] }
+  | { status: "error"; reason: string; throttled?: boolean };
+
+export interface ProdSurveyListOptions {
+  /** Wird vor jeder Seite gefragt; `false` bricht mit Fehler ab (Zeitbudget der Lambda). */
+  canContinue?: () => boolean;
+}
+
+/**
+ * Alle Umfragen des Mandanten mit gültigem Prod-Stand, ohne Umfragen, deren Löschung läuft (`SurveyDeletionJobsTable`).
+ * Liest die Zeilen der Data Table seitenweise; `__meta`, `__lock` und `survey_list` und Zeilen ohne gültige
+ * Prod-Zelle werden übersprungen. `survey_list` genügt nicht, weil dort nur ID und Titel stehen.
+ * Genesys blättert über den Offset: Ändert sich die Tabelle währenddessen, kann eine Zeile doppelt kommen
+ * (wird nach ID entfernt) oder fehlen.
+ */
+export async function listProdSurveys(
+  tenantId: string,
+  credentials?: TenantCredentials,
+  options: ProdSurveyListOptions = {}
+): Promise<ProdSurveyListResult> {
+  const tenantCredentials = credentials ?? (await loadTenantCredentials(tenantId));
+  if (!tenantCredentials) return { status: "error", reason: "No Genesys credentials for tenant" };
+
+  const surveys = new Map<string, FlowSurvey>();
+  try {
+    const access = await getSurveyTableAccess(tenantCredentials);
+    let pageNumber = 1;
+    let pageCount = 1;
+    do {
+      if (options.canContinue && !options.canContinue()) return { status: "error", reason: "Time budget exhausted" };
+      const url =
+        `https://api.${access.region}/api/v2/flows/datatables/${encodeURIComponent(access.dataTableId)}` +
+        `/rows?showbrief=false&pageSize=${SURVEY_ROWS_PAGE_SIZE}&pageNumber=${pageNumber}`;
+      const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${access.token}` } });
+      if (!res.ok) {
+        return { status: "error", reason: `Survey rows HTTP ${res.status}`, ...(res.status === 429 ? { throttled: true } : {}) };
+      }
+      const body: any = await res.json();
+      for (const row of Array.isArray(body?.entities) ? body.entities : []) {
+        const key = typeof row?.key === "string" ? row.key : "";
+        if (!key.startsWith(SURVEY_ROW_KEY_PREFIX) || key === "survey_list") continue;
+        const surveyId = key.slice(SURVEY_ROW_KEY_PREFIX.length);
+        if (!isValidSurveyId(surveyId)) continue;
+        const survey = parseProdSurvey(row.Prod, surveyId);
+        if (survey) surveys.set(survey.id, survey);
+      }
+      // Ohne Seitenzahl wäre unklar, ob weitere Seiten folgen: Fehler statt still gekürzter Liste
+      if (!Number.isInteger(body?.pageCount)) return { status: "error", reason: "Survey rows response without pageCount" };
+      pageCount = body.pageCount;
+      pageNumber += 1;
+    } while (pageNumber <= pageCount && pageNumber <= SURVEY_ROWS_MAX_PAGES);
+    if (pageNumber <= pageCount) return { status: "error", reason: "Too many rows in the survey data table" };
+
+    const deleting = await findSurveysBeingDeleted(tenantId, [...surveys.keys()]);
+    return { status: "ok", surveys: [...surveys.values()].filter((survey) => !deleting.has(survey.id)) };
+  } catch (err: any) {
+    return { status: "error", reason: err?.message ?? "request failed", ...(err?.status === 429 ? { throttled: true } : {}) };
   }
 }
 

@@ -6,8 +6,7 @@ import {
 	neutralizeFormula,
 	sessionToCsvRows
 } from "../amplify/functions/survey_responses_export/csv";
-import { addToSummary, createSummary } from "../amplify/functions/survey_responses_export/summary";
-import { buildTimeSlices } from "../amplify/functions/survey_responses_export/handler";
+import { addToSummary, buildTimeSlices, createSummary } from "../amplify/functions/shared/session_summary";
 
 let passed = 0;
 
@@ -68,13 +67,13 @@ test("sessionToCsvRows sortiert nach answeredAt und liefert pro Antwort eine Zei
 	]);
 });
 
-test("Channel: web aus der Sitzung, ohne Feld flow", () => {
+test("Channel: web aus der Sitzung, ohne Feld flow; fehlende Version ist 1", () => {
 	const answers = { q: { type: "yes_no", value: true, answeredAt: "2026-01-01T10:00:00.000Z" } };
 	assert.deepEqual(sessionToCsvRows({ responseId: "r-web", status: "completed", channel: "web", answers }), [
-		"r-web;;;q;yes_no;2026-01-01T10:00:00.000Z;true;completed;web"
+		"r-web;;1;q;yes_no;2026-01-01T10:00:00.000Z;true;completed;web"
 	]);
 	assert.deepEqual(sessionToCsvRows({ responseId: "r-flow", status: "partial", answers }), [
-		"r-flow;;;q;yes_no;2026-01-01T10:00:00.000Z;true;partial;flow"
+		"r-flow;;1;q;yes_no;2026-01-01T10:00:00.000Z;true;partial;flow"
 	]);
 });
 

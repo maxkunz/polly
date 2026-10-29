@@ -333,6 +333,7 @@ test("pickTheme: gewähltes Design, sonst Standard, sonst keines", () => {
 	assert.equal(pickTheme(themes, THEME_C)?.colors.primary, "#00bb00", "gelöschtes Design: Standard");
 	assert.equal(pickTheme([theme(THEME_A, false, "#aa0000")], THEME_C), undefined, "ohne Standard: eingebautes Design");
 	assert.equal(pickTheme([], THEME_A), undefined);
+	assert.equal(pickTheme(themes, THEME_A.toUpperCase())?.colors.primary, "#aa0000", "Groß- und Kleinschreibung egal");
 });
 
 test("parseWebThemeRequest: Name, Standard-Markierung, Tokens", () => {

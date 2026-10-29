@@ -1,5 +1,6 @@
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { createInvitationKey, type InvitationKey } from "./invitation_token";
+import { TtlCache } from "./ttl_cache";
 
 /**
  * Lädt den Signaturschlüssel der Einladungen aus Secrets Manager (`WEB_SURVEY_JWT_SECRET_ARN`,
@@ -13,9 +14,8 @@ import { createInvitationKey, type InvitationKey } from "./invitation_token";
 const sm = new SecretsManagerClient({});
 
 const SECRET_ARN = process.env.WEB_SURVEY_JWT_SECRET_ARN ?? "";
-const KEYS_TTL_MS = 5 * 60 * 1000;
 
-let cache: { expiresAt: number; keys: InvitationKey[] } | null = null;
+const cache = new TtlCache<InvitationKey[]>({ ttlMs: 5 * 60 * 1000, maxEntries: 1 });
 
 async function loadStage(stage: "AWSCURRENT" | "AWSPREVIOUS"): Promise<InvitationKey | null> {
   try {
@@ -29,14 +29,15 @@ async function loadStage(stage: "AWSCURRENT" | "AWSPREVIOUS"): Promise<Invitatio
 }
 
 /** Alle gültigen Schlüssel, `AWSCURRENT` zuerst. Wirft, wenn `AWSCURRENT` nicht lesbar ist. */
-export async function loadInvitationKeys(): Promise<InvitationKey[]> {
-  if (cache && cache.expiresAt > Date.now()) return cache.keys;
+export function loadInvitationKeys(): Promise<InvitationKey[]> {
+  return cache.getOrLoad(SECRET_ARN, async () => ({ value: await requestInvitationKeys() }));
+}
+
+async function requestInvitationKeys(): Promise<InvitationKey[]> {
   if (!SECRET_ARN) throw new Error("WEB_SURVEY_JWT_SECRET_ARN not configured");
 
   const [current, previous] = await Promise.all([loadStage("AWSCURRENT"), loadStage("AWSPREVIOUS")]);
   if (!current) throw new Error("Invitation signing key is empty");
 
-  const keys = previous && previous.kid !== current.kid ? [current, previous] : [current];
-  cache = { keys, expiresAt: Date.now() + KEYS_TTL_MS };
-  return keys;
+  return previous && previous.kid !== current.kid ? [current, previous] : [current];
 }

@@ -9,6 +9,7 @@ import { resolveTenantContext } from "../shared/tenant_auth";
 import { isSurveyBeingDeleted, updateSurveyAggregate } from "../shared/survey_results";
 import { checkSurveyExists } from "../shared/genesys_survey_check";
 import { isValidSurveyId } from "../shared/survey_id";
+import { toSurveyVersion } from "../shared/answer_records";
 
 type AnyApiGwEvent = any;
 type AnyResult = { statusCode: number; headers: Record<string, string>; body: string };
@@ -19,7 +20,7 @@ interface SubmitSurveyAnswerBody {
   conversationId: string;
   surveyId: string;
   surveyName?: string;
-  surveyVersion?: number;
+  surveyVersion?: number | string;
   questionName?: string;
   questionType?: "rating" | "nps" | "choice" | "yes_no" | "comment" | string;
   value?: any;
@@ -58,13 +59,14 @@ async function upsertSurveyResponse(
     conversationId,
     surveyId,
     surveyName = "",
-    surveyVersion = 1,
     questionName,
     questionType,
     value,
     isCompleted = false,
   } = body;
 
+  // Immer als Zahl speichern (fehlend → 1, Ganzzahl-String aus der Data Action → Zahl), sonst findet der Versionsfilter sie nicht
+  const surveyVersion = toSurveyVersion(body.surveyVersion);
   const hasAnswer = Boolean(questionName && value !== undefined);
   const statusToSet = isCompleted ? "completed" : undefined;
 

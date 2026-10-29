@@ -6,6 +6,7 @@ import {
   type WebTheme,
   type WebThemeTokens,
 } from "../../../src/domain/webTheme/webTheme";
+import { compareCodeUnits } from "./answer_records";
 
 /**
  * Web-Designs ohne AWS-Abhängigkeiten (Lambdas `web_themes` und `web_survey`, getestet in
@@ -33,6 +34,17 @@ export interface WebThemeRequest {
 /** ISO-Zeitstempel sind 24 Zeichen lang; die Grenze schützt nur vor Unsinn im Body. */
 const UPDATED_AT_MAX_CHARS = 40;
 
+export type WebThemeNameResult = { ok: true; name: string } | { ok: false; message: string };
+
+/** Name eines Designs: getrimmt, 1 bis `WEB_THEME_NAME_MAX_CHARS` Zeichen, ohne Steuerzeichen. */
+export function checkWebThemeName(name: unknown): WebThemeNameResult {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed || trimmed.length > WEB_THEME_NAME_MAX_CHARS || CONTROL_CHARS.test(trimmed)) {
+    return { ok: false, message: `name must be 1 to ${WEB_THEME_NAME_MAX_CHARS} characters` };
+  }
+  return { ok: true, name: trimmed };
+}
+
 export type WebThemeRequestResult = { ok: true; request: WebThemeRequest } | { ok: false; message: string };
 
 /** Body von `PUT /web-themes/{id}`: `{ name, isDefault, tokens, expectedUpdatedAt }`. */
@@ -41,10 +53,9 @@ export function parseWebThemeRequest(body: unknown): WebThemeRequestResult {
     return { ok: false, message: "Body must be a JSON object" };
   }
   const { name, isDefault, tokens, expectedUpdatedAt } = body as Record<string, unknown>;
-  const trimmed = typeof name === "string" ? name.trim() : "";
-  if (!trimmed || trimmed.length > WEB_THEME_NAME_MAX_CHARS || CONTROL_CHARS.test(trimmed)) {
-    return { ok: false, message: `name must be 1 to ${WEB_THEME_NAME_MAX_CHARS} characters` };
-  }
+  const checkedName = checkWebThemeName(name);
+  if (!checkedName.ok) return checkedName;
+  const trimmed = checkedName.name;
   if (isDefault !== undefined && typeof isDefault !== "boolean") {
     return { ok: false, message: "isDefault must be a boolean" };
   }
@@ -81,6 +92,13 @@ export function toWebTheme(item: Record<string, unknown> | undefined): WebTheme 
  * fällt so auf das Standard-Design zurück.
  */
 export function pickTheme(themes: readonly WebTheme[], webThemeId?: string | null): WebThemeTokens | undefined {
-  const chosen = webThemeId ? themes.find((theme) => theme.id === webThemeId) : undefined;
+  // IDs werden kleingeschrieben gespeichert, die Auswahl im Prod-Stand kann aus einem Import stammen
+  const wanted = webThemeId?.toLowerCase();
+  const chosen = wanted ? themes.find((theme) => theme.id === wanted) : undefined;
   return (chosen ?? themes.find((theme) => theme.isDefault))?.tokens;
+}
+
+/** Sortierung der Designlisten (App und Kunden-API): nach Name, bei gleichem Namen nach ID, damit sie stabil bleibt. */
+export function compareWebThemes(a: WebTheme, b: WebTheme): number {
+  return a.name.localeCompare(b.name, "de", { sensitivity: "base" }) || compareCodeUnits(a.id, b.id);
 }

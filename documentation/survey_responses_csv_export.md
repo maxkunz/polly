@@ -59,7 +59,7 @@ responseId;Survey Name;Survey-Version;QuestionId;Type;answeredAt;value;status;Ch
 | :--- | :--- |
 | `responseId` | Genesys `conversationId` der Sitzung |
 | `Survey Name` | `surveyName` (technischer Name, nicht der Titel) |
-| `Survey-Version` | `surveyVersion` |
+| `Survey-Version` | `surveyVersion`; fehlt sie, zählt die Sitzung als Version `1` (wie in der Vorschau und beim Versionsfilter) |
 | `QuestionId` | technischer Fragename (`questionName`, z. B. `nps_ce9b05b7`) – eine Fragen-UUID wird nicht gespeichert |
 | `Type` | technischer Typ: `yes_no`, `nps`, `rating`, `choice`, `comment` |
 | `answeredAt` | Zeitpunkt der Antwort, ISO-8601 in UTC |

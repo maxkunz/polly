@@ -3,6 +3,7 @@ import type { FollowUpRule, QuestionOptions, Survey, SurveyQuestion } from "../s
 import { resetWebSettings } from "../src/domain/survey/surveyTypes";
 import { validateSurvey } from "../src/domain/survey/surveyValidator";
 import { questionFieldIds, surveyFieldIds } from "../src/domain/survey/surveyFieldIds";
+import { BASE_URL_MAX_CHARS, baseUrlError } from "../src/domain/survey/invitationLinks";
 
 let passed = 0;
 
@@ -140,6 +141,14 @@ test("Basis-URL: http, relative URLs, Leerzeichen und mehrere Platzhalter verwei
 	for (const baseUrl of ["http://example.com", "example.com", "/s/{token}", "https://exa mple.com", "https://", "javascript:alert(1)", "https://example.com/{token}/{token}"]) {
 		assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: baseUrl }), [surveyFieldIds.baseUrl], baseUrl);
 	}
+});
+
+test("Basis-URL: höchstens BASE_URL_MAX_CHARS Zeichen", () => {
+	const prefix = "https://example.com/";
+	const atLimit = prefix + "a".repeat(BASE_URL_MAX_CHARS - prefix.length);
+	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: atLimit }), []);
+	assert.deepEqual(fieldIdsOf({ ...survey([question({})]), base_url: atLimit + "a" }), [surveyFieldIds.baseUrl]);
+	assert.equal(baseUrlError(atLimit + "a"), "baseUrlTooLong");
 });
 
 test("Sprache: nur de, en, fr; fehlend ist erlaubt", () => {
