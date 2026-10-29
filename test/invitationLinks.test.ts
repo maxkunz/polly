@@ -5,7 +5,8 @@ import {
 	buildInvitationUrl,
 	buildPreviewUrl,
 	expirationFromDate,
-	formatInvitationExpiration
+	formatInvitationExpiration,
+	pickBaseUrl
 } from "../src/domain/survey/invitationLinks";
 
 let passed = 0;
@@ -108,6 +109,14 @@ test("CSV ohne Zeilen enthält nur die Kopfzeile", () => {
 test("Webvorschau-Link: immer die Polly-Seite /s/<jwt>", () => {
 	assert.equal(buildPreviewUrl(ORIGIN, JWT), `${ORIGIN}/s/${JWT}`);
 	assert.equal(buildPreviewUrl(`${ORIGIN}//`, JWT), `${ORIGIN}/s/${JWT}`);
+});
+
+test("Wirksame Basis-URL: Umfrage vor Standard, sonst leer", () => {
+	assert.equal(pickBaseUrl("https://a.de/{token}", "https://b.de/"), "https://a.de/{token}");
+	assert.equal(pickBaseUrl("", "https://b.de/"), "https://b.de/");
+	assert.equal(pickBaseUrl("  ", " https://b.de/ "), "https://b.de/");
+	assert.equal(pickBaseUrl(undefined, undefined), undefined);
+	assert.equal(pickBaseUrl(null, ""), undefined);
 });
 
 console.log(`\n${passed} Tests bestanden`);

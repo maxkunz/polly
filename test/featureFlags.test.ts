@@ -63,4 +63,16 @@ test("Meta ohne features (bestehende Installation) hat keine aktiven Flags", () 
 	assert.deepEqual(enabledFeatures(meta.features), []);
 });
 
+test("Meta normalisiert web.defaultBaseUrl und erhält die übrigen Felder", () => {
+	const meta = Meta.fromJSON({ appTitle: "demo", setup: { projectTag: "demo" }, features: { web_survey: true }, web: { defaultBaseUrl: " https://x.de/{token} " }, other: 1 });
+	assert.equal(meta.web.defaultBaseUrl, "https://x.de/{token}");
+	const json = meta.toJSON() as Record<string, any>;
+	assert.equal(json.other, 1);
+	assert.deepEqual(json.setup, { projectTag: "demo" });
+	assert.deepEqual(json.web, { defaultBaseUrl: "https://x.de/{token}" });
+	assert.equal(Meta.fromJSON({}).web.defaultBaseUrl, "");
+	assert.equal("web" in Meta.fromJSON({}).toJSON(), false);
+	assert.equal(Meta.fromJSON({ web: { defaultBaseUrl: 5 } }).web.defaultBaseUrl, "");
+});
+
 console.log(`\n${passed} Tests bestanden`);

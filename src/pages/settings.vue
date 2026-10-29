@@ -10,6 +10,7 @@ import { useToast } from "primevue/usetoast";
 
 import PageHeader from "@/components/layout/PageHeader.vue";
 import WebThemesCard from "@/components/webTheme/WebThemesCard.vue";
+import WebDefaultBaseUrlCard from "@/components/webSettings/WebDefaultBaseUrlCard.vue";
 import { useAppStore } from "@/stores/appStore";
 import { moduleRegistry } from "@/app/modules";
 import { usePageControlBar } from "@/app/usePageControlBar";
@@ -181,6 +182,8 @@ function startUninstall() {
 					</div>
 				</template>
 			</Card>
+
+			<WebDefaultBaseUrlCard v-if="setup && app.webSurveyEnabled" />
 
 			<WebThemesCard v-if="setup && app.webSurveyEnabled" />
 

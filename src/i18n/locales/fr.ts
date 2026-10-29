@@ -125,6 +125,7 @@ export const fr: MessageSchema = {
 			closing: "Message de fin",
 			baseUrl: "URL de base des liens d'invitation (web)",
 			baseUrlHint: "Facultatif. URL https absolue, p. ex. la page dans laquelle le sondage est intégré. {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Sans valeur, le lien pointe vers la page de sondage Polly.",
+			baseUrlHintDefault: "Sans valeur, l'URL de base par défaut des paramètres s'applique : {url}",
 			language: "Langue du sondage web",
 			webTheme: "Design du sondage web",
 			webThemeHint: "Police, tailles de texte et couleurs de la page du sondage. Gestion sous Paramètres → Designs web. Un changement prend effet après le déploiement en Prod.",
@@ -470,6 +471,7 @@ export const fr: MessageSchema = {
 		linkTarget: "Cible des liens",
 		linkTargetBaseUrl: "URL de base issue des paramètres enregistrés de l'enquête :",
 		linkTargetFallback: "Aucune URL de base définie – les liens pointent vers la page d'enquête Polly :",
+		linkTargetDefault: "URL de base par défaut des paramètres :",
 		generate: "Créer les liens et télécharger le CSV",
 		generateAriaLabel: "Créer les liens d'invitation et les télécharger en CSV",
 		notStoredHint: "Les liens ne sont pas enregistrés. Conservez le fichier CSV ; des liens perdus ne peuvent qu'être recréés.",
@@ -650,6 +652,14 @@ export const fr: MessageSchema = {
 		}
 	},
 	settings: {
+		webDefaults: {
+			title: "Sondages web : URL de base par défaut",
+			label: "URL de base par défaut pour les liens d'invitation",
+			hint: "S'applique à tous les sondages sans URL de base propre. URL https absolue ; {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Vide = les liens pointent vers la page de sondage Polly.",
+			save: "Enregistrer",
+			saved: "URL de base par défaut enregistrée.",
+			saveFailed: "Échec de l'enregistrement"
+		},
 		features: {
 			title: "Fonctionnalités activées"
 		},

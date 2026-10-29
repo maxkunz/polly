@@ -28,7 +28,7 @@ Die Flags stehen in der Zeile `__meta` der Umfrage-Data-Table (`<projectTag>_pol
 
 | Key | Wirkung, wenn aus |
 |---|---|
-| `web_survey` | Ausgeblendet werden: Einstellungen → Web-Designs; im Umfrage-Editor Basis-URL, Sprache, Design und der Button „Einladungslinks“ (auch `?invite=1` öffnet die Einladungsansicht nicht). Beim Speichern einer Umfrage werden die Standardwerte gesetzt: `base_url: ""`, `language: "de"`, `web_theme_id` entfernt. Der Validator prüft diese Felder dann nicht. Schon erzeugte Einladungslinks und die öffentliche Umfrageseite funktionieren weiter. |
+| `web_survey` | Ausgeblendet werden: Einstellungen → Web-Designs und Standard-Basis-URL; im Umfrage-Editor Basis-URL, Sprache, Design und der Button „Einladungslinks“ (auch `?invite=1` öffnet die Einladungsansicht nicht). Beim Speichern einer Umfrage werden die Standardwerte gesetzt: `base_url: ""`, `language: "de"`, `web_theme_id` entfernt. Der Validator prüft diese Felder dann nicht. Schon erzeugte Einladungslinks und die öffentliche Umfrageseite funktionieren weiter. |
 
 ## Technik
 

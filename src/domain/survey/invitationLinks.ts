@@ -53,6 +53,11 @@ export interface InvitationCsvRow {
 	url: string;
 }
 
+/** Wirksame Basis-URL: die der Umfrage, sonst der Standard des Mandanten; leer = Polly-Umfrageseite. */
+export function pickBaseUrl(surveyBaseUrl: string | null | undefined, defaultBaseUrl: string | null | undefined): string | undefined {
+	return surveyBaseUrl?.trim() || defaultBaseUrl?.trim() || undefined;
+}
+
 /**
  * Baut den Link einer Einladung:
  * - Basis-URL mit `{token}` → Platzhalter wird ersetzt

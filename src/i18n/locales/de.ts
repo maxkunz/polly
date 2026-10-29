@@ -123,6 +123,7 @@ export const de = {
 			closing: "Verabschiedungsnachricht",
 			baseUrl: "Basis-URL für Einladungslinks (Web)",
 			baseUrlHint: "Optional. Absolute https-URL, z. B. die Seite, in die die Umfrage eingebettet ist. Mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Ohne Angabe zeigt der Link auf die Polly-Umfrageseite.",
+			baseUrlHintDefault: "Ohne Angabe gilt die Standard-Basis-URL aus den Einstellungen: {url}",
 			language: "Sprache der Web-Umfrage",
 			webTheme: "Design der Web-Umfrage",
 			webThemeHint: "Schrift, Textgrößen und Farben der Umfrageseite. Pflege unter Einstellungen → Web-Designs. Ein Wechsel wirkt nach dem Deploy nach Prod.",
@@ -468,6 +469,7 @@ export const de = {
 		linkTarget: "Ziel der Links",
 		linkTargetBaseUrl: "Basis-URL aus den gespeicherten Umfrageeinstellungen:",
 		linkTargetFallback: "Keine Basis-URL hinterlegt – die Links zeigen auf die Polly-Umfrageseite:",
+		linkTargetDefault: "Standard-Basis-URL aus den Einstellungen:",
 		generate: "Links erzeugen und CSV herunterladen",
 		generateAriaLabel: "Einladungslinks erzeugen und als CSV herunterladen",
 		notStoredHint: "Die Links werden nicht gespeichert. Bewahren Sie die CSV-Datei auf; verlorene Links können nur neu erzeugt werden.",
@@ -648,6 +650,14 @@ export const de = {
 		}
 	},
 	settings: {
+		webDefaults: {
+			title: "Web-Umfragen: Standard-Basis-URL",
+			label: "Standard-Basis-URL für Einladungslinks",
+			hint: "Gilt für alle Umfragen ohne eigene Basis-URL. Absolute https-URL; mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Leer = Links zeigen auf die Polly-Umfrageseite.",
+			save: "Speichern",
+			saved: "Standard-Basis-URL gespeichert.",
+			saveFailed: "Speichern fehlgeschlagen"
+		},
 		features: {
 			title: "Aktivierte Funktionen"
 		},

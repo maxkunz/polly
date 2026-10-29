@@ -5,6 +5,8 @@ export class Meta {
 	setup: Record<string, any> | null;
 	/** Feature Flags der Installation (siehe domain/features/featureFlags.ts) */
 	features: FeatureFlags;
+	/** Web-Einstellungen des Mandanten: Standard-Basis-URL für Einladungslinks (leer = keine) */
+	web: { defaultBaseUrl: string };
 	private extras: Record<string, unknown>;
 
 	constructor(init?: Record<string, unknown>) {
@@ -14,11 +16,16 @@ export class Meta {
 				? (init.setup as Record<string, any>)
 				: null;
 		this.features = normalizeFeatures(init?.features);
+		const web = init?.web as { defaultBaseUrl?: unknown } | undefined;
+		this.web = {
+			defaultBaseUrl: typeof web?.defaultBaseUrl === "string" ? web.defaultBaseUrl.trim() : ""
+		};
 
 		const extras = { ...(init ?? {}) };
 		delete extras.appTitle;
 		delete extras.setup;
 		delete extras.features;
+		delete extras.web;
 		this.extras = extras;
 	}
 
@@ -34,7 +41,9 @@ export class Meta {
 			...this.extras,
 			appTitle: this.appTitle,
 			setup: this.setup,
-			features: this.features
+			features: this.features,
+			// Nur mit Wert schreiben, damit bestehende Installationen unverändert bleiben
+			...(this.web.defaultBaseUrl ? { web: this.web } : {})
 		};
 	}
 }

@@ -126,6 +126,7 @@ export const tlh: MessageSchema = {
 			closing: "Qapla' QIn",
 			baseUrl: "Web QIn ra'ghom URL (Web)",
 			baseUrlHint: "ghItlh. https URL, {placeholder} 'ej ?token=…. URL vItlhutlh: Polly QIn ra'ghom.",
+			baseUrlHintDefault: "URL vItlhutlh Daq: {url}",
 			language: "Web QIn Hol",
 			webTheme: "Web QIn HablI'",
 			webThemeHint: "ngutlh, tIn, rItlh. SeHmey → Web HablI'mey. Prod vIngeHDI' Qap.",
@@ -471,6 +472,7 @@ export const tlh: MessageSchema = {
 		linkTarget: "rItlh mu'mey ngoQ",
 		linkTargetBaseUrl: "Daq lurDech:",
 		linkTargetFallback: "Daq lurDech tu'be'lu' – Polly Daq lo':",
+		linkTargetDefault: "URL wa' Daq:",
 		generate: "rItlh mu'mey yIchenmoH 'ej CSV yIlI'",
 		generateAriaLabel: "rItlh mu'mey yIchenmoH 'ej CSV yIlI'",
 		notStoredHint: "rItlh mu'mey pollu'be'. CSV yIpol.",
@@ -651,6 +653,14 @@ export const tlh: MessageSchema = {
 		}
 	},
 	settings: {
+		webDefaults: {
+			title: "Web QIn: URL wa'",
+			label: "URL wa' Dunmey",
+			hint: "{placeholder} 'ej ?token=…. chIm = Polly QIn ra'ghom.",
+			save: "pol",
+			saved: "URL pol.",
+			saveFailed: "pol lonbe'"
+		},
 		features: {
 			title: "laH chu'lu'pu'bogh"
 		},

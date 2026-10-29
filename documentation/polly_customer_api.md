@@ -337,7 +337,7 @@ curl -X POST "[API_URL]/invitations" \
 | Feld | Beschreibung |
 |---|---|
 | `inviteToken` | Der signierte Token der Einladung. |
-| `fullLink` | Fertiger Link zur Umfrage. Hat die Umfrage in Polly eine gültige Basis-URL, zeigt er auf diese Seite (Platzhalter `{token}` wird ersetzt, sonst wird `token=<jwt>` angehängt). Sonst, auch bei einer ungültigen Basis-URL, zeigt er auf die Umfrageseite von Polly (`…/s/<token>`). |
+| `fullLink` | Fertiger Link zur Umfrage. Hat die Umfrage in Polly eine gültige Basis-URL oder ist für den Mandanten eine gültige Standard-Basis-URL hinterlegt (Einstellungen, Vorrang hat die der Umfrage), zeigt er auf diese Seite (Platzhalter `{token}` wird ersetzt, sonst wird `token=<jwt>` angehängt). Sonst, auch bei einer ungültigen Basis-URL, zeigt er auf die Umfrageseite von Polly (`…/s/<token>`). |
 | `expiration_date` | Ablaufdatum (UTC) oder `null`, wenn die Einladung nicht abläuft. |
 | `is_multi` | Wie im Request. |
 
@@ -450,7 +450,7 @@ curl "[API_URL]/surveys/123e4567-e89b-12d3-a456-426614174000" -H "Authorization:
 |---|---|
 | `greeting`, `closing` | Begrüßung und Verabschiedung (am Telefon gesprochen). |
 | `startQuestionId` | `id` der ersten Frage, `null` nur, wenn der Prod-Stand keine Startfrage enthält. Umfragen ohne Fragen liefert die API nicht (nicht in der Liste, Details `404`). |
-| `baseUrl` | Basis-URL der Umfrageseite des Kunden, die in Polly gepflegt ist (Web-Kanal), sonst `null`. |
+| `baseUrl` | Wirksame Basis-URL der Umfrageseite des Kunden (Web-Kanal): die der Umfrage, sonst die Standard-Basis-URL des Mandanten aus den Einstellungen, sonst `null`. |
 | `webTheme` | Design der Web-Umfrageseite (Farben, Schrift) oder `null`, wenn kein Design gewählt oder hinterlegt ist. Die Struktur steht in `schemaVersion`; Sie müssen unbekannte Felder ignorieren. |
 | `questions` | Fragen in der Reihenfolge der Umfrage. |
 

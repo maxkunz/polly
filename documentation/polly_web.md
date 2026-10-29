@@ -22,6 +22,7 @@ In der App ist der Web-Kanal nur sichtbar, wenn das Feature Flag `web_survey` ak
 
 * **Labels bei rating und nps:** Pro Frage gibt es ein optionales Label für den minimalen und den maximalen Wert (`min_label`, `max_label` in `options`, höchstens 100 Zeichen). Sie werden nicht vorgelesen und sind nur im Web (und in der Skalenvorschau des Editors) sichtbar.
 * **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}` und höchstens 200 Zeichen (`BASE_URL_MAX_CHARS`, hält die Antwort der Kunden-API bei 5000 Links unter dem Lambda-Limit). Die Kunden-API prüft den Wert serverseitig mit derselben Funktion (`baseUrlError`) und nimmt bei einem ungültigen Wert den Fallback.
+* **Standard-Basis-URL des Mandanten**: Unter Einstellungen pflegbar (Karte „Web-Umfragen: Standard-Basis-URL“, ändern mit `polly_deploy`, nur mit Feature Flag `web_survey`), gespeichert in der Zeile `__meta` im Feld `Draft` unter `web.defaultBaseUrl` (gleiche Regeln wie `base_url`). Sie gilt für alle Umfragen ohne eigene `base_url`; Reihenfolge: `base_url` der Umfrage, Standard des Mandanten, Polly-Umfrageseite. Die Lambdas lesen sie bei der Kunden-API aus `__meta` (`loadDefaultBaseUrl`, 60 s gecacht; ungültig oder nicht lesbar = Polly-Umfrageseite).
 * **Sprache der Umfrage** (`language`): siehe oben. Neue Umfragen starten mit `de`.
 * **Design der Umfrage** (`web_theme_id`, optional): Auswahl „Standard des Mandanten“ (Feld fehlt) oder eines der Designs aus `GET /web-themes`. Ein inzwischen gelöschtes Design bleibt mit Hinweis sichtbar; die Seite zeigt dann das Standard-Design.
 
@@ -70,7 +71,7 @@ In der Deployment-Ansicht öffnet der Button **„Webvorschau“** (nur mit Feat
 
 * Enthält die Basis-URL `{token}`, wird der Platzhalter ersetzt, z. B. `https://baseurl.com/{token}` → `https://baseurl.com/<jwt>`.
 * Sonst wird `?token=<jwt>` angehängt, bzw. `&token=<jwt>`, wenn die URL schon eine Query enthält.
-* Ohne Basis-URL wird `<polly-origin>/s/<jwt>` verwendet.
+* Ohne Basis-URL (weder an der Umfrage noch als Standard des Mandanten) wird `<polly-origin>/s/<jwt>` verwendet.
 * Die Polly-Seite versteht `/s/<jwt>` und `?token=<jwt>`.
 
 ### Einbindung per iframe
@@ -111,7 +112,7 @@ Expiration;Multi use;Complete URL
 
 * `Expiration`: ISO 8601 in der lokalen Zeit des Erstellers mit Offset; leer, wenn kein Ablaufdatum gewählt wurde.
 * `Multi use`: `true` / `false`.
-* `Complete URL`: fertiger Link nach den Regeln aus „Link-Aufbau“. Die Basis-URL stammt aus dem **gespeicherten** Draft (nicht aus Prod, `base_url` steht nicht im Flow-JSON); die Unterseite zeigt sie samt Beispiel-Link an. Fallback-Origin ist der Origin der Polly-App.
+* `Complete URL`: fertiger Link nach den Regeln aus „Link-Aufbau“. Die Basis-URL stammt aus dem **gespeicherten** Draft (nicht aus Prod, `base_url` steht nicht im Flow-JSON); fehlt sie dort, gilt die Standard-Basis-URL des Mandanten aus den Einstellungen; die Unterseite zeigt die wirksame URL samt Beispiel-Link und Herkunft an. Fallback-Origin ist der Origin der Polly-App.
 
 Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/useSurveyInvitations.ts` und `services/invitationService.ts`, Link-Aufbau und CSV rein in `domain/survey/invitationLinks.ts` (Test `test/invitationLinks.test.ts`). Die Grenzen 1–5000 kommen von dort auch in die Lambda `invitations`.
 
