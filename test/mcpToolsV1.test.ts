@@ -2,8 +2,22 @@ import assert from "node:assert/strict";
 import { translateSurveyForFlow } from "../src/domain/survey/flowTranslator";
 import type { Survey } from "../src/domain/survey/surveyTypes";
 import type { WebTheme } from "../src/domain/webTheme/webTheme";
+import { TTS_TEXT_MAX_CHARS } from "../src/constants/surveyConstants";
 import { prepareDraft } from "../amplify/functions/shared/survey_pipeline";
-import type { StoreResult, SurveyListItem, SurveyRowView } from "../amplify/functions/shared/survey_store";
+import {
+	beginEdit,
+	createSurvey,
+	deploySurvey,
+	endEdit,
+	readSurveyList,
+	readSurveyRow,
+	readSurveyRows,
+	rollbackSurvey,
+	saveDraft,
+	type StoreResult,
+	type SurveyListItem,
+	type SurveyRowView,
+} from "../amplify/functions/shared/survey_store";
 import type { SessionRecord } from "../amplify/functions/mcp/oauth_store";
 import type { McpTenant } from "../amplify/functions/mcp/tenant";
 import { handleMcpPost, MCP_MAX_BODY_BYTES } from "../amplify/functions/mcp/server";
@@ -140,14 +154,90 @@ function fakeDeps(overrides: {
 			calls.push("rows");
 			return { ok: true, value: rows };
 		},
+		// Schreiben über den echten Store; Genesys ersetzt `MemoryDataTable`
+		createSurvey,
+		beginEdit,
+		saveDraft,
+		endEdit,
+		deploySurvey,
+		rollbackSurvey,
+		async isSurveyBeingDeleted(_tenantId, surveyId) {
+			return (overrides.deleting ?? []).includes(surveyId);
+		},
 		async findSurveysBeingDeleted() {
 			return new Set(overrides.deleting ?? []);
 		},
-		async loadWebThemes() {
-			calls.push("themes");
+		async loadWebThemes(_tenantId, fresh) {
+			calls.push(fresh ? "themes:fresh" : "themes");
 			return overrides.themes ?? [];
 		},
 	};
+}
+
+/** Wie `fakeDeps`, aber auch Lesen über den echten Store (Ende-zu-Ende gegen `MemoryDataTable`). */
+function storeDeps(overrides: Parameters<typeof fakeDeps>[0] = {}): FakeDeps {
+	return { ...fakeDeps(overrides), readSurveyList, readSurveyRow, readSurveyRows };
+}
+
+/**
+ * Umfrage-Data-Table im Speicher statt Genesys (nur Zeilen lesen, ändern, anlegen). Unerwartete URLs werden
+ * gesammelt und nach dem Lauf geprüft: Ein `assert` im Fake würde der Store zu `upstream_error` machen.
+ */
+class MemoryDataTable {
+	rows = new Map<string, Record<string, string>>();
+	calls: Array<{ method: string; key: string }> = [];
+	unexpected: string[] = [];
+	private original = globalThis.fetch;
+
+	install(): this {
+		globalThis.fetch = (async (input: any, init: RequestInit = {}) => {
+			const url = new URL(String(input));
+			const method = init.method ?? "GET";
+			const match = url.pathname.match(/^\/api\/v2\/flows\/datatables\/dt-1\/rows(?:\/([^/]+))?$/);
+			if (!match) {
+				this.unexpected.push(`${method} ${url}`);
+				return new Response("{}", { status: 500 });
+			}
+			const body = init.body ? JSON.parse(String(init.body)) : undefined;
+			const key = match[1] ? decodeURIComponent(match[1]) : body?.key;
+			this.calls.push({ method, key });
+			const row = this.rows.get(key);
+			if (method === "GET") return new Response(JSON.stringify(row ?? {}), { status: row ? 200 : 404 });
+			if (method === "PUT" && !row) return new Response("{}", { status: 404 });
+			if (method === "POST" && row) return new Response("{}", { status: 409 });
+			this.rows.set(key, body);
+			return new Response(JSON.stringify(body), { status: 200 });
+		}) as typeof fetch;
+		return this;
+	}
+
+	restore(): void {
+		globalThis.fetch = this.original;
+	}
+
+	writes(): Array<{ method: string; key: string }> {
+		return this.calls.filter((entry) => entry.method !== "GET");
+	}
+
+	row(surveyId: string): Record<string, string> {
+		const row = this.rows.get(`survey_${surveyId}`);
+		assert.ok(row, `Zeile survey_${surveyId} fehlt`);
+		return row;
+	}
+
+	setLock(surveyId: string, lockedBy: string, sinceMs: number, via: "ui" | "mcp"): void {
+		this.row(surveyId).lock = JSON.stringify({ locked_by: lockedBy, locked_since: new Date(sinceMs).toISOString(), via });
+	}
+}
+
+async function withTable(fn: (table: MemoryDataTable) => Promise<void>): Promise<void> {
+	const table = new MemoryDataTable().install();
+	try {
+		await fn(table);
+	} finally {
+		table.restore();
+	}
+	assert.deepEqual(table.unexpected, [], "unerwartete Genesys-Aufrufe");
 }
 
 async function call(name: string, args: unknown, ctx = context(), deps: McpToolDeps = fakeDeps()): Promise<ToolCallResult> {
@@ -178,17 +268,33 @@ function failure(result: ToolCallResult): { code: string; message: string; detai
 // Katalog
 // ---------------------------------------------------------------------------
 
-await test("Katalog: list_web_themes nur mit web_survey, alle Tools nur lesend", () => {
-	assert.deepEqual(listToolsV1(false).map((tool) => tool.name), ["get_authoring_guide", "list_surveys", "get_survey", "validate_survey"]);
+const WRITE_TOOLS = ["create_survey", "begin_edit", "save_draft", "end_edit", "deploy_survey", "rollback_survey"];
+
+await test("Katalog: list_web_themes nur mit web_survey, Annotationen lesend/schreibend/destruktiv", () => {
+	assert.deepEqual(listToolsV1(false).map((tool) => tool.name), ["get_authoring_guide", "list_surveys", "get_survey", "validate_survey", ...WRITE_TOOLS]);
 	const tools = listToolsV1(true);
-	assert.deepEqual(tools.map((tool) => tool.name), ["get_authoring_guide", "list_surveys", "get_survey", "list_web_themes", "validate_survey"]);
+	assert.deepEqual(tools.map((tool) => tool.name), [
+		"get_authoring_guide",
+		"list_surveys",
+		"get_survey",
+		"list_web_themes",
+		"validate_survey",
+		...WRITE_TOOLS,
+	]);
 	for (const tool of tools) {
 		assert.equal(tool.inputSchema.type, "object");
 		assert.equal(tool.outputSchema.type, "object");
 		assert.equal("$schema" in tool.inputSchema, false);
-		assert.equal(tool.annotations.readOnlyHint, true);
+		assert.equal(tool.annotations.readOnlyHint, !WRITE_TOOLS.includes(tool.name), tool.name);
+		assert.equal(tool.annotations.destructiveHint === true, ["deploy_survey", "rollback_survey"].includes(tool.name), tool.name);
+		assert.equal(tool.annotations.openWorldHint, false);
 	}
 	assert.equal(findToolV1("list_web_themes", false), undefined);
+	// Rollen der schreibenden Tools
+	assert.deepEqual(
+		WRITE_TOOLS.map((name) => findToolV1(name, true)!.role),
+		["write", "write", "write", "write", "deploy", "deploy"]
+	);
 });
 
 await test("Katalog: Web-Felder im Eingabeschema von validate_survey nur mit web_survey", () => {
@@ -477,6 +583,282 @@ await test("validate_survey: gegen bestehende Umfrage behalten gespeicherte Name
 });
 
 // ---------------------------------------------------------------------------
+// Schreibende Tools (Ende-zu-Ende über den Store, Genesys im Speicher)
+// ---------------------------------------------------------------------------
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const HOUR_MS = 60 * 60 * 1000;
+const iso = (ms: number) => new Date(ms).toISOString();
+
+const NEW_SURVEY = {
+	title: "Kundenzufriedenheit",
+	greeting_message: "Hallo",
+	questions: [
+		{ type: "yes_no", title: "Zufrieden?" },
+		{ type: "comment", title: "Was noch?" },
+	],
+};
+
+async function createVia(deps: McpToolDeps, survey: unknown = NEW_SURVEY, ctx = context()): Promise<Record<string, any>> {
+	return success("create_survey", await call("create_survey", { survey }, ctx, deps));
+}
+
+await test("Schreibende Tools: polly_write bzw. polly_deploy nötig, ohne Rolle kein Zugriff auf die Data Table", async () => {
+	await withTable(async (table) => {
+		const reporting = fakeDeps({ roles: ["polly_reporting"] });
+		for (const name of ["create_survey", "begin_edit", "save_draft", "end_edit"]) {
+			const error = failure(await call(name, {}, context(), reporting));
+			assert.deepEqual([error.code, error.details], ["forbidden", { requiredRole: "polly_write" }], name);
+		}
+		const writer = fakeDeps({ roles: ["polly_write"] });
+		const args = { surveyId: SURVEY_A, target: "Prod", expectedDraftVersion: 1, expectedProdVersion: 1, confirm: true };
+		for (const name of ["deploy_survey", "rollback_survey"]) {
+			const error = failure(await call(name, args, context(), writer));
+			assert.deepEqual([error.code, error.details], ["forbidden", { requiredRole: "polly_deploy" }], name);
+		}
+		assert.deepEqual(table.calls, []);
+	});
+});
+
+await test("create_survey: Zeile ohne Lock und Index, IDs und Namen vom Server; 21 Fragen → validation_failed, nichts geschrieben", async () => {
+	await withTable(async (table) => {
+		const deps = storeDeps();
+		const result = await createVia(deps, { ...NEW_SURVEY, name: "eigener_name" });
+		assert.match(result.surveyId, UUID);
+		assert.equal(result.version, 1);
+		assert.deepEqual(result.warnings.map((warning: any) => warning.code), ["name_immutable_ignored"]);
+		const draft = JSON.parse(table.row(result.surveyId).Draft);
+		assert.equal(draft.name, `kundenzufriedenheit_${result.surveyId.slice(0, 8)}`);
+		assert.ok(draft.questions.every((question: any) => UUID.test(question.id)));
+		assert.equal(JSON.parse(table.row(result.surveyId).lock).locked_by, "");
+		assert.deepEqual(JSON.parse(table.rows.get("survey_list")!.Draft), [{ id: result.surveyId, title: "Kundenzufriedenheit" }]);
+
+		const before = table.writes().length;
+		const questions = Array.from({ length: 21 }, (_, i) => ({ type: "comment", title: `Frage ${i}` }));
+		const error = failure(await call("create_survey", { survey: { title: "Viel", questions } }, context(), deps));
+		assert.equal(error.code, "validation_failed");
+		assert.deepEqual(Object.keys(error.details), ["errors"]);
+		assert.deepEqual(error.details.errors.map((issue: any) => [issue.code, issue.params.max]), [["surveyMaxQuestions", 20]]);
+		assert.equal(table.writes().length, before);
+	});
+});
+
+await test("Bearbeiten: begin_edit → save_draft (Version +1, Namen unveränderlich, Lock verlängert) → end_edit", async () => {
+	await withTable(async (table) => {
+		const deps = storeDeps();
+		const { surveyId } = await createVia(deps);
+		const begin = success("begin_edit", await call("begin_edit", { surveyId }, context(), deps));
+		assert.deepEqual(begin, { surveyId, draftVersion: 1, expiresAt: iso(NOW + HOUR_MS) });
+		assert.deepEqual(JSON.parse(table.row(surveyId).lock), { locked_by: "Erika Muster", locked_since: iso(NOW), via: "mcp" });
+
+		// Ausgabe von get_survey wieder als Eingabe: servergeführte Felder fallen weg, IDs bleiben
+		const current = success("get_survey", await call("get_survey", { surveyId }, context(), deps)).draft;
+		const [first, ...rest] = current.questions;
+		const changed = {
+			...current,
+			title: "Neuer Titel",
+			questions: [{ ...first, name: "anders", title: "Geändert?" }, ...rest, { type: "nps", title: "Weiterempfehlen?" }],
+		};
+		const saved = success("save_draft", await call("save_draft", { surveyId, survey: changed, expectedDraftVersion: 1 }, context(), deps));
+		assert.equal(saved.version, 2);
+		assert.equal(saved.lockExpiresAt, iso(NOW + HOUR_MS));
+		assert.deepEqual(saved.warnings, [{ code: "name_immutable_ignored", details: { path: "questions[0].name", id: first.id, name: first.name } }]);
+
+		const draft = JSON.parse(table.row(surveyId).Draft);
+		assert.deepEqual([draft.version, draft.title, draft.name, draft.created_at], [2, "Neuer Titel", current.name, current.created_at]);
+		assert.deepEqual([draft.questions[0].id, draft.questions[0].name], [first.id, first.name]);
+		assert.ok(draft.questions[2].name.endsWith(draft.questions[2].id.slice(0, 8)));
+		assert.deepEqual(JSON.parse(table.rows.get("survey_list")!.Draft), [{ id: surveyId, title: "Neuer Titel" }]);
+
+		assert.deepEqual(success("end_edit", await call("end_edit", { surveyId }, context(), deps)), { surveyId, released: true });
+		assert.equal(JSON.parse(table.row(surveyId).lock).locked_by, "");
+
+		// release beendet die Bearbeitung beim Speichern
+		success("begin_edit", await call("begin_edit", { surveyId }, context(), deps));
+		const released = success("save_draft", await call("save_draft", { surveyId, survey: changed, expectedDraftVersion: 2, release: true }, context(), deps));
+		assert.equal("lockExpiresAt" in released, false);
+		assert.equal(JSON.parse(table.row(surveyId).lock).locked_by, "");
+	});
+});
+
+await test("Lock: fremdes Lock → survey_locked; in der App übernommen → lock_lost; veraltete Version → draft_conflict; nichts geschrieben", async () => {
+	await withTable(async (table) => {
+		const deps = storeDeps();
+		const { surveyId } = await createVia(deps);
+		const since = NOW - 10 * 60 * 1000;
+		table.setLock(surveyId, "Max Mustermann", since, "ui");
+		const before = table.writes().length;
+
+		const locked = failure(await call("begin_edit", { surveyId }, context(), deps));
+		assert.deepEqual([locked.code, locked.details], [
+			"survey_locked",
+			{ lockedBy: "Max Mustermann", since: iso(since), expiresAt: iso(since + HOUR_MS), via: "ui" },
+		]);
+		const lost = failure(await call("save_draft", { surveyId, survey: NEW_SURVEY, expectedDraftVersion: 1 }, context(), deps));
+		assert.deepEqual([lost.code, lost.details.lockedBy, lost.details.via], ["lock_lost", "Max Mustermann", "ui"]);
+		assert.deepEqual(success("end_edit", await call("end_edit", { surveyId }, context(), deps)), { surveyId, released: false });
+		const deploy = failure(await call("deploy_survey", { surveyId, target: "Stage", expectedDraftVersion: 1, confirm: true }, context(), deps));
+		assert.equal(deploy.code, "survey_locked");
+
+		table.setLock(surveyId, "Erika Muster", NOW, "mcp");
+		const conflict = failure(await call("save_draft", { surveyId, survey: NEW_SURVEY, expectedDraftVersion: 0 }, context(), deps));
+		assert.deepEqual([conflict.code, conflict.details], ["draft_conflict", { current: 1 }]);
+		const questions = Array.from({ length: 21 }, (_, i) => ({ type: "comment", title: `Frage ${i}` }));
+		const invalid = failure(await call("save_draft", { surveyId, survey: { title: "Viel", questions }, expectedDraftVersion: 1 }, context(), deps));
+		assert.equal(invalid.code, "validation_failed");
+		assert.equal(table.writes().length, before);
+	});
+});
+
+await test("deploy_survey/rollback_survey: confirm nötig, Stage, Prod mit Backup, already_in_prod, no_backup, prod_conflict", async () => {
+	await withTable(async (table) => {
+		const deps = storeDeps();
+		const { surveyId } = await createVia(deps);
+		const callsBefore = table.calls.length;
+		const unconfirmed = failure(await call("deploy_survey", { surveyId, target: "Prod", expectedDraftVersion: 1 }, context(), deps));
+		assert.deepEqual([unconfirmed.code, unconfirmed.details], ["confirm_required", {}]);
+		const declined = failure(await call("rollback_survey", { surveyId, expectedProdVersion: null, confirm: false }, context(), deps));
+		assert.equal(declined.code, "confirm_required");
+		assert.equal(table.calls.length, callsBefore);
+
+		const deploy = (target: string, expectedDraftVersion: number) =>
+			call("deploy_survey", { surveyId, target, expectedDraftVersion, confirm: true }, context(), deps);
+		assert.deepEqual(success("deploy_survey", await deploy("Stage", 1)), { surveyId, target: "Stage", deployedVersion: 1, warnings: [] });
+		assert.equal(JSON.parse(table.row(surveyId).Stage).version, 1);
+		assert.equal(table.row(surveyId).Prod, "{}");
+
+		success("deploy_survey", await deploy("Prod", 1));
+		assert.equal(JSON.parse(table.row(surveyId).Prod).version, 1);
+		const again = failure(await deploy("Prod", 1));
+		assert.deepEqual([again.code, again.details], ["already_in_prod", { version: 1 }]);
+		const noBackup = failure(await call("rollback_survey", { surveyId, expectedProdVersion: 1, confirm: true }, context(), deps));
+		assert.equal(noBackup.code, "no_backup");
+
+		// Neue Version nach Prod: die bisherige wird Backup
+		success("begin_edit", await call("begin_edit", { surveyId }, context(), deps));
+		success("save_draft", await call("save_draft", { surveyId, survey: { ...NEW_SURVEY, title: "Version 2" }, expectedDraftVersion: 1, release: true }, context(), deps));
+		success("deploy_survey", await deploy("Prod", 2));
+		assert.deepEqual([JSON.parse(table.row(surveyId).Prod).version, JSON.parse(table.row(surveyId).Backup).version], [2, 1]);
+
+		const stale = failure(await call("rollback_survey", { surveyId, expectedProdVersion: 1, confirm: true }, context(), deps));
+		assert.deepEqual([stale.code, stale.details], ["prod_conflict", { current: 2 }]);
+		const rollback = success("rollback_survey", await call("rollback_survey", { surveyId, expectedProdVersion: 2, confirm: true }, context(), deps));
+		assert.deepEqual(rollback, { surveyId, prodVersion: 1 });
+		assert.equal(JSON.parse(table.row(surveyId).Prod).version, 1);
+	});
+});
+
+await test("Payload-Budget: Speichern mit Warnung, Deploy → payload_too_large mit size und limit, nichts geschrieben", async () => {
+	await withTable(async (table) => {
+		const deps = storeDeps();
+		const questions = Array.from({ length: 12 }, (_, i) => ({ type: "comment", title: `${i} ${"x".repeat(TTS_TEXT_MAX_CHARS - 100)}` }));
+		const created = await createVia(deps, { title: "Groß", questions });
+		assert.deepEqual(created.warnings.map((warning: any) => warning.code), ["payload_budget_exceeded"]);
+
+		const before = table.writes().length;
+		const error = failure(
+			await call("deploy_survey", { surveyId: created.surveyId, target: "Stage", expectedDraftVersion: 1, confirm: true }, context(), deps)
+		);
+		assert.equal(error.code, "payload_too_large");
+		assert.equal(error.details.limit, 31500);
+		assert.ok(error.details.size > error.details.limit);
+		assert.equal(table.writes().length, before);
+	});
+});
+
+await test("Web-Felder: Design vor dem Schreiben frisch geprüft, Ladefehler → internal_error, ohne web_survey zurückgesetzt", async () => {
+	await withTable(async (table) => {
+		const survey = { ...NEW_SURVEY, web_theme_id: THEME_ID };
+		const web = context({ web_survey: true });
+		const unknownDeps = storeDeps({ themes: [] });
+		const unknown = failure(await call("create_survey", { survey }, web, unknownDeps));
+		assert.deepEqual([unknown.code, unknown.details], ["theme_unknown", { themeId: THEME_ID }]);
+		assert.ok(unknownDeps.calls.includes("themes:fresh"));
+
+		const broken = storeDeps();
+		broken.loadWebThemes = async () => {
+			throw new Error("DynamoDB nicht erreichbar");
+		};
+		assert.equal(failure(await call("create_survey", { survey }, web, broken)).code, "internal_error");
+		assert.deepEqual(table.writes(), []);
+
+		// Bekanntes Design: Treffer im Cache, kein frisches Lesen
+		const known = storeDeps({ themes: [{ id: THEME_ID, name: "Haus", isDefault: true } as WebTheme] });
+		const withTheme = await createVia(known, survey, web);
+		assert.equal(JSON.parse(table.row(withTheme.surveyId).Draft).web_theme_id, THEME_ID);
+		assert.deepEqual(known.calls.filter((entry) => entry.startsWith("themes")), ["themes"]);
+
+		// Nicht im Cache, aber frisch gelesen vorhanden (gerade angelegt): validate_survey und create_survey gleich
+		const created = storeDeps();
+		created.loadWebThemes = async (_tenantId, fresh) => (fresh ? [{ id: THEME_ID, name: "Neu", isDefault: false } as WebTheme] : []);
+		assert.equal(success("validate_survey", await call("validate_survey", { survey }, web, created)).valid, true);
+		await createVia(created, survey, web);
+
+		// Ohne web_survey: kein Design geladen, Web-Felder mit Warnung zurückgesetzt
+		const offDeps = storeDeps();
+		const off = await createVia(offDeps, survey);
+		assert.deepEqual(off.warnings.map((warning: any) => warning.code), ["web_settings_reset"]);
+		assert.equal("web_theme_id" in JSON.parse(table.row(off.surveyId).Draft), false);
+		assert.equal(offDeps.calls.some((entry) => entry.startsWith("themes")), false);
+	});
+});
+
+await test("not_found: Umfrage in Löschung, kein Zugriff auf die Data Table", async () => {
+	await withTable(async (table) => {
+		const deps = storeDeps({ deleting: [SURVEY_A] });
+		const cases: Array<[string, Record<string, unknown>]> = [
+			["begin_edit", { surveyId: SURVEY_A }],
+			["end_edit", { surveyId: SURVEY_A }],
+			["save_draft", { surveyId: SURVEY_A, survey: NEW_SURVEY, expectedDraftVersion: 1 }],
+			["deploy_survey", { surveyId: SURVEY_A, target: "Stage", expectedDraftVersion: 1, confirm: true }],
+			["rollback_survey", { surveyId: SURVEY_A, expectedProdVersion: 1, confirm: true }],
+		];
+		for (const [name, args] of cases) {
+			const error = failure(await call(name, args, context(), deps));
+			assert.deepEqual([error.code, error.details], ["not_found", {}], name);
+		}
+		assert.deepEqual(table.calls, []);
+	});
+});
+
+await test("Audit-Log: create_survey protokolliert die vom Server vergebene ID, nicht eine mitgeschickte", async () => {
+	await withTable(async () => {
+		const logged: any[] = [];
+		const original = console.log;
+		console.log = (message: unknown, entry: unknown) => {
+			if (message === "[mcp] tool call") logged.push(entry);
+		};
+		try {
+			const deps = storeDeps();
+			const created = success("create_survey", await call("create_survey", { survey: NEW_SURVEY, surveyId: SURVEY_B }, context(), deps));
+			const questions = Array.from({ length: 21 }, (_, i) => ({ type: "comment", title: `Frage ${i}` }));
+			failure(await call("create_survey", { survey: { title: "Viel", questions }, surveyId: SURVEY_B }, context(), deps));
+			failure(await call("begin_edit", { surveyId: SURVEY_C }, context(), deps));
+			assert.deepEqual(
+				logged.map((entry) => [entry.tool, entry.surveyId, entry.result]),
+				[
+					["create_survey", created.surveyId, "ok"],
+					["create_survey", undefined, "validation_failed"],
+					["begin_edit", SURVEY_C, "not_found"],
+				]
+			);
+		} finally {
+			console.log = original;
+		}
+	});
+});
+
+await test("Fehlerdetails: nur die Felder des Codes, interne Zusatzfelder fallen weg", async () => {
+	const deps = fakeDeps();
+	deps.beginEdit = async () => ({
+		ok: false,
+		error: { code: "survey_locked", details: { lockedBy: "Max", since: "s", expiresAt: "e", via: "ui", internal: "geheim" } },
+	});
+	const error = failure(await call("begin_edit", { surveyId: SURVEY_A }, context(), deps));
+	assert.deepEqual(error.details, { lockedBy: "Max", since: "s", expiresAt: "e", via: "ui" });
+});
+
+// ---------------------------------------------------------------------------
 // HTTP und Protokoll (Transport im Prozess)
 // ---------------------------------------------------------------------------
 
@@ -512,7 +894,9 @@ await test("HTTP: initialize mit Server-Instructions, tools/list und tools/call 
 	assert.equal(init.headers["mcp-session-id"], undefined);
 
 	const list = await handleMcpPost(mcpEvent({ jsonrpc: "2.0", id: 2, method: "tools/list" }, { "mcp-protocol-version": "2025-06-18" }), ctx, deps);
-	assert.equal(JSON.parse(list.body).result.tools.length, 4);
+	const listed = JSON.parse(list.body).result.tools;
+	assert.equal(listed.length, 10);
+	assert.equal(listed.find((tool: any) => tool.name === "deploy_survey").annotations.destructiveHint, true);
 
 	const guide = await handleMcpPost(
 		mcpEvent({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_authoring_guide", arguments: {} } }),

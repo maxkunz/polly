@@ -70,18 +70,32 @@ export async function loadTenantThemesCached(tenantId: string, fresh = false): P
   const tableName = process.env.WEB_THEMES_TABLE_NAME ?? "";
   if (!tableName) return [];
   try {
-    return await themeCache.getOrLoad(
-      tenantId,
-      async () => {
-        const items = await queryWebThemeItems(tableName, tenantId);
-        return { value: items.map(toWebTheme).filter((theme): theme is WebTheme => theme !== null) };
-      },
-      fresh
-    );
+    return await loadThemes(tableName, tenantId, fresh);
   } catch (err) {
     console.error("[web_themes_table] cannot load themes", { tenantId, error: String((err as Error)?.message ?? err) });
     return [];
   }
+}
+
+/**
+ * Wie `loadTenantThemesCached` (derselbe Cache), aber Fehler und eine fehlende Tabelle werden geworfen statt als
+ * leere Liste gemeldet. Für Prüfungen vor dem Schreiben (MCP): Eine leere Liste ließe jedes Design als unbekannt gelten.
+ */
+export async function loadTenantThemesOrThrow(tenantId: string, fresh = false): Promise<WebTheme[]> {
+  const tableName = process.env.WEB_THEMES_TABLE_NAME ?? "";
+  if (!tableName) throw new Error("WEB_THEMES_TABLE_NAME is not set");
+  return loadThemes(tableName, tenantId, fresh);
+}
+
+function loadThemes(tableName: string, tenantId: string, fresh: boolean): Promise<WebTheme[]> {
+  return themeCache.getOrLoad(
+    tenantId,
+    async () => {
+      const items = await queryWebThemeItems(tableName, tenantId);
+      return { value: items.map(toWebTheme).filter((theme): theme is WebTheme => theme !== null) };
+    },
+    fresh
+  );
 }
 
 export interface WebThemeInput {

@@ -23,7 +23,13 @@ import {
 import type { SurveyListItem } from "../../../src/domain/survey/surveyRow";
 import type { Survey, SurveyQuestion } from "../../../src/domain/survey/surveyTypes";
 import type { WebTheme } from "../../../src/domain/webTheme/webTheme";
-import type { DeployCheckResult, PrepareDraftResult, SurveyStoreErrorCode, SurveyWarning } from "../shared/survey_pipeline";
+import type {
+  DeployCheckResult,
+  PrepareDraftResult,
+  SurveyStoreError,
+  SurveyStoreErrorCode,
+  SurveyWarning,
+} from "../shared/survey_pipeline";
 import type { SurveyRowView } from "../shared/survey_store";
 import { parseProdSurvey, text } from "../shared/web_survey_format";
 import { toV1Question, toV1SurveySummary } from "../surveys_api/v1";
@@ -271,12 +277,53 @@ const getSurveyInput = z.object({
     .describe("Which versions to return; default [\"draft\"]. stage/prod/backup are the deployed flow versions"),
 });
 
+function surveyInput(web: boolean) {
+  return web ? surveyInputSchema : surveyInputWithoutWeb;
+}
+
 function validateSurveyInput(web: boolean) {
   return z.object({
-    survey: web ? surveyInputSchema : surveyInputWithoutWeb,
+    survey: surveyInput(web),
     surveyId: surveyIdInput.optional().describe("Existing survey to validate against (keeps its IDs and technical names)"),
   });
 }
+
+const versionInput = z.number().int().min(0);
+
+const confirmInput = z
+  .boolean()
+  .optional()
+  .describe("Must be true, and only after the user has explicitly agreed to this action in the conversation");
+
+const surveyIdOnlyInput = z.object({ surveyId: surveyIdInput });
+
+function createSurveyInput(web: boolean) {
+  return z.object({ survey: surveyInput(web) });
+}
+
+function saveDraftInput(web: boolean) {
+  return z.object({
+    surveyId: surveyIdInput,
+    survey: surveyInput(web).describe("Complete survey (not a patch); keep the IDs of existing questions and options"),
+    expectedDraftVersion: versionInput.nullable().describe("Draft version you based your changes on (draftVersion from begin_edit or get_survey)"),
+    release: z.boolean().optional().describe("Release the edit lock after saving (end of editing)"),
+  });
+}
+
+export const DEPLOY_TARGETS = ["Stage", "Prod"] as const;
+
+const deploySurveyInput = z.object({
+  surveyId: surveyIdInput,
+  target: z.enum(DEPLOY_TARGETS).describe("Stage = test version (web preview), Prod = live version for callers and invitation links"),
+  expectedDraftVersion: versionInput.describe("Draft version to deploy (draftVersion from get_survey)"),
+  confirm: confirmInput,
+});
+
+const rollbackSurveyInput = z.object({
+  surveyId: surveyIdInput,
+  expectedProdVersion: versionInput.nullable().describe("Current Prod version (versions.prod from get_survey)"),
+  confirm: confirmInput,
+});
 
 // ---------------------------------------------------------------------------
 // Ausgaben (Schemas für `outputSchema`, Tests prüfen jede Ausgabe dagegen)
@@ -364,6 +411,28 @@ const listWebThemesOutput = z.object({
 
 const validateSurveyOutput = validationOutput.extend({ payloadSize: payloadSizeOutput.nullable() });
 
+const createSurveyOutput = z.object({ surveyId: z.string(), version: z.number(), warnings: z.array(warningOutput) });
+
+const beginEditOutput = z.object({ surveyId: z.string(), draftVersion: versionOutput, expiresAt: z.string() });
+
+const saveDraftOutput = z.object({
+  surveyId: z.string(),
+  version: z.number(),
+  warnings: z.array(warningOutput),
+  lockExpiresAt: z.string().optional(),
+});
+
+const endEditOutput = z.object({ surveyId: z.string(), released: z.boolean() });
+
+const deploySurveyOutput = z.object({
+  surveyId: z.string(),
+  target: z.enum(DEPLOY_TARGETS),
+  deployedVersion: z.number(),
+  warnings: z.array(warningOutput),
+});
+
+const rollbackSurveyOutput = z.object({ surveyId: z.string(), prodVersion: z.number() });
+
 // ---------------------------------------------------------------------------
 // Feldabbildung
 // ---------------------------------------------------------------------------
@@ -442,6 +511,76 @@ export function toV1ValidateResult(result: PrepareDraftResult): z.infer<typeof v
   return { ...toV1Validation(result), payloadSize: result.ok ? toV1PayloadSize(result.payloadSize) : null };
 }
 
+/** Nur die genannten Felder, und nur wenn vorhanden. */
+function pick(details: Record<string, unknown>, fields: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(fields.filter((field) => details[field] !== undefined).map((field) => [field, details[field]]));
+}
+
+/** Felder der `details` je Fehlercode aus Store bzw. Pipeline (Abschnitt 4.2); alles andere fällt weg. */
+const ERROR_DETAIL_FIELDS: Record<Exclude<SurveyStoreErrorCode, "validation_failed">, readonly string[]> = {
+  not_found: [],
+  invalid_id: ["path", "reason"],
+  theme_unknown: ["themeId"],
+  survey_locked: ["lockedBy", "since", "expiresAt", "via"],
+  lock_lost: ["lockedBy", "since", "expiresAt", "via"],
+  draft_conflict: ["current"],
+  prod_conflict: ["current"],
+  already_in_prod: ["version"],
+  no_backup: [],
+  payload_too_large: ["size", "limit"],
+  upstream_error: ["status", "throttled"],
+};
+
+/**
+ * `details` eines Tool-Fehlers aus Store bzw. Pipeline in fester Abbildung: `validation_failed` mit Befunden wie bei
+ * `validate_survey`, die übrigen Codes nur mit den Feldern aus `ERROR_DETAIL_FIELDS`.
+ */
+export function toV1ErrorDetails(error: SurveyStoreError): Record<string, unknown> {
+  const details = error.details ?? {};
+  if (error.code !== "validation_failed") return pick(details, ERROR_DETAIL_FIELDS[error.code]);
+  const validation = toV1Validation({ ok: false, error });
+  return { errors: validation.errors, ...(validation.translation ? { translation: validation.translation } : {}) };
+}
+
+export function toV1CreateResult(value: { surveyId: string; version: number; warnings: readonly SurveyWarning[] }): z.infer<typeof createSurveyOutput> {
+  return { surveyId: value.surveyId, version: value.version, warnings: value.warnings.map(toV1Warning) };
+}
+
+export function toV1BeginEditResult(value: { surveyId: string; draftVersion: number | null; expiresAt: string }): z.infer<typeof beginEditOutput> {
+  return { surveyId: value.surveyId, draftVersion: value.draftVersion, expiresAt: value.expiresAt };
+}
+
+export function toV1SaveDraftResult(value: {
+  surveyId: string;
+  version: number;
+  warnings: readonly SurveyWarning[];
+  lockExpiresAt?: string;
+}): z.infer<typeof saveDraftOutput> {
+  return {
+    surveyId: value.surveyId,
+    version: value.version,
+    warnings: value.warnings.map(toV1Warning),
+    ...(value.lockExpiresAt ? { lockExpiresAt: value.lockExpiresAt } : {}),
+  };
+}
+
+export function toV1EndEditResult(value: { surveyId: string; released: boolean }): z.infer<typeof endEditOutput> {
+  return { surveyId: value.surveyId, released: value.released };
+}
+
+export function toV1DeployResult(value: {
+  surveyId: string;
+  target: (typeof DEPLOY_TARGETS)[number];
+  deployedVersion: number;
+  warnings: readonly SurveyWarning[];
+}): z.infer<typeof deploySurveyOutput> {
+  return { surveyId: value.surveyId, target: value.target, deployedVersion: value.deployedVersion, warnings: value.warnings.map(toV1Warning) };
+}
+
+export function toV1RollbackResult(value: { surveyId: string; prodVersion: number }): z.infer<typeof rollbackSurveyOutput> {
+  return { surveyId: value.surveyId, prodVersion: value.prodVersion };
+}
+
 function toV1ChoiceLabel(label: any) {
   return {
     id: text(label?.id),
@@ -494,7 +633,7 @@ function toV1DraftQuestion(question: SurveyQuestion): Record<string, unknown> {
   };
 }
 
-/** Draft im Editor-Format, wie ihn `validate_survey` (und ab M9 `save_draft`) entgegennimmt. Web-Felder nur mit `web_survey`. */
+/** Draft im Editor-Format, wie ihn `validate_survey` und `save_draft` entgegennehmen. Web-Felder nur mit `web_survey`. */
 export function toV1Draft(survey: Survey, webSurvey: boolean): Record<string, unknown> {
   return {
     id: text(survey.id),
@@ -680,6 +819,11 @@ function guideText(webSurvey: boolean): string {
     "## Workflow",
     "- `list_surveys` → `get_survey` (draft, versions, lock, validation result).",
     "- `validate_survey` checks a survey without writing anything. Fix every entry in `errors` before saving.",
+    "- New survey: `create_survey` with the complete survey. Only a survey without errors is written; the result has the new `surveyId`.",
+    `- Change a survey: \`begin_edit\` (takes the edit lock for ${SURVEY_LOCK_TTL_MINUTES} minutes) → \`get_survey\` → \`save_draft\` with the complete survey and \`expectedDraftVersion\` → \`end_edit\` (or \`save_draft\` with \`release: true\`). Every save extends the lock.`,
+    "- The lock is the same one the Polly app uses. If someone else holds it you get `survey_locked`; if it was taken over in the app you get `lock_lost`. On `draft_conflict` reload the survey and apply your changes again; never overwrite changes of others.",
+    "- Deploy: `deploy_survey` to `Stage` first (test version, web preview), then to `Prod` (live for callers and invitation links). Deploying to Prod keeps the previous Prod version as backup; `rollback_survey` restores it.",
+    "- `deploy_survey` and `rollback_survey` change what callers hear. Call them only after the user has explicitly agreed, with `confirm: true`.",
     "",
     "## Server-managed fields",
     "- `id`, `version`, `created_at`, `updated_at` are set by the server; values you send are ignored.",
@@ -764,6 +908,11 @@ export interface ToolDefinitionV1 {
 }
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
+/** Schreibt, überschreibt aber nichts unwiederbringlich (Draft mit Versionsprüfung, Lock). */
+const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+const WRITE_IDEMPOTENT = { ...WRITE, idempotentHint: true } as const;
+/** Ändert, was Anrufende hören bzw. Eingeladene sehen; verlangt `confirm: true`. */
+const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 
 export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   {
@@ -813,6 +962,63 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
     input: validateSurveyInput,
     output: validateSurveyOutput,
     annotations: READ_ONLY,
+  },
+  {
+    name: "create_survey",
+    title: "Create survey",
+    description:
+      "Creates a new survey from a complete draft. The server assigns survey ID, question/option IDs and technical names. Nothing is written if the validation fails.",
+    role: "write",
+    input: createSurveyInput,
+    output: createSurveyOutput,
+    annotations: WRITE,
+  },
+  {
+    name: "begin_edit",
+    title: "Begin editing",
+    description: `Takes the edit lock of a survey for ${SURVEY_LOCK_TTL_MINUTES} minutes (or extends your own). Required before save_draft. Fails with survey_locked if someone else is editing.`,
+    role: "write",
+    input: () => surveyIdOnlyInput,
+    output: beginEditOutput,
+    annotations: WRITE_IDEMPOTENT,
+  },
+  {
+    name: "save_draft",
+    title: "Save draft",
+    description:
+      "Saves the complete draft of a survey you hold the edit lock for (begin_edit). expectedDraftVersion must match the stored draft. Validates like validate_survey; nothing is written on errors. Extends the lock, or releases it with release: true.",
+    role: "write",
+    input: saveDraftInput,
+    output: saveDraftOutput,
+    annotations: WRITE,
+  },
+  {
+    name: "end_edit",
+    title: "End editing",
+    description: "Releases your own edit lock of a survey. A lock held by someone else is left untouched (released: false).",
+    role: "write",
+    input: () => surveyIdOnlyInput,
+    output: endEditOutput,
+    annotations: WRITE_IDEMPOTENT,
+  },
+  {
+    name: "deploy_survey",
+    title: "Deploy survey",
+    description:
+      "Deploys the saved draft to Stage (test version, web preview) or Prod (live for callers and invitation links; the previous Prod version becomes the backup). Only with confirm: true after the user explicitly agreed.",
+    role: "deploy",
+    input: () => deploySurveyInput,
+    output: deploySurveyOutput,
+    annotations: DESTRUCTIVE,
+  },
+  {
+    name: "rollback_survey",
+    title: "Roll back survey",
+    description: "Restores the backup (previous Prod version) to Prod. Only with confirm: true after the user explicitly agreed.",
+    role: "deploy",
+    input: () => rollbackSurveyInput,
+    output: rollbackSurveyOutput,
+    annotations: DESTRUCTIVE,
   },
 ];
 

@@ -7,8 +7,21 @@ import {
 import { isFeatureEnabled, type FeatureFlags } from "../../../src/domain/features/featureFlags";
 import type { WebTheme } from "../../../src/domain/webTheme/webTheme";
 import { isValidSurveyId } from "../shared/survey_id";
+import type { Survey } from "../../../src/domain/survey/surveyTypes";
 import { checkDraft, prepareDraft, type SurveyStoreError } from "../shared/survey_pipeline";
-import type { StoreResult, SurveyListItem, SurveyRowView, SurveyStoreContext } from "../shared/survey_store";
+import type {
+  beginEdit as storeBeginEdit,
+  createSurvey as storeCreateSurvey,
+  deploySurvey as storeDeploySurvey,
+  DeployTarget,
+  endEdit as storeEndEdit,
+  rollbackSurvey as storeRollbackSurvey,
+  saveDraft as storeSaveDraft,
+  StoreResult,
+  SurveyListItem,
+  SurveyRowView,
+  SurveyStoreContext,
+} from "../shared/survey_store";
 import type { TenantCredentials } from "../shared/tenant_auth";
 import type { McpCallContext } from "./session";
 import {
@@ -19,12 +32,20 @@ import {
   toolError,
   toolSuccess,
   toSurveyInput,
+  toV1BeginEditResult,
+  toV1CreateResult,
+  toV1DeployResult,
+  toV1EndEditResult,
+  toV1ErrorDetails,
+  toV1RollbackResult,
+  toV1SaveDraftResult,
   toV1SurveyDetail,
   toV1SurveyList,
   toV1ValidateResult,
   toV1WebThemes,
   type McpToolErrorCode,
   type SurveyField,
+  type SurveyInput,
   type ToolCallResult,
   type ToolRole,
 } from "./tools_v1";
@@ -54,9 +75,18 @@ export interface McpToolDeps {
   readSurveyList(store: SurveyStoreContext): Promise<StoreResult<SurveyListItem[]>>;
   readSurveyRow(store: SurveyStoreContext, surveyId: string): Promise<StoreResult<SurveyRowView>>;
   readSurveyRows(store: SurveyStoreContext): Promise<StoreResult<SurveyRowView[]>>;
+  createSurvey: typeof storeCreateSurvey;
+  beginEdit: typeof storeBeginEdit;
+  saveDraft: typeof storeSaveDraft;
+  endEdit: typeof storeEndEdit;
+  deploySurvey: typeof storeDeploySurvey;
+  rollbackSurvey: typeof storeRollbackSurvey;
+  /** Löschung läuft oder ist abgeschlossen; der Store fragt das vor jedem Schreiben. */
+  isSurveyBeingDeleted(tenantId: string, surveyId: string): Promise<boolean>;
   /** IDs, deren Löschung läuft oder abgeschlossen ist. */
   findSurveysBeingDeleted(tenantId: string, surveyIds: readonly string[]): Promise<Set<string>>;
-  loadWebThemes(tenantId: string): Promise<WebTheme[]>;
+  /** Web-Designs des Mandanten (30 s gemerkt, `fresh` liest neu). Wirft bei Fehlern statt eine leere Liste zu liefern. */
+  loadWebThemes(tenantId: string, fresh?: boolean): Promise<WebTheme[]>;
 }
 
 const REQUIRED_ROLES: Record<Exclude<ToolRole, "any">, string> = {
@@ -68,21 +98,36 @@ const REQUIRED_ROLES: Record<Exclude<ToolRole, "any">, string> = {
 type ToolOutcome = { ok: true; value: Record<string, unknown> } | { ok: false; code: McpToolErrorCode; details?: Record<string, unknown> };
 
 function failed(error: SurveyStoreError): ToolOutcome {
-  return { ok: false, code: error.code, details: error.details };
+  return { ok: false, code: error.code, details: toV1ErrorDetails(error) };
 }
 
-function storeContext(ctx: McpToolContext): SurveyStoreContext {
+function storeContext(ctx: McpToolContext, deps: McpToolDeps): SurveyStoreContext {
   return {
     tenantId: ctx.call.tenant.tenantId,
     credentials: ctx.credentials,
     token: ctx.call.genesysAccessToken,
     userName: ctx.call.userName,
+    isBeingDeleted: deps.isSurveyBeingDeleted,
     now: () => new Date(ctx.now),
   };
 }
 
 function webSurveyEnabled(ctx: McpToolContext): boolean {
   return isFeatureEnabled(ctx.features, "web_survey");
+}
+
+/**
+ * Designs für die Prüfung von `web_theme_id` (Schritt 5 der Pipeline), gleich für Prüfen und Schreiben: nur mit
+ * `web_survey` und nur, wenn die Umfrage ein Design nennt (sonst kein DynamoDB-Zugriff). Erst aus dem Cache (30 s);
+ * fehlt die ID dort, wird einmal frisch gelesen, damit ein gerade angelegtes Design nicht als unbekannt gilt.
+ */
+async function themeIdsFor(survey: Survey, ctx: McpToolContext, deps: McpToolDeps): Promise<ReadonlySet<string> | undefined> {
+  const themeId = survey.web_theme_id;
+  if (!webSurveyEnabled(ctx) || typeof themeId !== "string" || themeId === "") return undefined;
+  const tenantId = ctx.call.tenant.tenantId;
+  const cached = new Set((await deps.loadWebThemes(tenantId)).map((theme) => theme.id));
+  if (cached.has(themeId)) return cached;
+  return new Set((await deps.loadWebThemes(tenantId, true)).map((theme) => theme.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +145,7 @@ async function listSurveys(
   ctx: McpToolContext,
   deps: McpToolDeps
 ): Promise<ToolOutcome> {
-  const store = storeContext(ctx);
+  const store = storeContext(ctx, deps);
   const list = await deps.readSurveyList(store);
   if (!list.ok) return failed(list.error);
   const includeVersions = args.includeVersions === true;
@@ -128,7 +173,7 @@ async function listSurveys(
 }
 
 async function getSurvey(args: { surveyId: string; fields?: SurveyField[] }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
-  const read = await deps.readSurveyRow(storeContext(ctx), args.surveyId);
+  const read = await deps.readSurveyRow(storeContext(ctx, deps), args.surveyId);
   if (!read.ok) return failed(read.error);
   const webSurvey = webSurveyEnabled(ctx);
   const fields = args.fields && args.fields.length > 0 ? args.fields : (["draft"] as SurveyField[]);
@@ -154,22 +199,77 @@ async function validateSurvey(args: { survey: any; surveyId?: string }, ctx: Mcp
   let saved = null;
   let version = 1;
   if (args.surveyId !== undefined) {
-    const read = await deps.readSurveyRow(storeContext(ctx), args.surveyId);
+    const read = await deps.readSurveyRow(storeContext(ctx, deps), args.surveyId);
     if (!read.ok) return failed(read.error);
     surveyId = args.surveyId;
     saved = read.value.draft;
     version = (read.value.versions.draft ?? 0) + 1;
   }
-  const knownThemeIds = webSurvey ? new Set((await deps.loadWebThemes(ctx.call.tenant.tenantId)).map((theme) => theme.id)) : undefined;
-  const prepared = prepareDraft(toSurveyInput(args.survey), {
+  const survey = toSurveyInput(args.survey);
+  const prepared = prepareDraft(survey, {
     surveyId,
     saved,
     version,
     webSurvey,
-    knownThemeIds,
+    knownThemeIds: await themeIdsFor(survey, ctx, deps),
     now: new Date(ctx.now).toISOString(),
   });
   return { ok: true, value: toV1ValidateResult(prepared) };
+}
+
+async function createSurvey(args: { survey: SurveyInput }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
+  const survey = toSurveyInput(args.survey);
+  const options = { webSurvey: webSurveyEnabled(ctx), knownThemeIds: await themeIdsFor(survey, ctx, deps) };
+  const result = await deps.createSurvey(storeContext(ctx, deps), survey, options);
+  return result.ok ? { ok: true, value: toV1CreateResult(result.value) } : failed(result.error);
+}
+
+async function beginEdit(args: { surveyId: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
+  const result = await deps.beginEdit(storeContext(ctx, deps), args.surveyId);
+  return result.ok ? { ok: true, value: toV1BeginEditResult(result.value) } : failed(result.error);
+}
+
+async function saveDraft(
+  args: { surveyId: string; survey: SurveyInput; expectedDraftVersion: number | null; release?: boolean },
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  const survey = toSurveyInput(args.survey);
+  const options = {
+    webSurvey: webSurveyEnabled(ctx),
+    knownThemeIds: await themeIdsFor(survey, ctx, deps),
+    release: args.release === true,
+  };
+  const result = await deps.saveDraft(storeContext(ctx, deps), args.surveyId, survey, args.expectedDraftVersion, options);
+  return result.ok ? { ok: true, value: toV1SaveDraftResult(result.value) } : failed(result.error);
+}
+
+async function endEdit(args: { surveyId: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
+  const result = await deps.endEdit(storeContext(ctx, deps), args.surveyId);
+  return result.ok ? { ok: true, value: toV1EndEditResult(result.value) } : failed(result.error);
+}
+
+/** Deploy und Rollback nur mit `confirm: true`; geprüft vor jedem Zugriff. */
+async function deploySurvey(
+  args: { surveyId: string; target: DeployTarget; expectedDraftVersion: number; confirm?: boolean },
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  if (args.confirm !== true) return { ok: false, code: "confirm_required" };
+  const result = await deps.deploySurvey(storeContext(ctx, deps), args.surveyId, args.target, args.expectedDraftVersion, {
+    webSurvey: webSurveyEnabled(ctx),
+  });
+  return result.ok ? { ok: true, value: toV1DeployResult(result.value) } : failed(result.error);
+}
+
+async function rollbackSurvey(
+  args: { surveyId: string; expectedProdVersion: number | null; confirm?: boolean },
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  if (args.confirm !== true) return { ok: false, code: "confirm_required" };
+  const result = await deps.rollbackSurvey(storeContext(ctx, deps), args.surveyId, args.expectedProdVersion);
+  return result.ok ? { ok: true, value: toV1RollbackResult(result.value) } : failed(result.error);
 }
 
 const HANDLERS: Record<string, ToolHandler> = {
@@ -178,6 +278,12 @@ const HANDLERS: Record<string, ToolHandler> = {
   get_survey: getSurvey,
   list_web_themes: listWebThemes,
   validate_survey: validateSurvey,
+  create_survey: createSurvey,
+  begin_edit: beginEdit,
+  save_draft: saveDraft,
+  end_edit: endEdit,
+  deploy_survey: deploySurvey,
+  rollback_survey: rollbackSurvey,
 };
 
 // ---------------------------------------------------------------------------
@@ -236,7 +342,10 @@ export async function callTool(name: string, rawArgs: unknown, ctx: McpToolConte
     outcome = { ok: false, code: "internal_error" };
   }
 
-  audit(ctx, tool.name, surveyId, outcome.ok ? "ok" : outcome.code, startedAt);
+  // Die ID aus dem Ergebnis gilt vor der Eingabe: Bei create_survey vergibt sie der Server, ein mitgeschicktes
+  // `surveyId` (von zod verworfen) darf das Audit-Log nicht auf eine fremde Umfrage lenken.
+  const resultSurveyId = outcome.ok ? outcome.value.surveyId : undefined;
+  audit(ctx, tool.name, resultSurveyId ?? (tool.name === "create_survey" ? undefined : surveyId), outcome.ok ? "ok" : outcome.code, startedAt);
   return { kind: "result", result: outcome.ok ? toolSuccess(outcome.value) : toolError(outcome.code, outcome.details) };
 }
 

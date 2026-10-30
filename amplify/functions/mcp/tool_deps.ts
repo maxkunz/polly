@@ -5,10 +5,20 @@ import {
 } from "../../../src/constants/permissionConstants";
 import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
 import { loadCallerRoles, loadInstallationProjectTag } from "../shared/caller_roles";
-import { readSurveyList, readSurveyRow, readSurveyRows } from "../shared/survey_store";
-import { findSurveysBeingDeleted } from "../shared/survey_results";
+import {
+  beginEdit,
+  createSurvey,
+  deploySurvey,
+  endEdit,
+  readSurveyList,
+  readSurveyRow,
+  readSurveyRows,
+  rollbackSurvey,
+  saveDraft,
+} from "../shared/survey_store";
+import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "../shared/survey_results";
 import { TtlCache } from "../shared/ttl_cache";
-import { loadTenantThemesCached } from "../shared/web_themes_table";
+import { loadTenantThemesOrThrow } from "../shared/web_themes_table";
 import type { McpToolDeps, PollyRolesResult } from "./tool_handlers";
 
 /**
@@ -42,6 +52,14 @@ export const defaultToolDeps: McpToolDeps = {
   readSurveyList,
   readSurveyRow,
   readSurveyRows,
+  createSurvey,
+  beginEdit,
+  saveDraft,
+  endEdit,
+  deploySurvey,
+  rollbackSurvey,
+  isSurveyBeingDeleted,
   findSurveysBeingDeleted,
-  loadWebThemes: (tenantId) => loadTenantThemesCached(tenantId),
+  // Fehler werfen statt leerer Liste (sonst gälte jedes Design als unbekannt); der Aufruf ergibt dann internal_error
+  loadWebThemes: (tenantId, fresh) => loadTenantThemesOrThrow(tenantId, fresh),
 };

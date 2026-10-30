@@ -408,7 +408,7 @@ export function saveDraft(
 /** Gibt nur das eigene Lock frei; `released: false`, wenn es keines gab oder es anderen gehört. */
 export function endEdit(ctx: SurveyStoreContext, surveyId: string): Promise<StoreResult<{ surveyId: string; released: boolean }>> {
   return run(ctx, "end_edit", async (deadline) => {
-    if (!isValidSurveyId(surveyId)) fail("not_found");
+    await assertNotDeleting(ctx, surveyId);
     let released = false;
     await updateSurveyRow(ctx, surveyId, deadline, (currentRow) => {
       if (!isSurveyLockOwnedBy(parseSurveyLock(currentRow.lock), ctx.userName)) return null;

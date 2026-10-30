@@ -96,10 +96,10 @@ Vorgaben:
   - [x] Tests: `mcpToolsV1.test.ts` (Ausgabefelder).
   - [ ] Erster Ende-zu-Ende-Lauf: Claude Code verbinden und lesen. (braucht Deploy mit `MCP_ENABLED=true`)
 
-- [ ] **M9 Schreibende Tools mit Lock, Deploy und Rollback** (siehe „Lock“, „Validierungs-Pipeline“) · **Review danach**
-  - [ ] Tools: `create_survey`, `begin_edit`, `save_draft`, `end_edit`, `deploy_survey`, `rollback_survey` (mit `confirm`, Annotationen `destructiveHint`).
-  - [ ] Pipeline mit Web-Reset ohne `web_survey` und Prüfung von `web_theme_id` gegen die Designs des Mandanten.
-  - [ ] Tests: Lock-Fälle (`survey_locked`, `lock_lost`, `draft_conflict`), > 20 Fragen, Namen unveränderlich, Budget beim Deploy.
+- [x] **M9 Schreibende Tools mit Lock, Deploy und Rollback** (siehe „Lock“, „Validierungs-Pipeline“) · erledigt 2026-10-30 · **Review danach** (steht aus)
+  - [x] Tools: `create_survey`, `begin_edit`, `save_draft`, `end_edit`, `deploy_survey`, `rollback_survey` (mit `confirm`, Annotationen `destructiveHint`).
+  - [x] Pipeline mit Web-Reset ohne `web_survey` und Prüfung von `web_theme_id` gegen die Designs des Mandanten.
+  - [x] Tests: Lock-Fälle (`survey_locked`, `lock_lost`, `draft_conflict`), > 20 Fragen, Namen unveränderlich, Budget beim Deploy.
 
 - [ ] **M10 Auswertungs-Tools** (siehe „Tools“, „Pseudonymisierung“) · **Review danach** (Fokus Datenschutz)
   - [ ] Tools:
@@ -271,6 +271,23 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **CORS** unverändert (siehe M5): browserbasierte Clients wie der MCP Inspector bräuchten `mcp-protocol-version` in den erlaubten Headern.
 
 ### M9
+
+- **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json`, Test und lokalem esbuild-Bündel (minifiziert ca. 754 KB, +12 KB), nicht deployt.** Der Ende-zu-Ende-Lauf (Plan „Prüfung“, Punkte 3–5) steht zusammen mit dem aus M8 aus.
+- **Store unverändert:** Die Schreiboperationen standen seit M4 in `survey_store.ts`. M9 ergänzt nur die Schnittstelle: Schemas, feste Ausgabeabbildung (`toV1CreateResult` usw.) und Katalog in `tools_v1.ts`, Handler in `tool_handlers.ts`, Store-Funktionen als Teil von `McpToolDeps` (`tool_deps.ts`).
+- **Löschprüfung über `McpToolDeps.isSurveyBeingDeleted`:** Der Store bekommt sie als `isBeingDeleted` im Kontext; so laufen die Tests Ende-zu-Ende über den echten Store ohne DynamoDB (Genesys ersetzt eine Data Table im Speicher).
+- **Web-Designs:** Neuer Loader `loadTenantThemesOrThrow` in `web_themes_table.ts` (derselbe Cache wie `loadTenantThemesCached`), der Fehler und eine fehlende Tabelle wirft statt eine leere Liste zu liefern (offen aus M8). Alle MCP-Tools nutzen ihn, auch `validate_survey` und `list_web_themes`; ein Ladefehler ergibt `internal_error`. Geladen wird nur mit `web_survey` und nur, wenn die Umfrage eine `web_theme_id` nennt.
+- **`confirm`** ist im Schema optional; fehlt es oder ist es nicht `true`, kommt `confirm_required` vor jedem Zugriff auf die Data Table (statt `invalid_input`).
+- **Annotationen:** `deploy_survey`/`rollback_survey` `destructiveHint: true`; `create_survey`/`save_draft` schreibend, nicht destruktiv; `begin_edit`/`end_edit` zusätzlich `idempotentHint: true`. Alle `openWorldHint: false`.
+- **Fehlerdetails in fester Abbildung** (`toV1ErrorDetails`): `validation_failed` mit `errors` wie bei `validate_survey` (ggf. `translation`), die übrigen Codes nur mit den Feldern aus `ERROR_DETAIL_FIELDS` (Abschnitt 4.2 der Spezifikation).
+- **Audit-Log:** Die `surveyId` aus dem Ergebnis gilt vor der Eingabe; bei `create_survey` steht nur die vom Server vergebene im Log, nie eine mitgeschickte.
+- **Nach dem Review (2026-10-30):**
+  - Designs für `web_theme_id` gleich in `validate_survey`, `create_survey` und `save_draft`: erst Cache, nur bei fehlender ID frisch (vorher Schreiben immer frisch, Prüfen nur Cache). So kostet ein `save_draft`, der an Lock oder Version scheitert, keine DynamoDB-Query mehr.
+  - `end_edit` (Store `endEdit`) prüft jetzt auch auf laufende Löschung (`not_found`).
+  - Audit-Log nicht mehr über eine mitgeschickte `surveyId` bei `create_survey` lenkbar.
+  - Fehlerdetails je Code fest abgebildet, interne Zusatzfelder fallen weg.
+  - Test-Fake der Data Table sammelt unerwartete URLs und prüft sie nach dem Lauf (ein `assert` im Fake würde der Store zu `upstream_error` machen).
+  - Bewusst nicht geändert: Rollen-Cache 60 s auch für `deploy_survey`/`rollback_survey` (Abschnitt 11 der Spezifikation).
+- **Server-Instructions und Authoring-Guide** beschreiben jetzt den Ablauf zum Schreiben (Lock, `expectedDraftVersion`, Stage vor Prod, `confirm` nur nach ausdrücklicher Zustimmung).
 
 ### M10
 
