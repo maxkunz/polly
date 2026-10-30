@@ -201,10 +201,12 @@ export const la: MessageSchema = {
 		conflict: {
 			header: "Percontatio iam mutatur",
 			message: "Haec percontatio inde a {date} a „{user}“ mutatur. Visne eam nihilominus mutare an tantum spectare?",
+			messageMcp: "AI „{user}“ hanc percontationem inde a {date} per MCP mutat. Visne eam nihilominus mutare an tantum spectare? AI postea servare non poterit.",
 			acceptLabel: "Nihilominus muta",
 			rejectLabel: "Tantum specta"
 		},
-		readOnlyBanner: "Contra scripturam tuta: haec percontatio nunc a „{user}“ mutatur. Mutationes sunt inactivae."
+		readOnlyBanner: "Contra scripturam tuta: haec percontatio nunc a „{user}“ mutatur. Mutationes sunt inactivae.",
+		readOnlyBannerMcp: "Contra scripturam tuta: haec percontatio nunc per MCP a „{user}“ (cliens AI) mutatur. Mutationes sunt inactivae."
 	},
 
 	surveyQuestions: {
@@ -653,6 +655,10 @@ export const la: MessageSchema = {
 		web_survey: {
 			label: "Quaestiones interretiales",
 			description: "Quaestiones per nexum invitationis in navigatro, cum formis interretialibus et optionibus in editore."
+		},
+		mcp: {
+			label: "Interfacies MCP",
+			description: "Percontationes cum cliente AI (e. g. Claude) mutare, publicare et aestimare. In optionibus activatur."
 		}
 	},
 	settings: {

@@ -7,6 +7,11 @@ import {
 	normalizeFeatures
 } from "../src/domain/features/featureFlags";
 import { Meta } from "../src/domain/Meta";
+import { de } from "../src/i18n/locales/de";
+import { en } from "../src/i18n/locales/en";
+import { fr } from "../src/i18n/locales/fr";
+import { tlh } from "../src/i18n/locales/tlh";
+import { la } from "../src/i18n/locales/la";
 
 let passed = 0;
 
@@ -49,6 +54,23 @@ test("Vorauswahl im Onboarding enthält jedes Flag der Registry", () => {
 	const defaults = defaultSetupFeatures();
 	assert.deepEqual(Object.keys(defaults), FEATURE_FLAGS.map(flag => flag.key));
 	assert.equal(defaults.web_survey, true);
+});
+
+test("Flag mcp ist registriert und im Onboarding standardmäßig aus", () => {
+	assert.ok(FEATURE_FLAGS.some(flag => flag.key === "mcp"));
+	assert.equal(defaultSetupFeatures().mcp, false);
+	assert.equal(isFeatureEnabled({}, "mcp"), false);
+	assert.equal(isFeatureEnabled({ mcp: true }, "mcp"), true);
+	assert.deepEqual(enabledFeatures({ web_survey: true, mcp: true }), ["web_survey", "mcp"]);
+});
+
+test("Jedes Flag hat Texte in allen Locales", () => {
+	for (const locale of [de, en, fr, tlh, la] as any[]) {
+		for (const flag of FEATURE_FLAGS) {
+			assert.ok(locale.features[flag.key]?.label, `label ${flag.key}`);
+			assert.ok(locale.features[flag.key]?.description, `description ${flag.key}`);
+		}
+	}
 });
 
 test("Meta liest features und gibt sie mit den übrigen Feldern wieder aus", () => {

@@ -310,7 +310,8 @@ export async function deleteSurvey(surveyId: string): Promise<void> {
 export async function acquireSurveyLock(surveyId: string, username: string): Promise<Record<string, any>> {
 	const newLock: SurveyLockData = {
 		locked_by: username,
-		locked_since: new Date().toISOString()
+		locked_since: new Date().toISOString(),
+		via: "ui"
 	};
 	return await updateSurveyRow(surveyId, () => ({ lock: JSON.stringify(newLock) }));
 }

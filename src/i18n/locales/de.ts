@@ -198,10 +198,12 @@ export const de = {
 		conflict: {
 			header: "Umfrage wird bereits bearbeitet",
 			message: "Diese Umfrage wird seit {date} von „{user}“ bearbeitet. Möchten Sie die Umfrage trotzdem bearbeiten oder nur ansehen?",
+			messageMcp: "Die KI „{user}“ bearbeitet diese Umfrage seit {date} über MCP. Möchten Sie die Umfrage trotzdem bearbeiten oder nur ansehen? Die KI kann danach nicht mehr speichern.",
 			acceptLabel: "Trotzdem bearbeiten",
 			rejectLabel: "Nur anschauen"
 		},
-		readOnlyBanner: "Schreibgeschützt: Diese Umfrage wird gerade von „{user}“ bearbeitet. Änderungen sind deaktiviert."
+		readOnlyBanner: "Schreibgeschützt: Diese Umfrage wird gerade von „{user}“ bearbeitet. Änderungen sind deaktiviert.",
+		readOnlyBannerMcp: "Schreibgeschützt: Diese Umfrage wird gerade über MCP von „{user}“ (KI-Client) bearbeitet. Änderungen sind deaktiviert."
 	},
 
 	surveyQuestions: {
@@ -650,6 +652,10 @@ export const de = {
 		web_survey: {
 			label: "Web-Umfragen",
 			description: "Umfragen per Einladungslink im Browser, inkl. Web-Designs und Web-Einstellungen im Editor."
+		},
+		mcp: {
+			label: "MCP-Schnittstelle",
+			description: "Umfragen per KI-Client (z. B. Claude) bearbeiten, deployen und auswerten. Einschalten in den Einstellungen."
 		}
 	},
 	settings: {

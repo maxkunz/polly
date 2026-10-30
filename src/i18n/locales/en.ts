@@ -200,10 +200,12 @@ export const en: MessageSchema = {
 		conflict: {
 			header: "Survey is already being edited",
 			message: "This survey has been edited by „{user}“ since {date}. Do you want to edit it anyway or open it read-only?",
+			messageMcp: "The AI of „{user}“ has been editing this survey via MCP since {date}. Do you want to edit it anyway or open it read-only? The AI can no longer save afterwards.",
 			acceptLabel: "Edit anyway",
 			rejectLabel: "Read only"
 		},
-		readOnlyBanner: "Read-only: this survey is currently being edited by „{user}“. Editing is disabled."
+		readOnlyBanner: "Read-only: this survey is currently being edited by „{user}“. Editing is disabled.",
+		readOnlyBannerMcp: "Read-only: this survey is currently being edited via MCP by „{user}“ (AI client). Editing is disabled."
 	},
 
 	surveyQuestions: {
@@ -652,6 +654,10 @@ export const en: MessageSchema = {
 		web_survey: {
 			label: "Web surveys",
 			description: "Surveys via invitation link in the browser, including web designs and web settings in the editor."
+		},
+		mcp: {
+			label: "MCP interface",
+			description: "Edit, deploy and evaluate surveys with an AI client (e.g. Claude). Enable it in the settings."
 		}
 	},
 	settings: {

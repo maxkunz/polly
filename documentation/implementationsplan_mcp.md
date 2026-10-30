@@ -48,10 +48,10 @@ Vorgaben:
   - [x] Tests: `surveyRules.test.ts` und `domainImports.test.ts` (keine `@/`-, `vue`- oder `vue-i18n`-Importe in der Kette), ins `test`-Script aufgenommen. Alle bestehenden Tests bleiben unverändert grün.
   - [x] `CLAUDE.md`: neue reine Module, Testliste.
 
-- [ ] **M3 Frontend-Vorarbeiten: Lock-Kennzeichen und Feature Flag** (siehe „Lock“, „Abschaltung“) · Modell: Sonnet
-  - [ ] `acquireSurveyLock` schreibt `via: "ui"`; `useSurveyLock.ts` zeigt bei `via === "mcp"` einen eigenen Text, „Trotzdem bearbeiten“ bleibt möglich.
-  - [ ] Feature Flag `{ key: "mcp", defaultOnSetup: false }` in `FEATURE_FLAGS`, Texte `features.mcp.*`.
-  - [ ] i18n in allen fünf Locales; `featureFlags.test.ts` erweitern.
+- [x] **M3 Frontend-Vorarbeiten: Lock-Kennzeichen und Feature Flag** (siehe „Lock“, „Abschaltung“) · Modell: Sonnet · erledigt 2026-10-30
+  - [x] `acquireSurveyLock` schreibt `via: "ui"`; `useSurveyLock.ts` zeigt bei `via === "mcp"` einen eigenen Text, „Trotzdem bearbeiten“ bleibt möglich.
+  - [x] Feature Flag `{ key: "mcp", defaultOnSetup: false }` in `FEATURE_FLAGS`, Texte `features.mcp.*`.
+  - [x] i18n in allen fünf Locales; `featureFlags.test.ts` erweitern.
 
 - [ ] **M4 Gemeinsame Backend-Bausteine** (siehe „Backend-Bausteine“) · **Review danach**
   - [ ] `shared/installation_meta.ts`: liest `__meta` einmal (Projekt-Tag, `features`) mit `TtlCache`; `loadProjectTag`/`loadInstallationProjectTag` darauf umstellen.
@@ -153,6 +153,10 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - `domainImports.test.ts` prüft neben den neuen Modulen auch die schon gebündelten (`flowNavigation`, `invitationLinks`, `webTheme`, `roleCheck`, `surveyRow`, `surveyConstants`) und als Gegenprobe, dass der Adapter `surveyValidator.ts` erkannt wird. Zusätzlich einmalig mit den Compiler-Optionen aus `amplify/tsconfig.json` typgeprüft.
 
 ### M3
+
+- **Neue i18n-Keys:** `surveyLock.conflict.messageMcp` und `surveyLock.readOnlyBannerMcp` (Dialog und Banner bei MCP-Lock), `features.mcp.label`/`description`. `useSurveyLock` liefert zusätzlich `conflictVia` für das Banner im Editor.
+- Das Flag `mcp` erscheint damit im Onboarding (Vorauswahl aus) und in der Liste „Aktivierte Funktionen“, sobald es in `__meta` gesetzt ist. Die Karte dazu kommt erst in M6.
+- `featureFlags.test.ts` prüft zusätzlich, dass jedes Flag in allen fünf Locales Texte hat. `npm test` und `vue-tsc` laufen durch.
 
 ### M4
 

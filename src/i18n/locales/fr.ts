@@ -200,10 +200,12 @@ export const fr: MessageSchema = {
 		conflict: {
 			header: "Enquête déjà en cours de modification",
 			message: "Cette enquête est en cours de modification par « {user} » depuis {date}. Voulez-vous la modifier quand même ou l'ouvrir en lecture seule ?",
+			messageMcp: "L'IA de « {user} » modifie cette enquête via MCP depuis {date}. Voulez-vous la modifier quand même ou l'ouvrir en lecture seule ? L'IA ne pourra plus enregistrer ensuite.",
 			acceptLabel: "Modifier quand même",
 			rejectLabel: "Lecture seule"
 		},
-		readOnlyBanner: "Lecture seule : cette enquête est en cours de modification par « {user} ». Les modifications sont désactivées."
+		readOnlyBanner: "Lecture seule : cette enquête est en cours de modification par « {user} ». Les modifications sont désactivées.",
+		readOnlyBannerMcp: "Lecture seule : cette enquête est en cours de modification via MCP par « {user} » (client IA). Les modifications sont désactivées."
 	},
 
 	surveyQuestions: {
@@ -652,6 +654,10 @@ export const fr: MessageSchema = {
 		web_survey: {
 			label: "Enquêtes web",
 			description: "Enquêtes via lien d'invitation dans le navigateur, y compris les designs web et les paramètres web dans l'éditeur."
+		},
+		mcp: {
+			label: "Interface MCP",
+			description: "Modifier, déployer et évaluer des enquêtes avec un client IA (p. ex. Claude). À activer dans les paramètres."
 		}
 	},
 	settings: {

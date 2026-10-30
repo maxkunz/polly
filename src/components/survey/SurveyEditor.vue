@@ -75,7 +75,7 @@ const {
 
 const flowPayloadSize = useFlowPayloadSize(draftSurvey);
 
-const { markLockReleased, releaseLock, isLockReadOnly, conflictLockedBy, editAnyway } = useSurveyLock({
+const { markLockReleased, releaseLock, isLockReadOnly, conflictLockedBy, conflictVia, editAnyway } = useSurveyLock({
 	surveyId: props.surveyId,
 	existingRow,
 	isDirty,
@@ -164,7 +164,7 @@ function handleClone() {
 		</Message>
 		<Message v-else-if="isLockReadOnly" severity="warn" :closable="false">
 			<div class="flex flex-wrap items-center justify-between gap-3">
-				<span>{{ t("surveyLock.readOnlyBanner", { user: conflictLockedBy }) }}</span>
+				<span>{{ t(conflictVia === "mcp" ? "surveyLock.readOnlyBannerMcp" : "surveyLock.readOnlyBanner", { user: conflictLockedBy }) }}</span>
 				<Button
 					:label="t('surveyLock.conflict.acceptLabel')"
 					severity="danger"

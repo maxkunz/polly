@@ -201,10 +201,12 @@ export const tlh: MessageSchema = {
 		conflict: {
 			header: "yu'ghItlh choHtaH latlh",
 			message: "{date} vo' „{user}“ yu'ghItlh vam choHtaH. DachoHneS'a' pagh DalaDneS'a' neH?",
+			messageMcp: "„{user}“ Hurgh QI' {date} vo' MCP vegh yu'ghItlh vam choHtaH. DachoHneS'a' pagh DalaDneS'a' neH? Hurgh QI' pol ghItlhlaHbe'.",
 			acceptLabel: "yIchoH, vaj",
 			rejectLabel: "laD neH"
 		},
-		readOnlyBanner: "laD neH: DaH yu'ghItlh vam choHtaH „{user}“. choHlu'laHbe'."
+		readOnlyBanner: "laD neH: DaH yu'ghItlh vam choHtaH „{user}“. choHlu'laHbe'.",
+		readOnlyBannerMcp: "laD neH: DaH MCP vegh „{user}“ (Hurgh QI' lo'wI') yu'ghItlh vam choHtaH. choHlu'laHbe'."
 	},
 
 	surveyQuestions: {
@@ -653,6 +655,10 @@ export const tlh: MessageSchema = {
 		web_survey: {
 			label: "Web QIn",
 			description: "Web QIn: rI'meH rarwI' 'ej Web HaSta mIw."
+		},
+		mcp: {
+			label: "MCP Quch",
+			description: "Hurgh QI' lo'wI' (Claude) vegh yu'ghItlhmey choH, ngeH, 'ej lI'. DuHbogh chenmoHlu'."
 		}
 	},
 	settings: {

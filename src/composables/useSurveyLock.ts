@@ -3,7 +3,7 @@ import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/appStore";
 import { currentLocaleTag } from "@/i18n";
-import { parseSurveyLock, checkSurveyLockConflict } from "@/domain/survey/surveyLock";
+import { parseSurveyLock, checkSurveyLockConflict, type SurveyLockVia } from "@/domain/survey/surveyLock";
 import { acquireSurveyLock, releaseSurveyLock } from "@/services/surveyService";
 
 export interface UseSurveyLockOptions {
@@ -28,6 +28,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	/** Nutzer hat im Konfliktdialog „Nur lesen“ gewählt: Editor gesperrt, kein Lock nehmen */
 	const isLockReadOnly = ref<boolean>(false);
 	const conflictLockedBy = ref<string>("");
+	/** Herkunft des fremden Locks im Konfliktfall (KI-Client über MCP oder App) */
+	const conflictVia = ref<SurveyLockVia>("ui");
 
 	async function getCurrentUsername(): Promise<string> {
 		if (appStore.currentUser?.name) {
@@ -80,7 +82,10 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 				const formattedDate = formatLockDate(lock.locked_since);
 				confirm.require({
 					header: t("surveyLock.conflict.header"),
-					message: t("surveyLock.conflict.message", { date: formattedDate, user: lock.locked_by }),
+					message: t(lock.via === "mcp" ? "surveyLock.conflict.messageMcp" : "surveyLock.conflict.message", {
+						date: formattedDate,
+						user: lock.locked_by
+					}),
 					icon: "pi pi-exclamation-triangle",
 					acceptLabel: t("surveyLock.conflict.acceptLabel"),
 					rejectLabel: t("surveyLock.conflict.rejectLabel"),
@@ -91,6 +96,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 					},
 					reject: () => {
 						conflictLockedBy.value = lock.locked_by ?? "";
+						conflictVia.value = lock.via ?? "ui";
 						isLockReadOnly.value = true;
 					},
 					// Schließen per X/Escape (nicht bei accept/reject)
@@ -186,6 +192,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		markLockReleased,
 		isLockReadOnly,
 		conflictLockedBy,
+		conflictVia,
 		editAnyway
 	};
 }
