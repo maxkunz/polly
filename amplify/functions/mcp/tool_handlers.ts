@@ -7,6 +7,11 @@ import {
 import { isFeatureEnabled, type FeatureFlags } from "../../../src/domain/features/featureFlags";
 import type { WebTheme } from "../../../src/domain/webTheme/webTheme";
 import { isValidSurveyId } from "../shared/survey_id";
+import type { ExportSession } from "../shared/answer_records";
+import { openCursor, sealCursor, type PseudonymKeys } from "../shared/pseudonym";
+import { MAX_RANGE_MS, MAX_SUMMARY_RANGE_MS } from "../shared/reporting_limits";
+import type { ExportSummary } from "../shared/session_summary";
+import type { SurveyAggregateItem } from "../shared/survey_results";
 import type { Survey } from "../../../src/domain/survey/surveyTypes";
 import { checkDraft, prepareDraft, type SurveyStoreError } from "../shared/survey_pipeline";
 import type {
@@ -23,6 +28,19 @@ import type {
   SurveyStoreContext,
 } from "../shared/survey_store";
 import type { TenantCredentials } from "../shared/tenant_auth";
+import {
+  buildResponsesPage,
+  collectQuestionIndex,
+  cursorPayload,
+  CURSOR_TTL_MS,
+  parseResultsRange,
+  queryFingerprint,
+  readCursorPosition,
+  RESPONSES_DEFAULT_LIMIT,
+  toV1AggregatesResult,
+  toV1ResultsSummary,
+  type ResultsRange,
+} from "./results_v1";
 import type { McpCallContext } from "./session";
 import {
   buildAuthoringGuide,
@@ -87,7 +105,28 @@ export interface McpToolDeps {
   findSurveysBeingDeleted(tenantId: string, surveyIds: readonly string[]): Promise<Set<string>>;
   /** Web-Designs des Mandanten (30 s gemerkt, `fresh` liest neu). Wirft bei Fehlern statt eine leere Liste zu liefern. */
   loadWebThemes(tenantId: string, fresh?: boolean): Promise<WebTheme[]>;
+  /** Zählt die Sitzungen eines Zeitraums (ohne Antworten); `ok: false`, wenn `deadline` (ms) vorher erreicht ist. */
+  summarizeSessions(
+    tenantId: string,
+    surveyId: string,
+    fromIso: string,
+    toIso: string,
+    deadline: number
+  ): Promise<{ ok: true; summary: ExportSummary } | { ok: false }>;
+  /** Aggregate je Frage (alle Versionen). */
+  loadAggregates(tenantId: string, surveyId: string): Promise<SurveyAggregateItem[]>;
+  /** Sitzungen mit Antworten; `ok: false` bei mehr als `MAX_SESSIONS` Sitzungen oder wenn `deadline` (ms) erreicht ist. */
+  readSessions(
+    tenantId: string,
+    params: { surveyId: string; fromIso: string; toIso: string; version?: number },
+    deadline: number
+  ): Promise<{ ok: true; sessions: ExportSession[] } | { ok: false }>;
+  /** Schlüssel für Pseudonyme und Cursor (aus `McpPseudonymSecret`). Wirft, wenn das Secret nicht lesbar ist. */
+  pseudonymKeys(): Promise<PseudonymKeys>;
 }
+
+/** So lange darf eine Auswertung lesen (die Lambda läuft höchstens 28 s). */
+const RESULTS_READ_BUDGET_MS = 20 * 1000;
 
 const REQUIRED_ROLES: Record<Exclude<ToolRole, "any">, string> = {
   write: POLLY_ROLE_WRITE,
@@ -95,7 +134,9 @@ const REQUIRED_ROLES: Record<Exclude<ToolRole, "any">, string> = {
   reporting: POLLY_ROLE_REPORTING,
 };
 
-type ToolOutcome = { ok: true; value: Record<string, unknown> } | { ok: false; code: McpToolErrorCode; details?: Record<string, unknown> };
+type ToolOutcome =
+  | { ok: true; value: Record<string, unknown>; audit?: Record<string, unknown> }
+  | { ok: false; code: McpToolErrorCode; details?: Record<string, unknown> };
 
 function failed(error: SurveyStoreError): ToolOutcome {
   return { ok: false, code: error.code, details: toV1ErrorDetails(error) };
@@ -272,6 +313,115 @@ async function rollbackSurvey(
   return result.ok ? { ok: true, value: toV1RollbackResult(result.value) } : failed(result.error);
 }
 
+// --- Auswertung (Rolle `polly_reporting`, Datenschutz: documentation/polly_mcp.md, Abschnitt 8) --------------------
+
+const NOT_FOUND: ToolOutcome = { ok: false, code: "not_found" };
+
+function rangeFailure(range: Exclude<ResultsRange, { ok: true }>): ToolOutcome {
+  return range.kind === "invalid"
+    ? { ok: false, code: "invalid_input", details: { issues: range.issues } }
+    : { ok: false, code: "range_too_large", details: { maxMs: range.maxMs } };
+}
+
+/** Umfrage-ID kleingeschrieben wie in der Kunden-API; `undefined` bei ungültiger ID (keine Abfrage). */
+function resultsSurveyId(raw: string): string | undefined {
+  return isValidSurveyId(raw) ? raw.toLowerCase() : undefined;
+}
+
+async function getResultsSummary(args: { surveyId: string; from: string; to: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
+  const surveyId = resultsSurveyId(args.surveyId);
+  if (!surveyId) return NOT_FOUND;
+  const range = parseResultsRange(args.from, args.to, MAX_SUMMARY_RANGE_MS);
+  if (!range.ok) return rangeFailure(range);
+  const tenantId = ctx.call.tenant.tenantId;
+  if (await deps.isSurveyBeingDeleted(tenantId, surveyId)) return NOT_FOUND;
+  // Wie bei get_aggregates: Die Umfrage muss in der Data Table stehen und für die Person (Genesys-Token) lesbar sein
+  const read = await deps.readSurveyRow(storeContext(ctx, deps), surveyId);
+  if (!read.ok) return failed(read.error);
+  const result = await deps.summarizeSessions(tenantId, surveyId, range.fromIso, range.toIso, Date.now() + RESULTS_READ_BUDGET_MS);
+  // Ein unfertiger Zeitraum ergäbe eine zu niedrige Zählung: lieber ablehnen
+  if (!result.ok) return { ok: false, code: "range_too_large", details: { maxMs: MAX_SUMMARY_RANGE_MS } };
+  return { ok: true, value: toV1ResultsSummary(result.summary), audit: { from: range.fromIso, to: range.toIso } };
+}
+
+async function getAggregates(args: { surveyId: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
+  const surveyId = resultsSurveyId(args.surveyId);
+  if (!surveyId) return NOT_FOUND;
+  const tenantId = ctx.call.tenant.tenantId;
+  if (await deps.isSurveyBeingDeleted(tenantId, surveyId)) return NOT_FOUND;
+  // Die Zeile der Umfrage (Genesys-Token der Person) liefert die Fragetitel und stellt sicher, dass es die Umfrage gibt
+  const [read, items] = await Promise.all([deps.readSurveyRow(storeContext(ctx, deps), surveyId), deps.loadAggregates(tenantId, surveyId)]);
+  if (!read.ok) return failed(read.error);
+  const { row, draft } = read.value;
+  const index = collectQuestionIndex(draft, [row.Prod, row.Stage, row.Backup], surveyId);
+  return { ok: true, value: toV1AggregatesResult(items, index) };
+}
+
+async function getResponses(
+  args: { surveyId: string; from: string; to: string; channel?: string; status?: string; version?: number; cursor?: string; limit?: number },
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  const surveyId = resultsSurveyId(args.surveyId);
+  if (!surveyId) return NOT_FOUND;
+  const range = parseResultsRange(args.from, args.to, MAX_RANGE_MS);
+  if (!range.ok) return rangeFailure(range);
+  const tenantId = ctx.call.tenant.tenantId;
+  if (await deps.isSurveyBeingDeleted(tenantId, surveyId)) return NOT_FOUND;
+
+  const filter = { fromIso: range.fromIso, toIso: range.toIso, channel: args.channel, status: args.status, version: args.version };
+  const fingerprint = queryFingerprint(filter);
+  const keys = await deps.pseudonymKeys();
+  const binding = { tenantId, surveyId };
+  let after;
+  if (args.cursor !== undefined) {
+    after = readCursorPosition(openCursor(keys, binding, args.cursor, ctx.now), fingerprint);
+    if (!after) return { ok: false, code: "cursor_invalid" };
+  }
+
+  // Die Umfrage muss in der Data Table stehen (Genesys-Token der Person); ihre Labels entscheiden, welche Auswahlwerte
+  // als strukturiert gelten
+  const survey = await deps.readSurveyRow(storeContext(ctx, deps), surveyId);
+  if (!survey.ok) return failed(survey.error);
+  const { row, draft } = survey.value;
+  const { choiceLabels } = collectQuestionIndex(draft, [row.Prod, row.Stage, row.Backup], surveyId);
+
+  // Sitzungen vor der Cursor-Position fallen ohnehin weg: erst ab dort lesen (gleicher Start ist enthalten, BETWEEN)
+  const readFrom = after && after.t > range.fromIso ? after.t : range.fromIso;
+  const read = await deps.readSessions(tenantId, { surveyId, fromIso: readFrom, toIso: range.toIso, version: args.version }, Date.now() + RESULTS_READ_BUDGET_MS);
+  if (!read.ok) return { ok: false, code: "range_too_large", details: { maxMs: MAX_RANGE_MS } };
+
+  const allowComments = ctx.call.tenant.allowComments;
+  const page = buildResponsesPage(read.sessions, {
+    keys,
+    tenantId,
+    surveyId,
+    allowComments,
+    choiceLabels,
+    filter,
+    after,
+    limit: args.limit ?? RESPONSES_DEFAULT_LIMIT,
+  });
+  return {
+    ok: true,
+    value: {
+      responses: page.responses,
+      ...(page.next ? { nextCursor: sealCursor(keys, binding, cursorPayload(page.next, fingerprint), ctx.now + CURSOR_TTL_MS) } : {}),
+    },
+    // Nachweis, welche Daten in welchem Umfang abgerufen wurden (ohne Inhalte und Pseudonyme)
+    audit: {
+      from: range.fromIso,
+      to: range.toIso,
+      ...(args.channel !== undefined ? { channel: args.channel } : {}),
+      ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.version !== undefined ? { version: args.version } : {}),
+      continued: after !== undefined,
+      returned: page.responses.length,
+      allowComments,
+    },
+  };
+}
+
 const HANDLERS: Record<string, ToolHandler> = {
   get_authoring_guide: getAuthoringGuide,
   list_surveys: listSurveys,
@@ -284,6 +434,9 @@ const HANDLERS: Record<string, ToolHandler> = {
   end_edit: endEdit,
   deploy_survey: deploySurvey,
   rollback_survey: rollbackSurvey,
+  get_results_summary: getResultsSummary,
+  get_aggregates: getAggregates,
+  get_responses: getResponses,
 };
 
 // ---------------------------------------------------------------------------
@@ -303,14 +456,18 @@ export async function checkToolRole(role: ToolRole, ctx: McpToolContext, deps: M
   return roles.roles.has(required) ? undefined : { ok: false, code: "forbidden", details: { requiredRole: required } };
 }
 
-/** Audit-Log ohne Inhalte: Mandant, Person, Tool, Umfrage, Ergebnis-Code, Dauer. */
-function audit(ctx: McpToolContext, tool: string, surveyId: unknown, result: string, startedAt: number): void {
+/**
+ * Audit-Log ohne Inhalte: Mandant, Person, Tool, Umfrage, Ergebnis-Code, Dauer; bei der Auswertung zusätzlich Umfang
+ * des Abrufs (`extra`: Zeitraum, Filter, Anzahl, Freigabe der Kommentare).
+ */
+function audit(ctx: McpToolContext, tool: string, surveyId: unknown, result: string, startedAt: number, extra?: Record<string, unknown>): void {
   console.log("[mcp] tool call", {
     tenantId: ctx.call.tenant.tenantId,
     userId: ctx.call.userId,
     tool,
     ...(typeof surveyId === "string" && isValidSurveyId(surveyId) ? { surveyId } : {}),
     result,
+    ...extra,
     ms: Date.now() - startedAt,
   });
 }
@@ -345,7 +502,14 @@ export async function callTool(name: string, rawArgs: unknown, ctx: McpToolConte
   // Die ID aus dem Ergebnis gilt vor der Eingabe: Bei create_survey vergibt sie der Server, ein mitgeschicktes
   // `surveyId` (von zod verworfen) darf das Audit-Log nicht auf eine fremde Umfrage lenken.
   const resultSurveyId = outcome.ok ? outcome.value.surveyId : undefined;
-  audit(ctx, tool.name, resultSurveyId ?? (tool.name === "create_survey" ? undefined : surveyId), outcome.ok ? "ok" : outcome.code, startedAt);
+  audit(
+    ctx,
+    tool.name,
+    resultSurveyId ?? (tool.name === "create_survey" ? undefined : surveyId),
+    outcome.ok ? "ok" : outcome.code,
+    startedAt,
+    outcome.ok ? outcome.audit : undefined
+  );
   return { kind: "result", result: outcome.ok ? toolSuccess(outcome.value) : toolError(outcome.code, outcome.details) };
 }
 

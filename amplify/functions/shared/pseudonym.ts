@@ -5,7 +5,8 @@ import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } f
  * das Secret (`McpPseudonymSecret`) übergibt der Aufrufer.
  *
  * - `pseudonymize`: Klar-ID (`responseId`, `conversationId`, `tokenId`) → `r_<base64url>`, HMAC-SHA256 auf 128 bit
- *   gekürzt. Stabil pro Mandant, ohne Secret nicht umkehrbar; derselbe Wert ergibt bei anderen Mandanten ein anderes Pseudonym.
+ *   gekürzt. Stabil pro Mandant und Umfrage, ohne Secret nicht umkehrbar; derselbe Wert ergibt bei anderen Mandanten
+ *   oder Umfragen ein anderes Pseudonym (eine Conversation mit mehreren Umfragen lässt sich darüber nicht verknüpfen).
  * - `sealCursor`/`openCursor`: Cursor mit AES-256-GCM, AAD bindet ihn an Mandant und Umfrage, dazu ein Ablauf.
  *   Ungültige, fremde, manipulierte oder abgelaufene Cursor ergeben `undefined`.
  *
@@ -48,8 +49,8 @@ function boundInput(...parts: string[]): string {
   return parts.map((part) => `${part.length}:${part}`).join("\0");
 }
 
-export function pseudonymize(keys: PseudonymKeys, tenantId: string, value: string): string {
-  const digest = createHmac("sha256", keys.hmacKey).update(boundInput(tenantId, value), "utf8").digest();
+export function pseudonymize(keys: PseudonymKeys, tenantId: string, surveyId: string, value: string): string {
+  const digest = createHmac("sha256", keys.hmacKey).update(boundInput(tenantId, surveyId, value), "utf8").digest();
   return PSEUDONYM_PREFIX + digest.subarray(0, PSEUDONYM_BYTES).toString("base64url");
 }
 

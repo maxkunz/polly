@@ -18,7 +18,7 @@ export { MAX_RANGE_MS, MAX_SESSIONS, MAX_SUMMARY_RANGE_MS };
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 /** `YYYY-MM-DDTHH:mm:ss`, UTC, ohne `Z` und ohne Millisekunden. */
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
 
 export interface V1DataParams {
   surveyId: string;

@@ -101,7 +101,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`.
    6. Rate-Limit pro Session (feste Fenster pro Minute, vorläufig 120; 429 mit `Retry-After`)
    7. Rolle des Tools (Abschnitt 4)
-   8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**
+   8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**; bei der Auswertung zusätzlich Zeitraum, Filter, Anzahl der ausgegebenen Sitzungen, Folgeseite ja/nein und ob Kommentare freigegeben waren
 9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`, `EncryptionContext` mit Mandant und Session) in der Session.
 10. **Abschalten:** `DELETE /mcp-settings` und ein Wechsel des Genesys-Clients widerrufen vor dem Löschen der Einträge die Genesys-Tokens aller Sessions (`DELETE /api/v2/tokens/me`). Das geschieht nach Möglichkeit mit Zeitbudget von 4 s; was dann fehlt, macht das Löschen des Genesys-Clients ungültig. Die Onboarding-Routen widerrufen nicht.
 
@@ -161,8 +161,8 @@ Die Felder der Umfrage entsprechen dem Editor-Format aus [survey_definition.md](
 | `deploy_survey` | `surveyId`, `target` (`Stage` \| `Prod`), `expectedDraftVersion`, `confirm` | `{ surveyId, target, deployedVersion, warnings: [...] }` |
 | `rollback_survey` | `surveyId`, `expectedProdVersion`, `confirm` | `{ surveyId, prodVersion }` |
 | `get_results_summary` | `surveyId`, `from`, `to` | `{ total, byStatus, byVersion, byChannel }` |
-| `get_aggregates` | `surveyId` | `{ questions: [{ questionId, title, type, count, average?, distribution?, nps? }] }` |
-| `get_responses` | `surveyId`, `from`, `to`, `channel?`, `status?`, `version?`, `cursor?`, `limit?` | `{ responses: [...], nextCursor? }` |
+| `get_aggregates` | `surveyId` | `{ questions: [{ questionId, title, type, count, average?, distribution?, otherCount?, nps? }] }` (Abschnitt 8) |
+| `get_responses` | `surveyId`, `from`, `to`, `channel?`, `status?`, `version?`, `cursor?`, `limit?` | `{ responses: [{ responseId, channel, status, version, startedHour, answers }], nextCursor? }` (Abschnitt 8) |
 
 `errors` sind `{ code, field, params, questionId? }`. `code` ist der Schlüssel der bisherigen Editor-Meldung (`validation.*`, ohne Präfix), Zahlen stehen roh in `params`. Die Feldliste je Tool steht fest in `tools_v1.ts`; jedes Tool meldet sein `outputSchema` in `tools/list`.
 
@@ -264,13 +264,16 @@ Beim Deploy gelten zusätzlich die Regeln der App: Prod → Backup vor dem Über
 
 ## 8. Pseudonymisierung
 
-Gilt für `get_responses`.
+Gilt für `get_responses`, die Regeln für Werte auch für `get_aggregates`. Umsetzung: `mcp/results_v1.ts`, Schlüssel aus `shared/mcp_pseudonym_keys.ts` und `shared/pseudonym.ts`. Alle drei Auswertungs-Tools verlangen, dass die Zeile der Umfrage in der Data Table steht und mit dem Genesys-Token der Person lesbar ist (sonst `not_found`), auch wenn ein Löschjob fehlgeschlagen ist.
 
-- **Ersetzte Kennungen:** `responseId`, `conversationId` und `tokenId` werden zu `r_<base64url(HMAC-SHA256)>`, gekürzt auf 128 bit. Das Pseudonym ist pro Mandant stabil (gleiche Antwort → gleiches Pseudonym) und ohne das Secret `McpPseudonymSecret` nicht umkehrbar. Der Schlüssel wird per HKDF aus dem Secret abgeleitet.
-- **Cursor:** versiegelt mit AES-256-GCM (Schlüssel per HKDF abgeleitet), die AAD bindet ihn an Mandant und Umfrage, dazu ein Ablaufzeitpunkt. Klar-IDs kommen nie in Ausgabe oder Cursor. Fremde, manipulierte oder abgelaufene Cursor → `cursor_invalid`.
-- **Kommentare** (Telefon und Web): Ohne `mcpAllowComments` erscheint `{ type: "comment", redacted: true, hasText }`. Mit Flag wird der Text auf 2.000 Zeichen gekürzt und von Steuerzeichen bereinigt. Der Text ist weiterhin Daten, keine Anweisung (Server-Instructions).
-- **Weitere Einschränkungen:** Zeitraum höchstens 24 Stunden, höchstens 100 Antworten pro Seite, Filter `channel` (`flow`/`web`), `status`, `version`.
-- `get_results_summary` und `get_aggregates` enthalten keine Einzelantworten und brauchen keine Pseudonymisierung.
+- **Ersetzte Kennungen:** Die `responseId` der Sitzung wird zu `r_<base64url(HMAC-SHA256)>`, gekürzt auf 128 bit. Das Pseudonym ist pro Mandant und Umfrage stabil (gleiche Sitzung → gleiches Pseudonym; dieselbe Conversation in zwei Umfragen ergibt zwei Pseudonyme) und ohne das Secret `McpPseudonymSecret` nicht umkehrbar. Der Schlüssel wird per HKDF aus dem Secret abgeleitet. `conversationId` (bei Kanal `flow` identisch mit der `responseId`) und `tokenId` (Web) erscheinen gar nicht: Sie werden weder gelesen noch ausgegeben. Auch `surveyName` und andere interne Felder fehlen.
+- **Cursor:** versiegelt mit AES-256-GCM (Schlüssel per HKDF abgeleitet), die AAD bindet ihn an Mandant und Umfrage, dazu ein Ablauf (15 Minuten). Er trägt nur Sitzungsstart, Pseudonym der letzten Sitzung und einen Abdruck von Zeitraum und Filtern; Klar-IDs kommen nie hinein. Die Reihenfolge ist Sitzungsstart, dann Pseudonym, deshalb bleibt die Position auch bei neuen Sitzungen stabil. Fremde, manipulierte, abgelaufene Cursor und Cursor einer anderen Abfrage (anderer Zeitraum oder Filter) → `cursor_invalid`.
+- **Zeitpunkte nur grob:** `startedHour` ist der Sitzungsstart, auf die volle Stunde abgerundet; Antworten tragen `secondsFromStart` (ganze Sekunden seit dem Start) statt eines Zeitstempels. Genaue Zeitpunkte ließen sich mit Genesys-Interaktionsdaten verknüpfen und so die Conversation (Anrufer, Agent) bestimmen. Intern (Sortierung, versiegelter Cursor) zählt weiter der genaue Start.
+- **Freitext** gibt es nur bei Fragetyp `comment` und nur mit `mcpAllowComments`. Nur `rating`/`nps` mit Zahl, `yes_no` mit Wahrheitswert und `choice` mit einem Label dieser Frage (aus Draft, Prod, Stage oder Backup; bereinigt, höchstens 200 Zeichen) erscheinen unverändert. Alles andere, auch ein unbekannter Typ, ein Wert, der nicht zum Typ passt, oder ein Auswahlwert, der kein bekanntes Label ist (z. B. ein Transkript), gilt als Freitext. Labels von Versionen, die in keinem Stand mehr stehen, sind nicht bekannt; solche Antworten erscheinen ebenfalls als Freitext. Ohne Freigabe erscheint `{ questionId, type, secondsFromStart, redacted: true, hasText }`. Mit Freigabe wird der Text von Steuer- und Formatzeichen bereinigt, Zeilenumbrüche werden zu Leerzeichen, und er wird auf 2.000 Zeichen gekürzt. Der Text ist weiterhin Daten, keine Anweisung (Server-Instructions). Ein unbekannter Typ erscheint als `unknown`. `questionId` enthält nur `[A-Za-z0-9_-]` (anderes wird zu `_`, höchstens 100 Zeichen), damit kein Text mit Anweisungen über den Schlüssel kommt.
+- **Weitere Einschränkungen:** Zeitraum höchstens 24 Stunden, höchstens `limit` Sitzungen pro Seite (Standard 50, höchstens 100) und 256 KB pro Seite, Filter `channel` (`flow`/`web`), `status`, `version`.
+- **Ausgabe je Sitzung:** `{ responseId, channel, status, version, startedHour, answers: [{ questionId, type, secondsFromStart, value | redacted, hasText }] }`.
+- **`get_results_summary`** zählt nur (Status, Version, Kanal). **`get_aggregates`** liefert pro Frage Anzahl, Mittelwert, Verteilung und NPS mit dem Fragetitel. Eine Verteilung gibt es nur für `yes_no`, `choice`, `rating`, `nps` und nur mit Werten, die zum Typ passen (`true`/`false`, Labels der Frage, Zahlen, `empty`); andere Werte zählen nur in `otherCount`. Kommentarfragen und unbekannte Typen haben keine Verteilung, bei mehr als 100 Werten entfällt sie ganz. Beide enthalten keine Einzelantworten und brauchen keine Pseudonymisierung.
+- **Bekannte Grenzen:** Auch die Stunde des Sitzungsstarts schränkt bei wenig Verkehr die Kandidaten in Genesys ein (nur für Personen, die ohnehin Zugriff auf beide haben). Eine Mindestgröße (k-Anonymität) für kleine Gruppen gibt es nicht.
 
 ## 9. Tabellenschema `McpOAuthTable`
 
@@ -304,8 +307,9 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | Zeitraum `get_responses` | 24 Stunden | `MAX_RANGE_MS` in `shared/reporting_limits.ts` |
 | Zeitraum `get_results_summary` | 31 Tage | `MAX_SUMMARY_RANGE_MS` |
 | Sitzungen pro Aufruf | wie Kunden-API | `MAX_SESSIONS` |
-| Antworten pro Seite | 100 | `get_responses` |
+| Sitzungen pro Seite | 100 (Standard 50), höchstens 256 KB | `get_responses` |
 | Kommentar | 2.000 Zeichen | Pseudonymisierung |
+| Cursor von `get_responses` | 15 Minuten | `CURSOR_TTL_MS` in `mcp/results_v1.ts` |
 | Lock-Dauer | 60 Minuten | `SURVEY_LOCK_TTL_MINUTES` |
 | Access-Token | 60 Minuten | `McpOAuthTable` |
 | Refresh-Token / Session | 30 Tage | `McpOAuthTable` |

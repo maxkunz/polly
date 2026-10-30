@@ -39,22 +39,24 @@ test("HMAC- und Cursor-Schlüssel sind verschieden und deterministisch", () => {
 });
 
 test("Pseudonym: Format r_<base64url>, 128 bit, ohne Klar-ID", () => {
-	const pseudonym = pseudonymize(keys, "tenant-a", CONVERSATION_ID);
+	const pseudonym = pseudonymize(keys, "tenant-a", "survey-1", CONVERSATION_ID);
 	assert.match(pseudonym, /^r_[A-Za-z0-9_-]{22}$/);
 	assert.ok(!pseudonym.includes(CONVERSATION_ID.slice(0, 8)));
 });
 
-test("Pseudonym: stabil pro Mandant, verschieden zwischen Mandanten, Werten und Secrets", () => {
-	const a = pseudonymize(keys, "tenant-a", CONVERSATION_ID);
-	assert.equal(pseudonymize(keys, "tenant-a", CONVERSATION_ID), a);
-	assert.notEqual(pseudonymize(keys, "tenant-b", CONVERSATION_ID), a);
-	assert.notEqual(pseudonymize(keys, "tenant-a", `${CONVERSATION_ID}x`), a);
-	assert.notEqual(pseudonymize(derivePseudonymKeys(`${SECRET}-anders`), "tenant-a", CONVERSATION_ID), a);
+test("Pseudonym: stabil pro Mandant und Umfrage, verschieden zwischen Mandanten, Umfragen, Werten und Secrets", () => {
+	const a = pseudonymize(keys, "tenant-a", "survey-1", CONVERSATION_ID);
+	assert.equal(pseudonymize(keys, "tenant-a", "survey-1", CONVERSATION_ID), a);
+	assert.notEqual(pseudonymize(keys, "tenant-b", "survey-1", CONVERSATION_ID), a);
+	assert.notEqual(pseudonymize(keys, "tenant-a", "survey-2", CONVERSATION_ID), a);
+	assert.notEqual(pseudonymize(keys, "tenant-a", "survey-1", `${CONVERSATION_ID}x`), a);
+	assert.notEqual(pseudonymize(derivePseudonymKeys(`${SECRET}-anders`), "tenant-a", "survey-1", CONVERSATION_ID), a);
 });
 
-test("Pseudonym: Mandant und Wert lassen sich nicht verschieben", () => {
-	assert.notEqual(pseudonymize(keys, "a", "b:c"), pseudonymize(keys, "a:b", "c"));
-	assert.notEqual(pseudonymize(keys, "ab", "c"), pseudonymize(keys, "a", "bc"));
+test("Pseudonym: Mandant, Umfrage und Wert lassen sich nicht verschieben", () => {
+	assert.notEqual(pseudonymize(keys, "a", "s", "b:c"), pseudonymize(keys, "a:b", "s", "c"));
+	assert.notEqual(pseudonymize(keys, "ab", "s", "c"), pseudonymize(keys, "a", "bs", "c"));
+	assert.notEqual(pseudonymize(keys, "a", "sb", "c"), pseudonymize(keys, "a", "s", "bc"));
 });
 
 test("Cursor: Rundreise liefert den Inhalt, Klar-IDs stehen nicht im Cursor", () => {

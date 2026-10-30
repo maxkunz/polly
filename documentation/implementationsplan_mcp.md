@@ -101,13 +101,14 @@ Vorgaben:
   - [x] Pipeline mit Web-Reset ohne `web_survey` und Prüfung von `web_theme_id` gegen die Designs des Mandanten.
   - [x] Tests: Lock-Fälle (`survey_locked`, `lock_lost`, `draft_conflict`), > 20 Fragen, Namen unveränderlich, Budget beim Deploy.
 
-- [ ] **M10 Auswertungs-Tools** (siehe „Tools“, „Pseudonymisierung“) · **Review danach** (Fokus Datenschutz)
-  - [ ] Tools:
+- [x] **M10 Auswertungs-Tools** (siehe „Tools“, „Pseudonymisierung“) · erledigt 2026-10-30 · **Review danach** (Fokus Datenschutz, erledigt 2026-10-30)
+  - [x] Tools:
     - `get_results_summary` (`summarizeSlices`, 31 Tage, nach Kanal)
     - `get_aggregates` (`loadSurveyAggregates` plus Fragetitel)
     - `get_responses` (`iterateSessions`, pseudonymisiert, max. 24 h, versiegelter Cursor, Kommentare nur mit `mcpAllowComments`)
-  - [ ] Bei laufender Löschung gibt es `not_found` (`isSurveyBeingDeleted`).
-  - [ ] Tests: keine `conversationId`/`responseId`/`tokenId` in Ausgabe oder Cursor; Kommentare ohne Flag geschwärzt.
+  - [x] Bei laufender Löschung gibt es `not_found` (`isSurveyBeingDeleted`).
+  - [x] Tests: keine `conversationId`/`responseId`/`tokenId` in Ausgabe oder Cursor; Kommentare ohne Flag geschwärzt. (in `mcpToolsV1.test.ts`)
+  - [x] Review (Datenschutz) umgesetzt: Verteilungen und `choice` nur mit typgerechten Werten bzw. Labels der Umfrage, grobe Zeitpunkte, Existenzprüfung in allen drei Tools, Audit-Log mit Umfang, Pseudonym pro Umfrage, `questionId` bereinigt, Folgeseiten lesen ab der Cursor-Position.
 
 - [ ] **M11 Härtung, Ende-zu-Ende-Test, Abschluss** (siehe „Prüfung“) · **Abschluss-Review und Security-Review**
   - [ ] Rate-Limits pro Session, gemerkte Zustimmung, maximale Anzahl DCR-Clients pro Mandant.
@@ -171,7 +172,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Neue Warnung `survey_list_not_updated`:** Scheitert nach dem Schreiben der Umfrage die Pflege von `survey_list`, gibt es keinen Fehler (sonst legte die KI erneut an), sondern diese Warnung.
 - **Deploy prüft zusätzlich die Prüfregeln** (`surveyRules`), wie in der Spezifikation; die App prüft beim Deploy nur Translator und Budget.
 - **`upstream_error`** trägt bei HTTP-Fehlern `details: { status }`, bei 429 zusätzlich `throttled: true`. Geloggt werden nur Mandant, Vorgang, Fehlername und Status, keine Inhalte.
-- **Pseudonym** auf 128 bit gekürzt (`r_` + 22 Zeichen). Mandant und Wert gehen mit Längenpräfix in den HMAC ein. Das Secret muss mindestens 32 Bytes haben; Laden aus Secrets Manager kommt mit M5/M10. Cursor: Version-Byte, 12-Byte-IV, Tag, Chiffrat als base64url, höchstens 4.096 Zeichen.
+- **Pseudonym** auf 128 bit gekürzt (`r_` + 22 Zeichen). Mandant, Umfrage (seit dem Review zu M10) und Wert gehen mit Längenpräfix in den HMAC ein. Das Secret muss mindestens 32 Bytes haben; Laden aus Secrets Manager kommt mit M5/M10. Cursor: Version-Byte, 12-Byte-IV, Tag, Chiffrat als base64url, höchstens 4.096 Zeichen.
 - `domainImports.test.ts` prüft zusätzlich `featureFlags.ts` (von `installation_meta.ts` gebündelt).
 - `MAX_RESPONSE_BYTES` und `MAX_LIMIT` bleiben in `reporting_api/v1.ts` (nur Kunden-API); `v1.ts` re-exportiert die gemeinsamen Grenzwerte, Handler und Tests bleiben unverändert.
 - **Nach dem Review (2026-10-30):**
@@ -290,6 +291,26 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Server-Instructions und Authoring-Guide** beschreiben jetzt den Ablauf zum Schreiben (Lock, `expectedDraftVersion`, Stage vor Prod, `confirm` nur nach ausdrücklicher Zustimmung).
 
 ### M10
+
+- **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json` und Test, nicht deployt.** Beim ersten Lauf auf einer Branch-Umgebung achten auf: Zugriff von `mcp` auf `McpPseudonymSecret` (`GetSecretValue`, Env `MCP_PSEUDONYM_SECRET_ARN`), Laufzeit von `get_responses` bei vielen Sitzungen (liest wie die Kunden-API alle Sitzungen des Zeitraums, bis 10.000; Lesebudget 20 s) und die Menge pro Seite in Claude (Seiten sind auf 256 KB begrenzt).
+- **Dateien:** `mcp/results_v1.ts` (rein: Zeitraum, Cursor, Seitenaufbau, Schwärzung, Abbildung), Schemas und Katalog in `tools_v1.ts`, Ablauf in `tool_handlers.ts`, neue `McpToolDeps` (`summarizeSessions`, `loadAggregates`, `readSessions`, `pseudonymKeys`; Standard in `tool_deps.ts`), `shared/mcp_pseudonym_keys.ts` lädt das Secret (Schlüssel 5 min im Speicher).
+- **Nur `responseId` als Pseudonym:** `conversationId` ist bei Kanal `flow` dieselbe ID wie `responseId`, `tokenId` wird gar nicht gelesen. Ein zweites Pseudonym brächte nichts, die Ausgabe hat deshalb nur `responseId` (Datenminimierung); `surveyName` und weitere interne Felder fehlen ebenfalls.
+- **Einzelantworten je Sitzung** statt je Antwort: `{ responseId, channel, status, version, startedHour, answers: [{ questionId, type, secondsFromStart, value | redacted + hasText }] }`.
+- **Cursor ohne Klar-ID:** Die Reihenfolge ist Sitzungsstart, dann Pseudonym (nicht die Klar-ID). Der Cursor trägt nur Start, Pseudonym und einen Abdruck von Zeitraum und Filtern (andere Filter → `cursor_invalid`), versiegelt, gebunden an Mandant und Umfrage, 15 min gültig. Die Position bleibt auch bei neuen Sitzungen stabil (kein Offset).
+- **Freitext fail-safe:** Nur `rating`/`nps` (Zahl), `yes_no` (Wahrheitswert) und `choice` (Text, bereinigt, höchstens 200 Zeichen) erscheinen unverändert. Alles andere, auch ein unbekannter oder vom Flow mitgeschickter Typ oder ein falscher Werttyp, gilt als Freitext: ohne `mcpAllowComments` nur `redacted: true` und `hasText`, mit Freigabe bereinigt (Steuer- und Formatzeichen, Zeilenumbrüche → Leerzeichen) und auf 2.000 Zeichen gekürzt. Unbekannte Typen erscheinen als `unknown`.
+- **Seitengröße:** höchstens `limit` (Standard 50, höchstens 100) Sitzungen und 256 KB; die Seite endet früher (mindestens eine Sitzung), `nextCursor` setzt fort.
+- **`get_aggregates`:** Titel aus Draft, danach Prod/Stage/Backup (`null` für Fragen, die nirgends mehr stehen); Reihenfolge der Umfrage. Ausgabe pro Frage `{ questionId, title, type, count, average?, distribution?, nps? }`; Kommentare ohne `distribution`, Verteilungen höchstens 100 Werte (die häufigsten, Schlüssel bereinigt). Die Umfrage muss in der Data Table existieren (sonst `not_found`).
+- **Zeiträume** im Format der Kunden-API (`YYYY-MM-DDTHH:mm:ss`, UTC, `to` exklusiv). Zu lang → `range_too_large { maxMs }`; auch wenn das Lesebudget nicht reicht (dann in kürzeren Zeiträumen abfragen). Ungültiges Datum → `invalid_input`. Ungültige Umfrage-ID → `not_found` ohne Abfrage.
+- **Server-Instructions** weisen zusätzlich darauf hin, Befragte nicht zu identifizieren oder Antworten mit anderen Daten zu verknüpfen.
+- **Review (Fokus Datenschutz), umgesetzt:**
+  - `get_aggregates` gab Freitext als Schlüssel von `distribution` aus (unbekannter Typ, unpassende Werte) und kürzte bei mehr als 100 Werten nur. Jetzt: Verteilung nur für strukturierte Typen mit typgerechten Werten, Rest als `otherCount`; über 100 Werte keine Verteilung.
+  - `choice`-Werte galten ungeprüft als strukturiert. Jetzt nur Labels der Frage aus Draft/Prod/Stage/Backup (`collectQuestionIndex`), sonst Freitext. Labels alter, nirgends mehr gespeicherter Versionen sind unbekannt: Diese Antworten werden geschwärzt (bewusst fail-safe).
+  - Zeitstempel auf die Millisekunde hätten die Conversation in Genesys verraten: `startedHour` (volle Stunde) und `secondsFromStart` statt `startedAt`/`answeredAt`.
+  - `get_responses`/`get_results_summary` lesen jetzt wie `get_aggregates` die Zeile der Umfrage (sonst bei fehlgeschlagenem Löschjob noch Daten gelöschter Umfragen).
+  - Audit-Log der Auswertung mit Zeitraum, Filtern, Anzahl, Folgeseite und `allowComments` (Rechenschaftspflicht), ohne Inhalte und Pseudonyme.
+  - Pseudonym zusätzlich an die Umfrage gebunden; `questionId` auf `[A-Za-z0-9_-]` begrenzt.
+  - Folgeseiten lesen erst ab dem Sitzungsstart im Cursor (weniger Lesezugriffe, kein `range_too_large` mitten im Blättern, wenn die erste Seite ging). `DATE_PATTERN` kommt aus `reporting_api/v1.ts`.
+  - Offen bleibt: keine Mindestgröße (k-Anonymität) bei Aggregaten oder kleinen Zeiträumen.
 
 ### M11
 
@@ -543,7 +564,8 @@ Gilt für create/save/validate. Deploy durchläuft die Schritte 6–8 auf dem ge
 
 ## Pseudonymisierung
 
-- **Ersetzte Kennungen:** `responseId`, `conversationId` und `tokenId` werden zu `r_<HMAC>`. Das Pseudonym ist stabil pro Mandant und ohne Secret nicht umkehrbar.
+- **Ersetzte Kennungen:** `responseId`, `conversationId` und `tokenId` werden zu `r_<HMAC>`. Das Pseudonym ist stabil pro Mandant und Umfrage und ohne Secret nicht umkehrbar.
+- **Zeitpunkte:** Sitzungsstart nur als volle Stunde, Antworten als Sekunden seit dem Start.
 - **Cursor:** versiegelt (AES-GCM) und an Mandant und Umfrage gebunden. Klar-IDs kommen nie in Ausgabe oder Cursor.
 - **Kommentare:** Ohne `mcpAllowComments` erscheint `{ type: "comment", redacted: true, hasText }`. Mit Flag wird der Text auf 2.000 Zeichen gekürzt und von Steuerzeichen bereinigt.
 
