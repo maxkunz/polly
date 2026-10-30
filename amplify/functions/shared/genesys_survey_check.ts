@@ -324,8 +324,10 @@ export async function loadFlowSurvey(
 
     const survey = parseProdSurvey(row.body?.[column], surveyId);
     if (!survey) return { status: "unavailable", reason: `No valid ${column} version` };
+    // `__meta` nur lesen, wenn der Draft keine eigene Basis-URL hat
+    const draftBaseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
     const baseUrl = options.withBaseUrl
-      ? pickBaseUrl(readDraftBaseUrl(row.body?.Draft, surveyId), await loadDefaultBaseUrl(tenantId, access))
+      ? pickBaseUrl(draftBaseUrl, draftBaseUrl ? undefined : await loadDefaultBaseUrl(tenantId, access))
       : undefined;
     return { status: "ok", survey, ...(baseUrl ? { baseUrl } : {}) };
   } catch (err: any) {
@@ -434,24 +436,19 @@ const defaultBaseUrlCache = new TtlCache<string>({ ttlMs: 60 * 1000 });
 
 /**
  * Standard-Basis-URL des Mandanten (`meta.web.defaultBaseUrl` in `__meta`, in den Einstellungen gepflegt).
- * Ungültige Werte (`baseUrlError`) und Lesefehler ergeben `undefined`, dann gilt die Polly-Umfrageseite;
- * Fehler werden nicht gemerkt.
+ * Ungültige Werte (`baseUrlError`) ergeben `undefined`, dann gilt die Polly-Umfrageseite.
+ * Wirft bei Lesefehlern (Fehler mit `status`), damit keine Links auf die falsche Seite entstehen; Fehler werden nicht gemerkt.
  */
 export async function loadDefaultBaseUrl(tenantId: string, access: SurveyTableAccess): Promise<string | undefined> {
-  try {
-    const value = await defaultBaseUrlCache.getOrLoad(tenantId, async () => {
-      const raw = (await readMetaDraft(access))?.web?.defaultBaseUrl;
-      const baseUrl = typeof raw === "string" ? raw.trim() : "";
-      const error = baseUrl ? baseUrlError(baseUrl) : null;
-      if (error) {
-        console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error, length: baseUrl.length });
-        return { value: "" };
-      }
-      return { value: baseUrl };
-    });
-    return value || undefined;
-  } catch (err: any) {
-    console.warn("[genesys_survey_check] Cannot load default base URL", { tenantId, reason: err?.message ?? "request failed" });
-    return undefined;
-  }
+  const value = await defaultBaseUrlCache.getOrLoad(tenantId, async () => {
+    const raw = (await readMetaDraft(access))?.web?.defaultBaseUrl;
+    const baseUrl = typeof raw === "string" ? raw.trim() : "";
+    const error = baseUrl ? baseUrlError(baseUrl) : null;
+    if (error) {
+      console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error, length: baseUrl.length });
+      return { value: "" };
+    }
+    return { value: baseUrl };
+  });
+  return value || undefined;
 }

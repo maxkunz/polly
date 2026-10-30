@@ -11,8 +11,11 @@ import {
 	INVITATION_COUNT_MIN,
 	buildInvitationCsv,
 	buildInvitationUrl,
-	expirationFromDate
+	expirationFromDate,
+	pickBaseUrl,
+	usableBaseUrl
 } from "@/domain/survey/invitationLinks";
+import { loadWebSettings } from "@/services/metaSettingsService";
 import { downloadBlob } from "@/utils/download";
 
 export interface UseSurveyInvitationsOptions {
@@ -63,7 +66,9 @@ export function useSurveyInvitations({ survey, surveyId, existingRow }: UseSurve
 
 	/** Basis-URL der Umfrage (gespeicherter Draft), sonst Standard aus den Einstellungen; leer = Polly-Umfrageseite. */
 	const surveyBaseUrl = computed(() => (survey.value.base_url ?? "").trim());
-	const baseUrl = computed(() => surveyBaseUrl.value || app.domain.meta.web.defaultBaseUrl);
+	// Ungültige Standard-URL (z. B. von Hand in __meta eingetragen) ignorieren wie das Backend
+	const defaultBaseUrl = computed(() => usableBaseUrl(app.domain.meta.web.defaultBaseUrl));
+	const baseUrl = computed(() => pickBaseUrl(surveyBaseUrl.value, defaultBaseUrl.value) ?? "");
 	/** Woher die Basis-URL kommt, für die Anzeige des Link-Ziels. */
 	const baseUrlSource = computed<"survey" | "default" | "fallback">(() =>
 		surveyBaseUrl.value ? "survey" : baseUrl.value ? "default" : "fallback"
@@ -114,6 +119,8 @@ export function useSurveyInvitations({ survey, surveyId, existingRow }: UseSurve
 		errorMessage.value = "";
 		lastGeneratedCount.value = null;
 		try {
+			// Standard-Basis-URL frisch lesen: kann seit dem Login in den Einstellungen geändert worden sein
+			app.domain.meta.web = await loadWebSettings(await app.ensureDataTableId());
 			const tokens = await createInvitations(
 				{ surveyId, count: count.value!, multi: multi.value, ...(exp !== undefined ? { exp } : {}) },
 				controller.signal

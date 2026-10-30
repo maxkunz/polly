@@ -6,7 +6,8 @@ import {
 	buildPreviewUrl,
 	expirationFromDate,
 	formatInvitationExpiration,
-	pickBaseUrl
+	pickBaseUrl,
+	usableBaseUrl
 } from "../src/domain/survey/invitationLinks";
 
 let passed = 0;
@@ -117,6 +118,14 @@ test("Wirksame Basis-URL: Umfrage vor Standard, sonst leer", () => {
 	assert.equal(pickBaseUrl("  ", " https://b.de/ "), "https://b.de/");
 	assert.equal(pickBaseUrl(undefined, undefined), undefined);
 	assert.equal(pickBaseUrl(null, ""), undefined);
+});
+
+test("Verwendbare Basis-URL: getrimmt, ungültig oder leer ergibt undefined", () => {
+	assert.equal(usableBaseUrl(" https://b.de/{token} "), "https://b.de/{token}");
+	assert.equal(usableBaseUrl("http://intranet/umfrage"), undefined);
+	assert.equal(usableBaseUrl("https://b.de/{token}/{token}"), undefined);
+	assert.equal(usableBaseUrl(""), undefined);
+	assert.equal(usableBaseUrl(undefined), undefined);
 });
 
 console.log(`\n${passed} Tests bestanden`);

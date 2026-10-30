@@ -10,6 +10,7 @@ import { displayTechnicalName } from "@/domain/survey/surveyTypes";
 import { SURVEY_LANGUAGES, DEFAULT_SURVEY_LANGUAGE } from "@/domain/survey/flowTypes";
 import type { SurveyLanguage } from "@/domain/survey/flowTypes";
 import { BASE_URL_TOKEN_PLACEHOLDER } from "@/constants/surveyConstants";
+import { usableBaseUrl } from "@/domain/survey/invitationLinks";
 import { surveyFieldIds } from "@/domain/survey/surveyFieldIds";
 import { useFieldErrors } from "@/composables/useFieldErrors";
 import FieldError from "@/components/ui/FieldError.vue";
@@ -50,7 +51,7 @@ const computedTechnicalName = computed(() => displayTechnicalName(props.survey, 
 // {token} nicht direkt in die Sprachdatei schreiben: vue-i18n würde es als Parameter lesen
 const tokenPlaceholder = BASE_URL_TOKEN_PLACEHOLDER;
 // Standard-Basis-URL des Mandanten (Einstellungen): gilt, solange die Umfrage keine eigene hat
-const defaultBaseUrl = computed(() => app.domain.meta.web.defaultBaseUrl);
+const defaultBaseUrl = computed(() => usableBaseUrl(app.domain.meta.web.defaultBaseUrl) ?? "");
 
 // Umfragen ohne Feld (ältere Stände) gelten als Deutsch
 const languageOptions = computed(() => SURVEY_LANGUAGES.map(value => ({ value, label: t(`language.${value}`) })));
@@ -204,6 +205,7 @@ function setWebTheme(value: string | null): void {
 						<p :id="`${surveyBaseUrlId}_hint`" class="mt-1 text-xs text-[var(--p-text-muted-color)]">
 							{{ t("surveyEditor.meta.baseUrlHint", { placeholder: tokenPlaceholder }) }}
 							<template v-if="defaultBaseUrl">{{ t("surveyEditor.meta.baseUrlHintDefault", { url: defaultBaseUrl }) }}</template>
+							<template v-else>{{ t("surveyEditor.meta.baseUrlHintFallback") }}</template>
 						</p>
 						<FieldError :fieldId="surveyBaseUrlId" />
 					</div>

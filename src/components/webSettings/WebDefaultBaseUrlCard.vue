@@ -27,7 +27,13 @@ const inputId = "web_default_base_url_input";
 const value = ref(app.domain.meta.web.defaultBaseUrl);
 const saving = ref(false);
 
-watch(() => app.domain.meta.web.defaultBaseUrl, next => (value.value = next));
+// Neu geladenen Wert nur übernehmen, wenn keine ungespeicherte Eingabe überschrieben wird
+watch(
+	() => app.domain.meta.web.defaultBaseUrl,
+	(next, previous) => {
+		if (value.value.trim() === previous) value.value = next;
+	}
+);
 
 const canEdit = computed(() => app.canDeploy);
 const trimmed = computed(() => value.value.trim());
@@ -37,11 +43,9 @@ const errorText = computed(() => (errorKey.value ? t(`validation.${errorKey.valu
 
 async function save(): Promise<void> {
 	if (!canEdit.value || !dirty.value || errorKey.value || saving.value) return;
-	const datatableId = app.datatableId;
-	if (!datatableId) return;
 	saving.value = true;
 	try {
-		const meta = await saveWebDefaultBaseUrl(datatableId, trimmed.value);
+		const meta = await saveWebDefaultBaseUrl(await app.ensureDataTableId(), trimmed.value);
 		app.domain.meta.web = meta.web;
 		toast.add({ severity: "success", summary: t("settings.webDefaults.saved"), life: 3000 });
 	} catch (error) {
