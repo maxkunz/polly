@@ -339,7 +339,7 @@ curl -X POST "[API_URL]/invitations" \
 | Feld | Beschreibung |
 |---|---|
 | `inviteToken` | Der signierte Token der Einladung. |
-| `fullLink` | Fertiger Link zur Umfrage. Hat die Umfrage in Polly eine gültige Basis-URL oder ist für den Mandanten eine gültige Standard-Basis-URL hinterlegt (Einstellungen, Vorrang hat die der Umfrage), zeigt er auf diese Seite (Platzhalter `{token}` wird ersetzt, sonst wird `token=<jwt>` angehängt). Sonst, auch bei einer ungültigen Basis-URL, zeigt er auf die Umfrageseite von Polly (`…/s/<token>`). |
+| `fullLink` | Fertiger Link zur Umfrage. Hat die Umfrage in Polly eine gültige Basis-URL oder ist für den Mandanten eine gültige Standard-Basis-URL hinterlegt (Einstellungen, Vorrang hat die der Umfrage), zeigt er auf diese Seite (Platzhalter `{token}` wird ersetzt, sonst wird `token=<jwt>` angehängt). Sonst, auch bei einer ungültigen Basis-URL, zeigt er auf die Umfrageseite von Polly (`…/s/<token>`). Eine Änderung der Basis-URL wirkt sofort. |
 | `expiration_date` | Ablaufdatum (UTC) oder `null`, wenn die Einladung nicht abläuft. |
 | `is_multi` | Wie im Request. |
 
@@ -495,7 +495,7 @@ curl "[API_URL]/surveys/123e4567-e89b-12d3-a456-426614174000" -H "Authorization:
 
 **Hinweise:**
 - **Nur der aktuelle Prod-Stand.** Es gibt keine Versionsgeschichte: Ältere Versionen sind nicht abrufbar. Antworten im Reporting tragen ihre `surveyVersion`; haben sich Fragen seit dieser Version geändert, passen Texte und Verzweigungen nicht mehr zu den alten Antworten (der technische Name `questionId` bleibt dabei gleich).
-- **Bis zu 1 Minute verzögert.** Ein neuer Prod-Stand erscheint in der API erst nach bis zu einer Minute, ein geändertes Design nach bis zu anderthalb Minuten. Das gilt auch für gerade gelöschte Umfragen.
+- **Bis zu 1 Minute verzögert.** Ein neuer Prod-Stand erscheint in der API erst nach bis zu einer Minute, ein geändertes Design nach bis zu anderthalb Minuten, eine geänderte Standard-Basis-URL (`baseUrl`) nach bis zu zwei Minuten. Das gilt auch für gerade gelöschte Umfragen. Einladungen (`fullLink`) nutzen dagegen immer die aktuelle Basis-URL.
 - Rufen Sie die Liste nicht bei jedem Seitenaufruf Ihres Systems ab, sondern halten Sie das Ergebnis selbst kurz vor.
 
 ## 8. API 6: Web-Designs

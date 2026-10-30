@@ -484,6 +484,8 @@ export const tlh: MessageSchema = {
 			noProd: "Prod Sep tu'be'lu'. yIchu'qa'.",
 			throttled: "Genesys Qu' law'. tugh yInIDqa'.",
 			expiryInPast: "Qaw'meH jaj ret.",
+			baseUrlChanged: "URL wa' choHlu'pu'. ghoch chu' yI'ol 'ej yIchenmoHqa'.",
+			metaUnreadable: "__meta laDlaHbe'.",
 			generic: "rItlh mu'mey chenmoHmeH Qagh"
 		}
 	},
@@ -660,7 +662,8 @@ export const tlh: MessageSchema = {
 			hint: "{placeholder} 'ej ?token=…. chIm = Polly QIn ra'ghom.",
 			save: "pol",
 			saved: "URL pol.",
-			saveFailed: "pol lonbe'"
+			saveFailed: "pol lonbe'",
+			metaUnreadable: "__meta laDlaHbe'."
 		},
 		features: {
 			title: "laH chu'lu'pu'bogh"

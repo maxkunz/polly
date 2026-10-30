@@ -484,6 +484,8 @@ export const la: MessageSchema = {
 			noProd: "Quaestionarium statum Prod (iam) non habet. Aspectum renova.",
 			throttled: "Genesys nunc occupatus est. Mox iterum tempta.",
 			expiryInPast: "Dies exitus praeteriit.",
+			baseUrlChanged: "URL fundamentalis interim mutata est. Novum finem nexuum inspice et iterum genera.",
+			metaUnreadable: "Optiones in tabula (linea __meta) legi non potuerunt.",
 			generic: "Error in nexibus invitationis creandis"
 		}
 	},
@@ -660,7 +662,8 @@ export const la: MessageSchema = {
 			hint: "Valet omnibus quaestionibus sine URL propria. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Vacua = nexus ad paginam Polly ducit.",
 			save: "Servare",
 			saved: "URL fundamentalis exempli servata.",
-			saveFailed: "Servare non successit"
+			saveFailed: "Servare non successit",
+			metaUnreadable: "Optiones in tabula (linea __meta) legi non potuerunt."
 		},
 		features: {
 			title: "Facultates activae"

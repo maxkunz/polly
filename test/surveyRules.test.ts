@@ -41,7 +41,7 @@ test("Befunde tragen Code und rohe Parameter, keinen Text", () => {
 	assert.equal(issues.length, 1);
 	assert.equal(issues[0].code, "ttsTextTooLong");
 	assert.deepEqual(issues[0].params, {
-		labelKey: "surveyEditor.meta.greeting",
+		label: "greeting",
 		length: TTS_TEXT_MAX_CHARS + 1,
 		max: TTS_TEXT_MAX_CHARS
 	});
@@ -119,8 +119,13 @@ test("Lock: via wird gelesen, unbekannte Werte verworfen", () => {
 
 test("Choice-Vorgaben kommen vom Aufrufer", () => {
 	assert.deepEqual(createDefaultChoiceOptions(n => `Option ${n}`).labels.map(label => label.label), ["Option 1", "Option 2"]);
+	const custom = createEmptyQuestion("choice", n => `Antwort ${n}`);
+	assert.deepEqual((custom.options as { labels: { label: string }[] }).labels.map(label => label.label), ["Antwort 1", "Antwort 2"]);
+	// Ohne Aufrufer-Text neutral vorbelegt, damit die neue Frage nicht sofort ungültig ist
 	const choice = createEmptyQuestion("choice");
-	assert.deepEqual((choice.options as { labels: { label: string }[] }).labels.map(label => label.label), ["", ""]);
+	assert.deepEqual((choice.options as { labels: { label: string }[] }).labels.map(label => label.label), ["Option 1", "Option 2"]);
+	const codes = surveyRules(survey([{ ...choice, title: "Welche?" }])).map(issue => issue.code);
+	assert.ok(!codes.includes("choiceOptionEmpty"), codes.join(", "));
 });
 
 console.log(`\n${passed} Tests bestanden`);

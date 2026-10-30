@@ -1,6 +1,6 @@
 import type { Survey, SurveyQuestion } from "./surveyTypes";
 import { questionRules, surveyRules } from "./surveyRules";
-import type { SurveyRuleIssue, SurveyRulesOptions } from "./surveyRules";
+import type { SurveyRuleIssue, SurveyRuleLabel, SurveyRulesOptions } from "./surveyRules";
 import { i18n, currentLocaleTag } from "@/i18n";
 
 /**
@@ -27,11 +27,21 @@ export interface ValidationError {
 
 export type ValidateSurveyOptions = SurveyRulesOptions;
 
+/** i18n-Schlüssel der Feldbezeichnungen aus `params.label`. */
+const RULE_LABEL_KEYS: Record<SurveyRuleLabel, string> = {
+	greeting: "surveyEditor.meta.greeting",
+	closing: "surveyEditor.meta.closing",
+	title: "surveyQuestionFields.title",
+	reprompt: "surveyQuestionFields.reprompt",
+	minLabel: "ratingOptions.minLabel",
+	maxLabel: "ratingOptions.maxLabel"
+};
+
 function ruleMessage(code: SurveyRuleIssue["code"], ruleParams: SurveyRuleIssue["params"]): string {
 	const { t } = i18n.global;
-	const { labelKey, ...params } = ruleParams;
-	if (typeof labelKey === "string") {
-		params.field = t(labelKey);
+	const { label, ...params } = ruleParams;
+	if (typeof label === "string" && label in RULE_LABEL_KEYS) {
+		params.field = t(RULE_LABEL_KEYS[label as SurveyRuleLabel]);
 	}
 	// Nur beim TTS-Limit werden die Zahlen mit Tausendertrennzeichen ausgegeben
 	if (code === "ttsTextTooLong") {

@@ -1,6 +1,14 @@
 import { OneRowDataTable, updateDataTableRow } from "@/services/genesys/dataTable";
 import { Meta } from "@/domain/Meta";
 
+/** `__meta` fehlt oder das Feld `Draft` ist kein JSON-Objekt; Meldung übersetzen die Aufrufer. */
+export class MetaUnreadableError extends Error {
+	constructor() {
+		super("__meta unreadable");
+		this.name = "MetaUnreadableError";
+	}
+}
+
 /** Liest die Zeile `__meta` frisch; `draft` ist das geparste Feld `Draft` (immer ein Objekt). */
 async function readMetaRow(datatableId: string): Promise<{ row: Record<string, any>; draft: Record<string, any> }> {
 	const row: Record<string, any> = await OneRowDataTable(datatableId, "__meta");
@@ -8,9 +16,9 @@ async function readMetaRow(datatableId: string): Promise<{ row: Record<string, a
 	try {
 		draft = typeof row?.Draft === "string" ? JSON.parse(row.Draft) : (row?.Draft ?? {});
 	} catch {
-		throw new Error("__meta konnte nicht gelesen werden");
+		throw new MetaUnreadableError();
 	}
-	if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("__meta konnte nicht gelesen werden");
+	if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new MetaUnreadableError();
 	return { row, draft: draft as Record<string, any> };
 }
 

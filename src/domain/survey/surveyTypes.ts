@@ -117,7 +117,10 @@ export function createDefaultChoiceOptions(labelFor: ChoiceLabelFor): ChoiceOpti
 	};
 }
 
-export function createEmptyQuestion(type: QuestionType = "rating", choiceLabelFor: ChoiceLabelFor = () => ""): SurveyQuestion {
+/** Sprachneutraler Vorgabetext ohne Aufrufer-Text, damit neue Auswahlfragen nicht sofort als leer gelten (`choiceOptionEmpty`). */
+const neutralChoiceLabel: ChoiceLabelFor = number => `Option ${number}`;
+
+export function createEmptyQuestion(type: QuestionType = "rating", choiceLabelFor: ChoiceLabelFor = neutralChoiceLabel): SurveyQuestion {
 	const id = crypto.randomUUID();
 	const question: SurveyQuestion = {
 		id,

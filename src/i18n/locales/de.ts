@@ -481,6 +481,8 @@ export const de = {
 			noProd: "Die Umfrage hat keinen Prod-Stand (mehr). Bitte Ansicht neu laden.",
 			throttled: "Genesys ist gerade ausgelastet. Bitte in einem Moment erneut versuchen.",
 			expiryInPast: "Das Ablaufdatum liegt in der Vergangenheit.",
+			baseUrlChanged: "Die Standard-Basis-URL wurde inzwischen geändert. Bitte das neue Ziel der Links prüfen und erneut erzeugen.",
+			metaUnreadable: "Die Einstellungen in der Data Table (Zeile __meta) konnten nicht gelesen werden.",
 			generic: "Fehler beim Erzeugen der Einladungslinks"
 		}
 	},
@@ -657,7 +659,8 @@ export const de = {
 			hint: "Gilt für alle Umfragen ohne eigene Basis-URL. Absolute https-URL; mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Leer = Links zeigen auf die Polly-Umfrageseite.",
 			save: "Speichern",
 			saved: "Standard-Basis-URL gespeichert.",
-			saveFailed: "Speichern fehlgeschlagen"
+			saveFailed: "Speichern fehlgeschlagen",
+			metaUnreadable: "Die Einstellungen in der Data Table (Zeile __meta) konnten nicht gelesen werden."
 		},
 		features: {
 			title: "Aktivierte Funktionen"

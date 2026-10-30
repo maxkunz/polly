@@ -483,6 +483,8 @@ export const fr: MessageSchema = {
 			noProd: "L'enquête n'a pas (plus) de version Prod. Veuillez recharger la vue.",
 			throttled: "Genesys est actuellement surchargé. Veuillez réessayer dans un instant.",
 			expiryInPast: "La date d'expiration est dans le passé.",
+			baseUrlChanged: "L'URL de base par défaut a été modifiée entre-temps. Veuillez vérifier la nouvelle cible des liens et générer à nouveau.",
+			metaUnreadable: "Les paramètres de la data table (ligne __meta) n'ont pas pu être lus.",
 			generic: "Erreur lors de la création des liens d'invitation"
 		}
 	},
@@ -659,7 +661,8 @@ export const fr: MessageSchema = {
 			hint: "S'applique à tous les sondages sans URL de base propre. URL https absolue ; {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Vide = les liens pointent vers la page de sondage Polly.",
 			save: "Enregistrer",
 			saved: "URL de base par défaut enregistrée.",
-			saveFailed: "Échec de l'enregistrement"
+			saveFailed: "Échec de l'enregistrement",
+			metaUnreadable: "Les paramètres de la data table (ligne __meta) n'ont pas pu être lus."
 		},
 		features: {
 			title: "Fonctionnalités activées"

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 /**
  * Die reinen Domain-Module werden von den Lambdas gebündelt (esbuild ab Repo-Root). Dort gibt es
@@ -39,12 +40,10 @@ const ENTRY_MODULES = [
 	"src/constants/surveyConstants.ts"
 ];
 
-// import … from "x", import "x", export … from "x", import("x") – auch mehrzeilig und mit `import type`
-const SPECIFIER_PATTERN = /(?:^|[^.\w$])(?:import|export)\s*(?:type\s+)?(?:[^'"`;]*?\sfrom\s*)?\(?\s*["']([^"']+)["']/gm;
-
+// import … from "x", import "x", export … from "x", import("x") – über den Scanner von TypeScript, damit
+// Kommentare und Strings (z. B. "src/**/x") sicher übergangen werden
 function importSpecifiers(source: string): string[] {
-	const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
-	return [...withoutComments.matchAll(SPECIFIER_PATTERN)].map(match => match[1]);
+	return ts.preProcessFile(source, true, true).importedFiles.map(file => file.fileName);
 }
 
 function resolveModule(fromFile: string, specifier: string): string {
@@ -75,7 +74,7 @@ function findViolations(entry: string): { files: Set<string>; violations: string
 	return { files, violations };
 }
 
-test("Importerkennung findet alle Formen und ignoriert Kommentare", () => {
+test("Importerkennung findet alle Formen und ignoriert Kommentare und Strings", () => {
 	const source = [
 		`import { a } from "./a";`,
 		`import type { B } from "@/b";`,
@@ -89,9 +88,12 @@ test("Importerkennung findet alle Formen und ignoriert Kommentare", () => {
 		`const lazy = () => import("./lazy");`,
 		`// import { x } from "@/kommentar";`,
 		`/* import { y } from "@/block"; */`,
-		`const text = "import nicht";`
+		`const text = "import nicht";`,
+		`const glob = "src/**/x";`,
+		`import { z } from "@/nach-glob";`,
+		`const ende = "*/";`
 	].join("\n");
-	assert.deepEqual(importSpecifiers(source), ["./a", "@/b", "vue", "./side-effect", "../e", "vue-i18n", "./lazy"]);
+	assert.deepEqual(importSpecifiers(source), ["./a", "@/b", "vue", "./side-effect", "../e", "vue-i18n", "./lazy", "@/nach-glob"]);
 });
 
 for (const entry of ENTRY_MODULES) {

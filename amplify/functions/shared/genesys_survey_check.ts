@@ -1,5 +1,5 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
-import { baseUrlError, pickBaseUrl } from "../../../src/domain/survey/invitationLinks";
+import { baseUrlError, pickBaseUrl, usableBaseUrl } from "../../../src/domain/survey/invitationLinks";
 import { fetchWithTimeout } from "./http";
 import { isValidSurveyId } from "./survey_id";
 import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "./survey_results";
@@ -274,19 +274,21 @@ function readDraftBaseUrl(raw: unknown, surveyId: string): string | undefined {
   }
   const baseUrl = (draft as { base_url?: unknown } | null)?.base_url;
   if (typeof baseUrl !== "string" || !baseUrl.trim()) return undefined;
-  const error = baseUrlError(baseUrl);
-  if (error) {
-    console.warn("[genesys_survey_check] Ignoring invalid base_url in Draft", { surveyId, error, length: baseUrl.length });
-    return undefined;
+  const usable = usableBaseUrl(baseUrl);
+  if (!usable) {
+    console.warn("[genesys_survey_check] Ignoring invalid base_url in Draft", { surveyId, error: baseUrlError(baseUrl.trim()), length: baseUrl.length });
   }
-  return baseUrl.trim();
+  return usable;
 }
 
 /** Spalte der Zeile `survey_<id>`, aus der ein Flow-Stand gelesen wird. */
 export type FlowSurveyColumn = "Prod" | "Stage";
 
-/** `withBaseUrl`: zusätzlich die wirksame Basis-URL ermitteln (`base_url` aus dem Draft, sonst Standard des Mandanten; nur für Links der Kunden-API). */
-export type FlowSurveyOptions = { withBaseUrl?: boolean };
+/**
+ * `withBaseUrl`: zusätzlich die wirksame Basis-URL ermitteln (`base_url` aus dem Draft, sonst Standard des Mandanten; nur für Links der Kunden-API).
+ * `freshBaseUrl`: den Standard ohne Cache aus `__meta` lesen (beim Signieren von Einladungen, deren Links sich nicht mehr ändern lassen).
+ */
+export type FlowSurveyOptions = { withBaseUrl?: boolean; freshBaseUrl?: boolean };
 
 /**
  * Lädt den Prod-Stand der Umfrage aus der Data Table des Mandanten. Liegt ein Lösch-Job vor
@@ -327,7 +329,7 @@ export async function loadFlowSurvey(
     // `__meta` nur lesen, wenn der Draft keine eigene Basis-URL hat
     const draftBaseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
     const baseUrl = options.withBaseUrl
-      ? pickBaseUrl(draftBaseUrl, draftBaseUrl ? undefined : await loadDefaultBaseUrl(tenantId, access))
+      ? pickBaseUrl(draftBaseUrl, draftBaseUrl ? undefined : await loadDefaultBaseUrl(tenantId, access, options.freshBaseUrl))
       : undefined;
     return { status: "ok", survey, ...(baseUrl ? { baseUrl } : {}) };
   } catch (err: any) {
@@ -438,17 +440,17 @@ const defaultBaseUrlCache = new TtlCache<string>({ ttlMs: 60 * 1000 });
  * Standard-Basis-URL des Mandanten (`meta.web.defaultBaseUrl` in `__meta`, in den Einstellungen gepflegt).
  * Ungültige Werte (`baseUrlError`) ergeben `undefined`, dann gilt die Polly-Umfrageseite.
  * Wirft bei Lesefehlern (Fehler mit `status`), damit keine Links auf die falsche Seite entstehen; Fehler werden nicht gemerkt.
+ * `fresh`: am Cache vorbei lesen (das Ergebnis wird trotzdem gemerkt).
  */
-export async function loadDefaultBaseUrl(tenantId: string, access: SurveyTableAccess): Promise<string | undefined> {
+export async function loadDefaultBaseUrl(tenantId: string, access: SurveyTableAccess, fresh = false): Promise<string | undefined> {
   const value = await defaultBaseUrlCache.getOrLoad(tenantId, async () => {
     const raw = (await readMetaDraft(access))?.web?.defaultBaseUrl;
     const baseUrl = typeof raw === "string" ? raw.trim() : "";
-    const error = baseUrl ? baseUrlError(baseUrl) : null;
-    if (error) {
-      console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error, length: baseUrl.length });
-      return { value: "" };
+    const usable = usableBaseUrl(baseUrl);
+    if (baseUrl && !usable) {
+      console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error: baseUrlError(baseUrl), length: baseUrl.length });
     }
-    return { value: baseUrl };
-  });
+    return { value: usable ?? "" };
+  }, fresh);
   return value || undefined;
 }

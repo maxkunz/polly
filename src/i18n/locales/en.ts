@@ -483,6 +483,8 @@ export const en: MessageSchema = {
 			noProd: "The survey has no Prod version (any more). Please reload the view.",
 			throttled: "Genesys is busy right now. Please try again in a moment.",
 			expiryInPast: "The expiry date is in the past.",
+			baseUrlChanged: "The default base URL has been changed in the meantime. Please check the new link target and generate again.",
+			metaUnreadable: "The settings in the data table (row __meta) could not be read.",
 			generic: "Error while creating the invitation links"
 		}
 	},
@@ -659,7 +661,8 @@ export const en: MessageSchema = {
 			hint: "Applies to all surveys without their own base URL. Absolute https URL; use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended. Empty = links point to the Polly survey page.",
 			save: "Save",
 			saved: "Default base URL saved.",
-			saveFailed: "Saving failed"
+			saveFailed: "Saving failed",
+			metaUnreadable: "The settings in the data table (row __meta) could not be read."
 		},
 		features: {
 			title: "Enabled features"

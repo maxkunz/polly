@@ -52,12 +52,15 @@ export type SurveyRuleCode =
 	| "followUpValueDuplicate"
 	| "followUpsTooDeep";
 
+/** Sprachneutrale Feldbezeichnung in `params.label` (TTS-Limit, Skalen-Labels). */
+export type SurveyRuleLabel = "greeting" | "closing" | "title" | "reprompt" | "minLabel" | "maxLabel";
+
 export interface SurveyRuleIssue {
 	field: string;
 	code: SurveyRuleCode;
 	/**
-	 * Parameter der Meldung, Zahlen unformatiert. `labelKey` ist der i18n-Schlüssel der
-	 * Feldbezeichnung; der Adapter setzt daraus den Parameter `field`.
+	 * Parameter der Meldung, Zahlen unformatiert. `label` (`SurveyRuleLabel`) benennt das Feld
+	 * sprachneutral; der Frontend-Adapter setzt daraus den übersetzten Parameter `field`.
 	 */
 	params: Record<string, unknown>;
 	questionId?: string;
@@ -162,7 +165,7 @@ export function isTtsTextTooLong(text: string | null | undefined): boolean {
 function ttsTooLongIssue(
 	text: string | null | undefined,
 	field: string,
-	labelKey: string,
+	label: SurveyRuleLabel,
 	fieldId: string,
 	questionId?: string
 ): SurveyRuleIssue | null {
@@ -170,7 +173,7 @@ function ttsTooLongIssue(
 	return {
 		field,
 		code: "ttsTextTooLong",
-		params: { labelKey, length: text!.length, max: TTS_TEXT_MAX_CHARS },
+		params: { label, length: text!.length, max: TTS_TEXT_MAX_CHARS },
 		questionId,
 		fieldId,
 		shownByField: true
@@ -218,8 +221,8 @@ export function questionRules(
 
 	// Fragetitel (prompt) und Reprompt werden im Bot Flow per TTS gesprochen
 	for (const error of [
-		ttsTooLongIssue(question.title, `${qField}.title`, "surveyQuestionFields.title", ids.title(question.id), question.id),
-		ttsTooLongIssue(question.reprompt_message, `${qField}.reprompt_message`, "surveyQuestionFields.reprompt", ids.reprompt(question.id), question.id)
+		ttsTooLongIssue(question.title, `${qField}.title`, "title", ids.title(question.id), question.id),
+		ttsTooLongIssue(question.reprompt_message, `${qField}.reprompt_message`, "reprompt", ids.reprompt(question.id), question.id)
 	]) {
 		if (error) errors.push(error);
 	}
@@ -237,16 +240,16 @@ export function questionRules(
 	if (question.type === "rating" || question.type === "nps") {
 		// Min/Max-Labels werden nur im Web angezeigt (kein TTS), daher nur die Länge begrenzen
 		const labels = (question.options ?? {}) as { min_label?: unknown; max_label?: unknown };
-		const labelFields = [
-			{ key: "min_label", value: labels.min_label, labelKey: "ratingOptions.minLabel", fieldId: ids.minLabel(question.id) },
-			{ key: "max_label", value: labels.max_label, labelKey: "ratingOptions.maxLabel", fieldId: ids.maxLabel(question.id) }
+		const labelFields: { key: string; value: unknown; label: SurveyRuleLabel; fieldId: string }[] = [
+			{ key: "min_label", value: labels.min_label, label: "minLabel", fieldId: ids.minLabel(question.id) },
+			{ key: "max_label", value: labels.max_label, label: "maxLabel", fieldId: ids.maxLabel(question.id) }
 		];
-		for (const { key, value, labelKey, fieldId } of labelFields) {
+		for (const { key, value, label, fieldId } of labelFields) {
 			if (typeof value === "string" && value.length > SCALE_LABEL_MAX_CHARS) {
 				errors.push({
 					field: `${qField}.options.${key}`,
 					code: "scaleLabelTooLong",
-					params: { labelKey, max: SCALE_LABEL_MAX_CHARS },
+					params: { label, max: SCALE_LABEL_MAX_CHARS },
 					questionId: question.id,
 					fieldId
 				});
@@ -454,8 +457,8 @@ export function surveyRules(survey: Survey, { webSurvey = true }: SurveyRulesOpt
 
 	// Begrüßung und Verabschiedung werden im Bot Flow per TTS gesprochen
 	for (const error of [
-		ttsTooLongIssue(survey.greeting_message, "survey.greeting_message", "surveyEditor.meta.greeting", surveyFieldIds.greeting),
-		ttsTooLongIssue(survey.closing_message, "survey.closing_message", "surveyEditor.meta.closing", surveyFieldIds.closing)
+		ttsTooLongIssue(survey.greeting_message, "survey.greeting_message", "greeting", surveyFieldIds.greeting),
+		ttsTooLongIssue(survey.closing_message, "survey.closing_message", "closing", surveyFieldIds.closing)
 	]) {
 		if (error) errors.push(error);
 	}
