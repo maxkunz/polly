@@ -53,6 +53,17 @@ export interface InvitationCsvRow {
 	url: string;
 }
 
+/** Basis-URL ohne Leerraum, wenn sie `baseUrlError` besteht; leer oder ungültig = `undefined`. */
+export function usableBaseUrl(baseUrl: string | null | undefined): string | undefined {
+	const value = baseUrl?.trim();
+	return value && !baseUrlError(value) ? value : undefined;
+}
+
+/** Wirksame Basis-URL: die der Umfrage, sonst der Standard des Mandanten; leer = Polly-Umfrageseite. */
+export function pickBaseUrl(surveyBaseUrl: string | null | undefined, defaultBaseUrl: string | null | undefined): string | undefined {
+	return surveyBaseUrl?.trim() || defaultBaseUrl?.trim() || undefined;
+}
+
 /**
  * Baut den Link einer Einladung:
  * - Basis-URL mit `{token}` → Platzhalter wird ersetzt

@@ -1,5 +1,5 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
-import { baseUrlError } from "../../../src/domain/survey/invitationLinks";
+import { baseUrlError, pickBaseUrl } from "../../../src/domain/survey/invitationLinks";
 import { fetchWithTimeout } from "./http";
 import { isValidSurveyId } from "./survey_id";
 import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "./survey_results";
@@ -240,7 +240,7 @@ export type SurveyTableAccess = {
 };
 
 export type ProdSurveyResult =
-  /** `baseUrl`: gültige `base_url` aus dem Draft (steht nicht im Flow-JSON), nur mit `withBaseUrl` und wenn gesetzt. */
+  /** `baseUrl`: wirksame Basis-URL, nur mit `withBaseUrl` und wenn gesetzt: gültige `base_url` aus dem Draft (steht nicht im Flow-JSON), sonst Standard des Mandanten aus `__meta`. */
   | { status: "ok"; survey: FlowSurvey; baseUrl?: string }
   /** Kein Prod- bzw. Stage-Stand, Umfrage gelöscht oder Löschung läuft. */
   | { status: "unavailable"; reason: string }
@@ -285,7 +285,7 @@ function readDraftBaseUrl(raw: unknown, surveyId: string): string | undefined {
 /** Spalte der Zeile `survey_<id>`, aus der ein Flow-Stand gelesen wird. */
 export type FlowSurveyColumn = "Prod" | "Stage";
 
-/** `withBaseUrl`: zusätzlich `base_url` aus dem Draft lesen (parst den ganzen Draft, nur für Links der Kunden-API). */
+/** `withBaseUrl`: zusätzlich die wirksame Basis-URL ermitteln (`base_url` aus dem Draft, sonst Standard des Mandanten; nur für Links der Kunden-API). */
 export type FlowSurveyOptions = { withBaseUrl?: boolean };
 
 /**
@@ -324,7 +324,11 @@ export async function loadFlowSurvey(
 
     const survey = parseProdSurvey(row.body?.[column], surveyId);
     if (!survey) return { status: "unavailable", reason: `No valid ${column} version` };
-    const baseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
+    // `__meta` nur lesen, wenn der Draft keine eigene Basis-URL hat
+    const draftBaseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
+    const baseUrl = options.withBaseUrl
+      ? pickBaseUrl(draftBaseUrl, draftBaseUrl ? undefined : await loadDefaultBaseUrl(tenantId, access))
+      : undefined;
     return { status: "ok", survey, ...(baseUrl ? { baseUrl } : {}) };
   } catch (err: any) {
     return errorResult(err?.message ?? "request failed", err?.status);
@@ -400,22 +404,51 @@ export async function listProdSurveys(
 }
 
 /**
- * Projekt-Tag der Installation (`meta.setup.projectTag` in der Zeile `__meta`, Feld `Draft`).
- * `undefined`, wenn die Zeile oder der Tag fehlt (wie im Frontend: dann zählt nur die unpräfixierte Rolle).
+ * Inhalt der Zeile `__meta` (Feld `Draft`). `undefined`, wenn die Zeile fehlt oder unlesbar ist.
  * Wirft bei anderen HTTP-Fehlern.
  */
-export async function loadProjectTag(access: SurveyTableAccess): Promise<string | undefined> {
+async function readMetaDraft(access: SurveyTableAccess): Promise<any | undefined> {
   const row = await getRow(access.region, access.token, access.dataTableId, "__meta");
   if (row.status === 404) return undefined;
   if (row.status !== 200) {
     throw Object.assign(new Error(`__meta row HTTP ${row.status}`), { status: row.status });
   }
-  let meta: any;
   try {
-    meta = typeof row.body?.Draft === "string" ? JSON.parse(row.body.Draft) : row.body?.Draft;
+    return typeof row.body?.Draft === "string" ? JSON.parse(row.body.Draft) : row.body?.Draft;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Projekt-Tag der Installation (`meta.setup.projectTag` in der Zeile `__meta`, Feld `Draft`).
+ * `undefined`, wenn die Zeile oder der Tag fehlt (wie im Frontend: dann zählt nur die unpräfixierte Rolle).
+ * Wirft bei anderen HTTP-Fehlern.
+ */
+export async function loadProjectTag(access: SurveyTableAccess): Promise<string | undefined> {
+  const meta = await readMetaDraft(access);
   const projectTag = meta?.setup?.projectTag;
   return typeof projectTag === "string" && projectTag.trim() ? projectTag.trim() : undefined;
+}
+
+/** Standard-Basis-URL pro Mandant (`""` = keine); kurz gemerkt, damit nicht jeder Aufruf `__meta` liest. */
+const defaultBaseUrlCache = new TtlCache<string>({ ttlMs: 60 * 1000 });
+
+/**
+ * Standard-Basis-URL des Mandanten (`meta.web.defaultBaseUrl` in `__meta`, in den Einstellungen gepflegt).
+ * Ungültige Werte (`baseUrlError`) ergeben `undefined`, dann gilt die Polly-Umfrageseite.
+ * Wirft bei Lesefehlern (Fehler mit `status`), damit keine Links auf die falsche Seite entstehen; Fehler werden nicht gemerkt.
+ */
+export async function loadDefaultBaseUrl(tenantId: string, access: SurveyTableAccess): Promise<string | undefined> {
+  const value = await defaultBaseUrlCache.getOrLoad(tenantId, async () => {
+    const raw = (await readMetaDraft(access))?.web?.defaultBaseUrl;
+    const baseUrl = typeof raw === "string" ? raw.trim() : "";
+    const error = baseUrl ? baseUrlError(baseUrl) : null;
+    if (error) {
+      console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error, length: baseUrl.length });
+      return { value: "" };
+    }
+    return { value: baseUrl };
+  });
+  return value || undefined;
 }

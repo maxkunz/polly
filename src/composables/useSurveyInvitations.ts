@@ -11,8 +11,11 @@ import {
 	INVITATION_COUNT_MIN,
 	buildInvitationCsv,
 	buildInvitationUrl,
-	expirationFromDate
+	expirationFromDate,
+	pickBaseUrl,
+	usableBaseUrl
 } from "@/domain/survey/invitationLinks";
+import { loadWebSettings } from "@/services/metaSettingsService";
 import { downloadBlob } from "@/utils/download";
 
 export interface UseSurveyInvitationsOptions {
@@ -61,8 +64,15 @@ export function useSurveyInvitations({ survey, surveyId, existingRow }: UseSurve
 	const hasProd = computed(() => hasFlowContent(existingRow.value?.Prod));
 	const prodVersion = computed(() => readFieldVersion(existingRow.value?.Prod));
 
-	/** Basis-URL aus dem gespeicherten Draft; leer = Polly-Umfrageseite. */
-	const baseUrl = computed(() => (survey.value.base_url ?? "").trim());
+	/** Basis-URL der Umfrage (gespeicherter Draft), sonst Standard aus den Einstellungen; leer = Polly-Umfrageseite. */
+	const surveyBaseUrl = computed(() => (survey.value.base_url ?? "").trim());
+	// Ungültige Standard-URL (z. B. von Hand in __meta eingetragen) ignorieren wie das Backend
+	const defaultBaseUrl = computed(() => usableBaseUrl(app.domain.meta.web.defaultBaseUrl));
+	const baseUrl = computed(() => pickBaseUrl(surveyBaseUrl.value, defaultBaseUrl.value) ?? "");
+	/** Woher die Basis-URL kommt, für die Anzeige des Link-Ziels. */
+	const baseUrlSource = computed<"survey" | "default" | "fallback">(() =>
+		surveyBaseUrl.value ? "survey" : baseUrl.value ? "default" : "fallback"
+	);
 	const fallbackOrigin = computed(() => window.location.origin);
 	/** Beispiel-Link zur Anzeige (Platzhalter statt echtem Token). */
 	const exampleUrl = computed(() => buildInvitationUrl(baseUrl.value, "<token>", fallbackOrigin.value));
@@ -109,6 +119,8 @@ export function useSurveyInvitations({ survey, surveyId, existingRow }: UseSurve
 		errorMessage.value = "";
 		lastGeneratedCount.value = null;
 		try {
+			// Standard-Basis-URL frisch lesen: kann seit dem Login in den Einstellungen geändert worden sein
+			app.domain.meta.web = await loadWebSettings(await app.ensureDataTableId());
 			const tokens = await createInvitations(
 				{ surveyId, count: count.value!, multi: multi.value, ...(exp !== undefined ? { exp } : {}) },
 				controller.signal
@@ -136,6 +148,7 @@ export function useSurveyInvitations({ survey, surveyId, existingRow }: UseSurve
 	onBeforeUnmount(() => abortController?.abort());
 
 	return {
+		baseUrlSource,
 		count,
 		expiryDate,
 		multi,

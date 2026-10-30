@@ -110,7 +110,7 @@ export function toV1SurveySummary(survey: FlowSurvey) {
   };
 }
 
-/** `baseUrl` aus dem Draft und `webTheme` (Tokens aus `pickTheme`) sind `null`, wenn es sie nicht gibt. */
+/** `baseUrl` (wirksame Basis-URL: Draft, sonst Standard des Mandanten) und `webTheme` (Tokens aus `pickTheme`) sind `null`, wenn es sie nicht gibt. */
 export function toV1SurveyDetail(survey: FlowSurvey, baseUrl: string | undefined, webTheme: WebThemeTokens | undefined) {
   return {
     ...toV1SurveySummary(survey),

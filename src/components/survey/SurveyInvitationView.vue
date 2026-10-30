@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 import { useI18n } from "vue-i18n";
 import Button from "primevue/button";
 import Checkbox from "primevue/checkbox";
@@ -36,7 +36,7 @@ const {
 	minExpiryDate,
 	hasProd,
 	prodVersion,
-	baseUrl,
+	baseUrlSource,
 	exampleUrl,
 	isCountValid,
 	canGenerate,
@@ -46,6 +46,16 @@ const {
 	surveyId: props.surveyId,
 	existingRow: toRef(props, "existingRow")
 });
+
+const linkTargetText = computed(() =>
+	t(
+		baseUrlSource.value === "survey"
+			? "invitations.linkTargetBaseUrl"
+			: baseUrlSource.value === "default"
+				? "invitations.linkTargetDefault"
+				: "invitations.linkTargetFallback"
+	)
+);
 </script>
 
 <template>
@@ -144,7 +154,7 @@ const {
 		<div class="space-y-1">
 			<h3 class="text-sm font-semibold text-[var(--p-text-color)]">{{ t("invitations.linkTarget") }}</h3>
 			<p class="text-sm text-[var(--p-surface-600)]">
-				{{ baseUrl ? t("invitations.linkTargetBaseUrl") : t("invitations.linkTargetFallback") }}
+				{{ linkTargetText }}
 			</p>
 			<code class="block text-xs font-mono break-all p-2 rounded-lg bg-[var(--p-surface-50)] border border-[var(--p-content-border-color)]">
 				{{ exampleUrl }}

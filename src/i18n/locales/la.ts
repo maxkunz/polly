@@ -125,7 +125,9 @@ export const la: MessageSchema = {
 			greeting: "Nuntius salutationis",
 			closing: "Nuntius valedictionis",
 			baseUrl: "URL basis pro nexibus invitationis (interretialis)",
-			baseUrlHint: "Optionale. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Sine ea nexus ad paginam Polly ducit.",
+			baseUrlHint: "Optionale. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur.",
+			baseUrlHintDefault: "Sine valore URL fundamentalis exempli ex optionibus valet: {url}",
+			baseUrlHintFallback: "Sine ea nexus ad paginam Polly ducit.",
 			language: "Lingua quaestionis interretialis",
 			webTheme: "Forma quaestionis interretialis",
 			webThemeHint: "Litterae, magnitudines et colores paginae. Cura sub Optiones → Formae interretiales. Mutatio post Prod valet.",
@@ -471,6 +473,7 @@ export const la: MessageSchema = {
 		linkTarget: "Meta nexuum",
 		linkTargetBaseUrl: "URL fundamentalis ex optionibus servatis:",
 		linkTargetFallback: "Nulla URL fundamentalis – nexus ad paginam Polly spectant:",
+		linkTargetDefault: "URL fundamentalis exempli ex optionibus:",
 		generate: "Nexus crea et CSV depone",
 		generateAriaLabel: "Nexus invitationis crea et ut CSV depone",
 		notStoredHint: "Nexus non servantur. Plicam CSV custodi.",
@@ -651,6 +654,14 @@ export const la: MessageSchema = {
 		}
 	},
 	settings: {
+		webDefaults: {
+			title: "Quaestiones interretiales: URL fundamentalis exempli",
+			label: "URL fundamentalis exempli pro nexibus invitationis",
+			hint: "Valet omnibus quaestionibus sine URL propria. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Vacua = nexus ad paginam Polly ducit.",
+			save: "Servare",
+			saved: "URL fundamentalis exempli servata.",
+			saveFailed: "Servare non successit"
+		},
 		features: {
 			title: "Facultates activae"
 		},

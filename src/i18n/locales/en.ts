@@ -124,7 +124,9 @@ export const en: MessageSchema = {
 			greeting: "Greeting message",
 			closing: "Closing message",
 			baseUrl: "Base URL for invitation links (web)",
-			baseUrlHint: "Optional. Absolute https URL, e.g. the page the survey is embedded in. Use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended. Without it, the link points to the Polly survey page.",
+			baseUrlHint: "Optional. Absolute https URL, e.g. the page the survey is embedded in. Use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended.",
+			baseUrlHintDefault: "Without a value, the default base URL from the settings applies: {url}",
+			baseUrlHintFallback: "Without it, the link points to the Polly survey page.",
 			language: "Web survey language",
 			webTheme: "Web survey design",
 			webThemeHint: "Font, text sizes and colours of the survey page. Managed under Settings → Web designs. A change takes effect after deploying to Prod.",
@@ -470,6 +472,7 @@ export const en: MessageSchema = {
 		linkTarget: "Link target",
 		linkTargetBaseUrl: "Base URL from the saved survey settings:",
 		linkTargetFallback: "No base URL set – the links point to the Polly survey page:",
+		linkTargetDefault: "Default base URL from the settings:",
 		generate: "Create links and download CSV",
 		generateAriaLabel: "Create invitation links and download them as CSV",
 		notStoredHint: "The links are not stored. Keep the CSV file; lost links can only be created again.",
@@ -650,6 +653,14 @@ export const en: MessageSchema = {
 		}
 	},
 	settings: {
+		webDefaults: {
+			title: "Web surveys: default base URL",
+			label: "Default base URL for invitation links",
+			hint: "Applies to all surveys without their own base URL. Absolute https URL; use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended. Empty = links point to the Polly survey page.",
+			save: "Save",
+			saved: "Default base URL saved.",
+			saveFailed: "Saving failed"
+		},
 		features: {
 			title: "Enabled features"
 		},
