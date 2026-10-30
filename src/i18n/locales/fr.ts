@@ -650,6 +650,70 @@ export const fr: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "Interface MCP",
+		intro: "Des clients IA (p. ex. Claude) modifient, déploient et analysent les enquêtes au nom d'une personne connectée. La connexion passe par Genesys, les rôles Polly de la personne s'appliquent.",
+		loading: "Chargement de l'état …",
+		status: {
+			active: "Actif",
+			inactive: "Désactivé",
+			serverOff: "Serveur éteint",
+			featureOff: "Fonction éteinte",
+			serverOffHint: "L'interface MCP est désactivée sur le serveur. Elle ne peut être activée qu'après autorisation de l'exploitation.",
+			featureOffHint: "La fonction mcp n'est pas activée pour cette installation. Elle ne se modifie que directement dans la Data Table (__meta)."
+		},
+		actions: {
+			enable: "Activer MCP",
+			disable: "Désactiver MCP",
+			enableHint: "Crée un client OAuth (Authorization Code) dans Genesys. Votre compte doit pouvoir créer et supprimer des clients OAuth (oauth:client:add/delete)."
+		},
+		sessions: "Sessions actives : {count}",
+		url: {
+			label: "URL MCP",
+			copy: "Copier",
+			copied: "URL MCP copiée."
+		},
+		comments: {
+			label: "Transmettre les commentaires libres à l'IA",
+			hint: "Sans coche, l'IA voit seulement qu'un commentaire existe, pas son texte. Les commentaires peuvent contenir des données personnelles."
+		},
+		guide: {
+			title: "Connecter Claude",
+			step1: "Claude Desktop ou claude.ai : Paramètres → Connecteurs → « Ajouter un connecteur personnalisé ».",
+			step2: "Saisir le nom « Polly » et l'URL MCP. Laisser l'ID client et le secret vides sous « Avancé ».",
+			step3: "Choisir « Connecter » et se connecter à Genesys.",
+			step4: "Choisir « Autoriser » sur la page Polly. Le connecteur peut ensuite être activé et désactivé dans le chat.",
+			claudeCode: "Claude Code : claude mcp add --transport http polly {url}, puis /mcp et « Authenticate ».",
+			roles: "Vos rôles déterminent ce que l'IA peut faire : polly_write (modifier), polly_deploy (déployer, restaurer), polly_reporting (résultats)."
+		},
+		disable: {
+			header: "Désactiver MCP ?",
+			message: "Tous les clients IA connectés ({count} sessions actives) sont déconnectés immédiatement et le client OAuth dans Genesys est supprimé. Un travail en cours reste dans la Data Table.",
+			accept: "Désactiver",
+			reject: "Annuler"
+		},
+		toast: {
+			enabled: "MCP activé.",
+			enableFailed: "MCP n'a pas pu être activé",
+			disabled: "MCP désactivé.",
+			disableFailed: "MCP n'a pas pu être désactivé",
+			commentsSaved: "Paramètre enregistré.",
+			commentsFailed: "Le paramètre n'a pas pu être enregistré"
+		},
+		errors: {
+			missingToken: "Non connecté. Veuillez recharger l'application.",
+			missingRole: "Pas d'autorisation – droits de déploiement manquants.",
+			serverDisabled: "L'interface MCP est désactivée sur le serveur.",
+			featureDisabled: "La fonction mcp n'est pas activée pour cette installation.",
+			clientNotReadable: "Le client OAuth créé n'est pas lisible par votre compte. Les droits sur les clients OAuth manquent dans Genesys.",
+			clientInvalid: "Le client OAuth dans Genesys ne convient pas (type, URI de redirection ou état). Veuillez réactiver.",
+			clientRights: "Genesys refuse l'accès aux clients OAuth. Pour les créer et les supprimer, votre compte doit avoir oauth:client:add/delete.",
+			metaUnreadable: "Les paramètres de la Data Table (ligne __meta) n'ont pas pu être lus.",
+			throttled: "Le service est occupé. Veuillez réessayer dans un instant.",
+			generic: "Erreur MCP"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Enquêtes web",

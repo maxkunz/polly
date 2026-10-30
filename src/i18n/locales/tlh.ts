@@ -651,6 +651,70 @@ export const tlh: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "MCP Quch",
+		intro: "QI' lo'wI'pu' (Claude) vegh yu'ghItlhmey choH, ngeH, 'ej lI'. Genesys ghoSlu', Polly Dochmey ghot 'oH.",
+		loading: "Dotlh laD …",
+		status: {
+			active: "Qapla'",
+			inactive: "Qapla'be'",
+			serverOff: "Server Qapla'be'",
+			featureOff: "Quch Qapla'be'",
+			serverOffHint: "MCP Quch server Daq Qapla'be'. QI'qa'wI' chaw' neH.",
+			featureOffHint: "mcp Quch cha'be'. Data Table (__meta) Daq neH choH."
+		},
+		actions: {
+			enable: "MCP chu'",
+			disable: "MCP mej",
+			enableHint: "Genesys Daq OAuth lo'wI' chenmoH (Authorization Code). oauth:client:add/delete Dochmey Hutlh."
+		},
+		sessions: "Qapla' ghoSmeH: {count}",
+		url: {
+			label: "MCP URL",
+			copy: "paw",
+			copied: "MCP URL pawta'."
+		},
+		comments: {
+			label: "QI' Daq jIj Hol",
+			hint: "pagh tlhegh: QI' neH HaDtaH, jIj ra'be'. jIjmey ghot De' Dachep."
+		},
+		guide: {
+			title: "Claude jon",
+			step1: "Claude Desktop pagh claude.ai: Settings → Connectors → “Add custom connector”.",
+			step2: "“Polly” 'ej MCP URL yIchel. Client ID 'ej secret yIQeH.",
+			step3: "“Connect” yIwIv 'ej Genesys yIlI'.",
+			step4: "Polly Daq “Allow” yIwIv. Qapla'.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url}, /mcp, “Authenticate”.",
+			roles: "Dochmey Dachep: polly_write, polly_deploy, polly_reporting."
+		},
+		disable: {
+			header: "MCP mej?",
+			message: "QI' lo'wI'pu' wa'DIch mejlu' ({count}). Genesys OAuth lo'wI' Qaw'lu'. Qu' Data Table Daq Dellu'.",
+			accept: "mej",
+			reject: "mevQo'"
+		},
+		toast: {
+			enabled: "MCP chu'ta'.",
+			enableFailed: "MCP chu' Qagh",
+			disabled: "MCP mejta'.",
+			disableFailed: "MCP mej Qagh",
+			commentsSaved: "chel Dellu'.",
+			commentsFailed: "chel Del Qagh"
+		},
+		errors: {
+			missingToken: "'el'be'. ghun yIlI'.",
+			missingRole: "Hu'tegh – deploy DIch Hutlh.",
+			serverDisabled: "MCP Quch server Daq Qapla'be'.",
+			featureDisabled: "mcp Quch cha'be'.",
+			clientNotReadable: "OAuth lo'wI' laD Qagh. Genesys Daq Dochmey Hutlh.",
+			clientInvalid: "Genesys OAuth lo'wI' mIgh (Segh, URI pagh Dotlh). chu'qa'.",
+			clientRights: "Genesys OAuth lo'wI' Qotlh. oauth:client:add/delete yIlo'.",
+			metaUnreadable: "Data Table (__meta) laD Qagh.",
+			throttled: "Qu' law'. yInIDqa'.",
+			generic: "MCP Qagh"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Web QIn",

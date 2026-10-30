@@ -11,6 +11,7 @@ import { deleteFlow, flowFetch } from "@/services/genesys/botFlow";
 import { deleteGroup, deleteRole } from "@/services/genesys/groups";
 import { inactiveOAuth, deleteBackend, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import { getErrorStatus, getErrorMessage, sleep } from "@/services/genesys/retry";
+import { disableMcp } from "@/services/SetupMcp";
 
 export async function runFullDelete(
   setup: any,
@@ -119,6 +120,11 @@ export async function runFullDelete(
     await removeResource(setup.dataAction, "data action", deleteDataAction);
     await removeResource(setup.dataActionIntegration, "data action integration", deleteIntegration);
     await removeResource(setup.dataActionCredential, "integration credentials", id => apiIntegration.deleteIntegrationsCredential(id));
+
+    // MCP vor dem Backend-Cleanup abschalten: danach ist der Mandant DELETED und /mcp-settings nicht mehr erreichbar
+    if (setup.mcpClient?.id) {
+      await disableMcp({ setup, onProgress, ignoreBackendErrors: true });
+    }
 
     if (setup.backendAuth?.clientId) {
       onProgress(`Marking backend tenant ${setup.backendAuth.clientId} as deleted...`);

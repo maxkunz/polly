@@ -24,6 +24,22 @@ export async function createBackendClient(name: string, authorizedGrantType = 'C
 }
 
 
+// create Authorization-Code-Client (MCP-Anmeldung über die Polly-Fassade), das Secret steht nur in dieser Antwort
+
+export async function createCodeGrantClient(name: string, redirectUri: string, scopes: string[], accessTokenValiditySeconds: number, description?: string) {
+  const { oAuthApi } = useAppStore().genesys;
+
+  return oAuthApi.postOauthClients({
+    name,
+    description,
+    authorizedGrantType: 'CODE',
+    accessTokenValiditySeconds,
+    registeredRedirectUri: [redirectUri],
+    scope: scopes
+  } as any);
+}
+
+
 // get One Client with ID
 
 export async function getOAuthClientWithID(clientId: string) {  //getBackendClientWithID
@@ -53,6 +69,23 @@ export async function getAllClients() {
     state: state
   };
   return oAuthApi.putOauthClient(clientId, body);
+}
+
+
+ // inactivate Authorization-Code-Client: Genesys verlangt beim PUT Redirect-URIs und Scopes, deshalb vorher lesen
+
+export async function inactivateCodeGrantClient(clientId: string) {
+  const { oAuthApi } = useAppStore().genesys;
+  const client: any = await oAuthApi.getOauthClient(clientId);
+  return oAuthApi.putOauthClient(clientId, {
+    name: client.name,
+    description: client.description,
+    authorizedGrantType: 'CODE',
+    accessTokenValiditySeconds: client.accessTokenValiditySeconds,
+    registeredRedirectUri: client.registeredRedirectUri,
+    scope: client.scope,
+    state: 'inactive'
+  } as any);
 }
 
 

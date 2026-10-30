@@ -48,3 +48,26 @@ export async function saveWebDefaultBaseUrl(datatableId: string, baseUrl: string
 	await updateDataTableRow(datatableId, "__meta", { ...row, Draft: JSON.stringify(next) });
 	return Meta.fromJSON(next);
 }
+
+/** Der in `meta.setup.mcpClient` gemerkte Genesys-Client der MCP-Anmeldung (frisch gelesen), sonst `null`. */
+export async function loadSetupMcpClient(datatableId: string): Promise<{ id: string; name: string } | null> {
+	const { draft } = await readMetaRow(datatableId);
+	const client = draft.setup?.mcpClient;
+	return client && typeof client.id === "string" && client.id ? { id: client.id, name: String(client.name ?? "") } : null;
+}
+
+/**
+ * Merkt den Genesys-Client der MCP-Anmeldung in `meta.setup.mcpClient` (oder entfernt ihn mit `null`), damit
+ * Deaktivieren und Uninstall ihn wieder löschen können. Die Zeile wird frisch gelesen, nur dieser Schlüssel ändert sich.
+ */
+export async function saveSetupMcpClient(datatableId: string, client: { id: string; name: string } | null): Promise<Meta> {
+	const { row, draft } = await readMetaRow(datatableId);
+	const setup: Record<string, unknown> =
+		draft.setup && typeof draft.setup === "object" && !Array.isArray(draft.setup) ? { ...draft.setup } : {};
+	if (client) setup.mcpClient = { id: client.id, name: client.name };
+	else delete setup.mcpClient;
+
+	const next = { ...draft, setup };
+	await updateDataTableRow(datatableId, "__meta", { ...row, Draft: JSON.stringify(next) });
+	return Meta.fromJSON(next);
+}

@@ -359,6 +359,13 @@ onboardingCfn.addPropertyOverride(
   apiClientsTable.tableName,
 );
 
+// Uninstall und Löschen eines Mandanten räumen dessen MCP-Einträge ab (shared/mcp_tenant.ts)
+mcpOAuthTable.grantReadWriteData(onboardingLambda);
+onboardingCfn.addPropertyOverride(
+  "Environment.Variables.MCP_OAUTH_TABLE_NAME",
+  mcpOAuthTable.tableName,
+);
+
 new cognito.UserPoolResourceServer(stack, "BackendResourceServer", {
   userPool: backend.auth.resources.userPool,
   identifier: "backend",

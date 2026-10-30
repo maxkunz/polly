@@ -572,6 +572,58 @@ def tests_web_themes(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> No
         suite.skip("[T6]/[T7]", "WEB_THEME_WRITE nicht gesetzt")
 
 
+def tests_mcp_settings(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
+    """/mcp-settings (Lambda mcp_admin). Aktivieren und Deaktivieren sind nicht dabei: Sie legen einen Genesys-Client an."""
+    suite.section("MCP-Schalter: /mcp-settings")
+    path = "/mcp-settings"
+
+    suite.case("[M1] GET /mcp-settings ohne Token (401)", lambda: api.public("GET", path), 401)
+    suite.case("[M2] PUT /mcp-settings ohne Token (401)",
+               lambda: api.public("PUT", path, body={"allowComments": True}), 401)
+    suite.case("[M3] DELETE /mcp-settings ohne Token (401)", lambda: api.public("DELETE", path), 401)
+
+    if cfg.api_client_id and cfg.api_client_secret and cfg.api_token_url:
+        basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
+        try:
+            token_res = HttpClient(cfg.api_token_url, api.ssl_context).request(
+                "POST", "", body=urllib.parse.urlencode({"grant_type": "client_credentials"}),
+                headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"})
+        except (urllib.error.URLError, OSError) as exc:
+            # Netz- oder TLS-Fehler beim Token-Endpunkt darf den restlichen Lauf nicht beenden
+            suite.skip("[M4]", f"Token-Endpunkt nicht erreichbar ({exc})")
+            return
+        body = token_res.json() if token_res.status == 200 else None
+        cognito_token = body.get("access_token", "") if isinstance(body, dict) else ""
+        if cognito_token:
+            # Ein Cognito-Token gehört nie zu einem Genesys-User: 403 (M2M des Mandanten) oder 401 (unbekannter Client)
+            suite.case("[M4] GET /mcp-settings mit Cognito-Token (401 oder 403, nie 200)",
+                       lambda: api.request("GET", path, headers={"Authorization": f"Bearer {cognito_token}"}), (401, 403))
+        else:
+            suite.skip("[M4]", "kein Cognito-Token erhalten")
+    else:
+        suite.skip("[M4]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
+
+    if cfg.token_no_deploy:
+        suite.case("[M5] GET /mcp-settings ohne Rolle polly_deploy (403 missing_role)",
+                   lambda: api.genesys("GET", path, token=cfg.token_no_deploy), 403, text_contains("missing_role"))
+        suite.case("[M6] PUT /mcp-settings ohne Rolle polly_deploy (403 missing_role, nichts geändert)",
+                   lambda: api.genesys("PUT", path, token=cfg.token_no_deploy, body={"allowComments": False}),
+                   403, text_contains("missing_role"))
+        suite.case("[M7] DELETE /mcp-settings ohne Rolle polly_deploy (403 missing_role, MCP bleibt an)",
+                   lambda: api.genesys("DELETE", path, token=cfg.token_no_deploy), 403, text_contains("missing_role"))
+    else:
+        suite.skip("[M5]–[M7]", "GENESYS_TOKEN_NO_DEPLOY nicht gesetzt")
+
+    # Beide Fälle scheitern vor jeder Änderung an der Eingabe
+    suite.case("[M8] PUT /mcp-settings ohne Felder (400 invalid_request)",
+               lambda: api.genesys("PUT", path, body={}), 400, text_contains("invalid_request"))
+    suite.case("[M9] PUT /mcp-settings mit ungültiger Client-ID (400 invalid_request)",
+               lambda: api.genesys("PUT", path, body={"clientId": "kein-uuid", "clientSecret": "x"}),
+               400, text_contains("invalid_request"))
+    suite.case("[M10] GET /mcp-settings mit polly_deploy (200, MCP-URL und Redirect-URI; erzeugt den URL-Schlüssel)",
+               lambda: api.genesys("GET", path), 200, json_has("mcpUrl", "redirectUri"))
+
+
 def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     """Kunden-API /ext/v1 mit Client Credentials. Braucht die Session aus tests_survey_responses."""
     suite.section("Kunden-API: /ext/v1")
@@ -977,6 +1029,7 @@ def main() -> int:
     tests_customer_api(suite, api, cfg, conversation_id)
     tests_delete(suite, api, cfg, conversation_id)
     tests_web_themes(suite, api, cfg)
+    tests_mcp_settings(suite, api, cfg)
     tests_preview(suite, api, cfg)
     tests_web_expired(suite, api, cfg.expiring_token, cfg.expiring_exp)
     return suite.summary()

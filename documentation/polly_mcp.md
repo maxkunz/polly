@@ -92,7 +92,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**
 9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`) in der Session.
 
-**Genesys-Client (Ergebnis M1, Details in Abschnitt 13):** Ein öffentlicher PKCE-Client ohne Secret bekommt keinen Refresh-Token. Der Token-Endpunkt von Genesys kennt nur `client_secret_basic`/`client_secret_post`. Empfohlen ist deshalb ein **vertraulicher** CODE-Client mit Secret (zusätzlich PKCE S256). Das Secret liegt nur im Backend. Nur so lassen sich Sessions über `accessTokenValiditySeconds` (höchstens 48 h) hinaus verlängern. Entscheidung vor M6. Ohne Secret gilt: Session ≤ `accessTokenValiditySeconds`, danach ist eine neue Anmeldung nötig.
+**Genesys-Client (Ergebnis M1, Details in Abschnitt 13):** Ein öffentlicher PKCE-Client ohne Secret bekommt keinen Refresh-Token. Der Token-Endpunkt von Genesys kennt nur `client_secret_basic`/`client_secret_post`. Empfohlen ist deshalb ein **vertraulicher** CODE-Client mit Secret (zusätzlich PKCE S256). Das Secret liegt nur im Backend. Nur so lassen sich Sessions über `accessTokenValiditySeconds` (höchstens 48 h) hinaus verlängern. **Entscheidung in M6: mit Secret** (Umsetzung in `SetupMcp.ts`). Ohne Secret gilt: Session ≤ `accessTokenValiditySeconds`, danach ist eine neue Anmeldung nötig.
 
 **Folgeschritt:** Client ID Metadata Documents der MCP-Spec 2025-11-25 vor DCR.
 
@@ -201,7 +201,7 @@ MCP ist nur erreichbar, wenn **alle drei Ebenen** an sind. Jede Ebene schaltet a
    - Die Lambda liest das Flag serverseitig (Cache 60 s). Weil `__meta` jeder mit Data-Table-Schreibrecht ändern kann, kann das Flag **nur abschalten, nie allein einschalten**.
 2. **`mcpEnabled` in `TenantsTable`** ist maßgeblich zum Einschalten. Gesetzt wird es über `mcp_admin`: nur Genesys-Bearer (Cognito-Token → 403), dazu `polly_deploy` (serverseitig geprüft).
    - `GET /mcp-settings`: Status (inkl. Flag und Kill-Switch), MCP-URL, Anzahl der Sitzungen. Erzeugt `mcpTenantKey` bei Bedarf.
-   - `PUT /mcp-settings`: prüft den Genesys-Client (Typ CODE, Redirect-URI), speichert `mcpGenesysClientId` und `genesysOrgId` und setzt `mcpEnabled`. Mit `{ allowComments }` schaltet es nur `mcpAllowComments` um.
+   - `PUT /mcp-settings`: prüft den Genesys-Client (Typ CODE, Redirect-URI), speichert `mcpGenesysClientId` und `genesysOrgId` und setzt `mcpEnabled`. Es nimmt `{ clientId, clientSecret }` entgegen und verschlüsselt das Secret mit `McpTokenKey` (`EncryptionContext` mit Mandant) als `mcpClientSecretEnc`; `GET` gibt es nie zurück. Aktivieren verlangt Kill-Switch und Flag `mcp` (sonst 409 `server_disabled`/`feature_disabled`), prüft den Client mit dem Token der Person (400 `client_invalid` mit `reason`) und die Org über `organizations/me`; ein anderer Client als bisher erhöht `mcpEpoch`. Mit `{ allowComments }` schaltet es nur `mcpAllowComments` um.
    - `DELETE /mcp-settings`: `mcpEnabled = false`, `mcpEpoch + 1` (alle Sessions sofort ungültig), alle MCP-Einträge des Mandanten löschen, Genesys-Tokens nach Möglichkeit widerrufen. Das Frontend löscht danach den Genesys-Client (`disableMcp()`), damit sind auch dessen Tokens ungültig.
 3. **Globaler Kill-Switch** `MCP_ENABLED`: Ist er nicht `"true"`, antworten alle MCP- und `.well-known`-Routen mit 404. Default ist `false`.
 

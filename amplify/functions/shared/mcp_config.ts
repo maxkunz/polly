@@ -14,3 +14,13 @@ export function parseAllowedRedirectHosts(raw: string | undefined): string[] {
     .filter((host) => host.length > 0);
   return hosts.length > 0 ? hosts : [...DEFAULT_MCP_REDIRECT_HOSTS];
 }
+
+/** MCP-Endpunkt eines Mandanten (die URL, die in den MCP-Client eingetragen wird). */
+export function buildMcpUrl(publicBaseUrl: string, tenantKey: string): string {
+  return `${publicBaseUrl.replace(/\/+$/, "")}/mcp/${tenantKey}`;
+}
+
+/** Redirect-URI des Genesys-Clients: Rückkehr von Genesys in die OAuth-Fassade (`/callback`, M7). */
+export function buildGenesysRedirectUri(publicBaseUrl: string, tenantKey: string): string {
+  return `${buildMcpUrl(publicBaseUrl, tenantKey)}/oauth/callback`;
+}

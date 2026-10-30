@@ -68,13 +68,14 @@ Vorgaben:
   - [x] Routen, Drosselung in `routeSettings`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS`.
   - [x] `branch_umgebung_einrichten.md`: neue Env-Variablen.
 
-- [ ] **M6 Schalter: `mcp_admin`, Einstellungen-Karte, Setup/Uninstall** (siehe „Abschaltung“) · **Review danach** (kurz, Fokus Rechte und Aufräumen)
-  - [ ] `mcp_admin`: `GET`/`PUT`/`DELETE /mcp-settings`, nur Genesys-Bearer, `requireCallerRole(..., "polly_deploy")`.
-  - [ ] Abschalten: `mcpEpoch + 1`, MCP-Einträge des Mandanten löschen, Genesys-Tokens nach Möglichkeit widerrufen.
-  - [ ] `services/genesys/oauth_backend.ts`: `createCodeGrantClient`. Neu `services/SetupMcp.ts` mit `enableMcp`/`disableMcp`; `SetupMeta.mcpClient`.
-  - [ ] Karte `components/mcp/McpSettingsCard.vue` und `composables/useMcpSettings.ts`. Sichtbar nur bei `app.hasFeature("mcp")`, bedienbar nur mit `canDeploy`. Anleitung „So verbinden Sie Claude“.
-  - [ ] `SetupUninstall.ts` ruft `disableMcp()` auf. Die Onboarding-Routen `uninstall`/`delete`/Wipe räumen die MCP-Einträge und `mcpEnabled` mit ab.
-  - [ ] `tools/api_tests.py`: `/mcp-settings` gibt 403 ohne `polly_deploy` und 403 mit Cognito-Token.
+- [x] **M6 Schalter: `mcp_admin`, Einstellungen-Karte, Setup/Uninstall** (siehe „Abschaltung“) · **Review danach** (kurz, Fokus Rechte und Aufräumen) · erledigt 2026-10-30 (Review und Deploy stehen aus, siehe Abweichungen)
+  - [x] `mcp_admin`: `GET`/`PUT`/`DELETE /mcp-settings`, nur Genesys-Bearer, `requireCallerRole(..., "polly_deploy")`.
+  - [x] Abschalten: `mcpEpoch + 1`, MCP-Einträge des Mandanten löschen, Genesys-Tokens nach Möglichkeit widerrufen. (Widerruf der Tokens folgt mit dem Session-Format in M7, siehe Abweichungen)
+  - [x] `services/genesys/oauth_backend.ts`: `createCodeGrantClient`. Neu `services/SetupMcp.ts` mit `enableMcp`/`disableMcp`; `SetupMeta.mcpClient`.
+  - [x] Karte `components/mcp/McpSettingsCard.vue` und `composables/useMcpSettings.ts`. Sichtbar nur bei `app.hasFeature("mcp")`, bedienbar nur mit `canDeploy`. Anleitung „So verbinden Sie Claude“.
+  - [x] `SetupUninstall.ts` ruft `disableMcp()` auf. Die Onboarding-Routen `uninstall`/`delete`/Wipe räumen die MCP-Einträge und `mcpEnabled` mit ab.
+  - [x] `tools/api_tests.py`: `/mcp-settings` gibt 403 ohne `polly_deploy` und 403 mit Cognito-Token. (`tests_mcp_settings`, Fälle M1–M10)
+  - [x] Tests: `mcpAdmin.test.ts` (Body, Client-Prüfung, Status), im `test`-Script.
 
 - [ ] **M7 OAuth-Fassade** (siehe „Auth-Ablauf“) · **Security-Review danach** (`secreview-de`)
   - [ ] Metadaten: Protected Resource Metadata und AS-Metadaten.
@@ -192,7 +193,21 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Rechte vorab:** `mcp` liest zusätzlich Ergebnisse, Aggregate, Löschjobs und Web-Designs (für M8–M10), `mcp_admin` schreibt `TenantsTable`. Die Tabellen-Berechtigungen stehen schon, damit M6/M8 nur noch Code liefern.
 - **Drosselung** pro Route vorläufig (MCP-Endpunkt 20/40, Metadaten 20/40, OAuth 10/20, `register` 2/5, `mcp-settings` 5/10 pro Sekunde); M11 legt sie nach Messungen fest.
 - **CORS** der HttpApi ist unverändert (`content-type`, `authorization`, `x-genesys-region`). Browserbasierte MCP-Clients (z. B. MCP Inspector) bräuchten weitere Header (`mcp-protocol-version`); claude.ai ruft serverseitig auf. Bei Bedarf in M8 nachziehen.
-- `npm test` läuft ohne neue Fehler; `test/setupLogin.test.ts` (nicht im `test`-Script, unverändert) scheitert schon vorher.### M6
+- `npm test` läuft ohne neue Fehler; `test/setupLogin.test.ts` (nicht im `test`-Script, unverändert) scheitert schon vorher.
+
+### M6
+
+- **Nur geprüft per `vue-tsc` und Test, nicht deployt und nicht gegen Genesys erprobt.** Beim ersten Lauf auf einer Branch-Umgebung achten auf: `EncryptionContext` bei KMS (`purpose`, `tenantId`), `GET /api/v2/oauth/clients/{id}` mit dem Token der Person (braucht `oauth:client:view`), `POST /api/v2/oauth/clients` mit `registeredRedirectUri`/`scope` für `CODE`, und ob das Secret in der Antwort steht. Die drei offenen Punkte aus M1 (Refresh ohne Secret, Laufzeit des Refresh-Tokens, `user-basic-info` für `expand=authorization`) sind weiter offen und wirken auf M7.
+- **Entscheidung zu M1 übernommen:** vertraulicher CODE-Client **mit Secret** (Plan-Vorschlag). `enableMcp()` legt ihn an und übergibt das Secret einmalig im Body von `PUT /mcp-settings`; die Lambda verschlüsselt es mit `McpTokenKey` (`EncryptionContext` mit Mandant) und speichert es als `mcpClientSecretEnc`. `GET` liefert es nie, `decryptClientSecret` (`shared/mcp_secret.ts`, getrennt von `mcp_tenant.ts`, damit Onboarding kein KMS bündelt) ist für den Token-Tausch in M7 da. Scopes `architect` und `user-basic-info`, Gültigkeit 3.600 s (`SetupMcp.ts`).
+- **`PUT /mcp-settings` hat zwei Formen:** `{ clientId, clientSecret }` aktiviert, `{ allowComments }` schaltet nur das Flag um; beides zusammen ist 400. Aktivieren prüft in dieser Reihenfolge: Kill-Switch (409 `server_disabled`), Flag `mcp` in `__meta` (409 `feature_disabled`), den Genesys-Client mit dem Token der Person (`client_not_found`, `genesys_forbidden`, 400 `client_invalid` mit `reason` `grant_type`/`redirect_uri`/`inactive`) und die Org über `organizations/me`. Ein **anderer** Client als bisher erhöht `mcpEpoch` und räumt die Sitzungen ab.
+- **`DELETE` und Kill-Switch:** `DELETE` funktioniert auch bei ausgeschaltetem Kill-Switch und ausgeschaltetem Flag (Aufräumen muss immer gehen). Reihenfolge: erst `mcpEnabled = false` mit `mcpEpoch + 1` und Entfernen von Client-ID, Secret und Org-ID, dann die Einträge löschen. Bricht das Löschen ab, ist MCP trotzdem schon aus und der Aufruf wiederholbar. `mcpTenantKey` und `mcpAllowComments` bleiben, damit die MCP-URL beim erneuten Aktivieren dieselbe ist.
+- **Genesys-Tokens beim Abschalten:** Es gibt noch keine Sessions (Format kommt mit M7). Der Widerruf je Session (`DELETE /api/v2/tokens/me`) ist deshalb nicht gebaut; das Löschen des Genesys-Clients im Frontend macht alle Tokens ungültig und die Epoch alle MCP-Tokens. **In M7 nachziehen:** `clearMcpEntries` soll vorher die Genesys-Tokens der Sessions widerrufen (nach Möglichkeit, Fehler nicht abbrechend).
+- **Cognito-Token an `/mcp-settings`:** Ein M2M-Token des Mandanten (Data Action) bekommt 403 `forbidden_m2m`, das Token eines Kunden-API-Clients 401 (unbekannte `backendClientId`). `api_tests.py` akzeptiert deshalb in M4 beides.
+- **Onboarding:** `uninstall` sperrt und räumt nur, wenn der Eintrag MCP je benutzt hat (`hasMcpState`); `delete` und Wipe räumen die Einträge einer `tenantId` erst, wenn kein weiterer Eintrag der Tenants-Tabelle mit dieser `tenantId` übrig ist (gemeinsame Prüfung `hasRemainingTenantItems`, vorher in `deleteApiClientsOfRemovedTenant`). Antworten haben neue Felder `deletedMcpEntries`/`mcpError`. Neue Env-Variable `MCP_OAUTH_TABLE_NAME` an `onboarding` (Tabellenrecht in `backend.ts`); fehlt sie, wird das Aufräumen mit Warnung übersprungen.
+- **Uninstall im Frontend:** `disableMcp` läuft **vor** dem Backend-Cleanup (danach ist der Mandant `DELETED` und `/mcp-settings` nicht mehr erreichbar) und ignoriert dort Backend-Fehler; ein Fehler beim Löschen des Genesys-Clients bricht den Uninstall wie bei den anderen Ressourcen ab. `hasSetupResources` kennt `mcpClient`.
+- **Abhängigkeit:** `@aws-sdk/client-kms` steht jetzt direkt in `package.json` (war nur transitiv in `node_modules`). Das `package-lock.json` muss mit `npm install` nachgezogen werden.
+- **Karte:** Ohne `polly_deploy` zeigt sie nur einen Hinweis und lädt nichts (schon `GET` verlangt die Rolle). Die Texte `mcp.*` stehen in allen fünf Locales.
+- **Review (Rechte, Aufräumen) und Deploy stehen aus.**
 
 ### M7
 

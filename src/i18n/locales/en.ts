@@ -650,6 +650,70 @@ export const en: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "MCP interface",
+		intro: "AI clients (e.g. Claude) edit, deploy and analyse surveys on behalf of a signed-in person. Sign-in runs through Genesys and the person's Polly roles apply.",
+		loading: "Loading status …",
+		status: {
+			active: "Active",
+			inactive: "Off",
+			serverOff: "Server off",
+			featureOff: "Feature off",
+			serverOffHint: "The MCP interface is switched off on the server. It can only be activated once operations has released it.",
+			featureOffHint: "The mcp feature is not enabled for this installation. It can only be changed directly in the data table (__meta)."
+		},
+		actions: {
+			enable: "Enable MCP",
+			disable: "Disable MCP",
+			enableHint: "Creates an OAuth client (authorization code) in Genesys. Your account needs the right to create and delete OAuth clients (oauth:client:add/delete)."
+		},
+		sessions: "Active sessions: {count}",
+		url: {
+			label: "MCP URL",
+			copy: "Copy",
+			copied: "MCP URL copied."
+		},
+		comments: {
+			label: "Pass free-text comments to the AI",
+			hint: "Unchecked, the AI only sees that a comment exists, not its text. Comments may contain personal data."
+		},
+		guide: {
+			title: "How to connect Claude",
+			step1: "Claude Desktop or claude.ai: Settings → Connectors → “Add custom connector”.",
+			step2: "Enter the name “Polly” and the MCP URL. Leave client ID and secret empty under “Advanced”.",
+			step3: "Choose “Connect” and sign in to Genesys.",
+			step4: "Choose “Allow” on the Polly page. Afterwards the connector can be switched on and off in the chat.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url}, then /mcp and “Authenticate”.",
+			roles: "Your roles decide what the AI may do: polly_write (edit), polly_deploy (deploy, roll back), polly_reporting (results)."
+		},
+		disable: {
+			header: "Disable MCP?",
+			message: "All connected AI clients ({count} active sessions) are signed out immediately and the OAuth client in Genesys is deleted. Work in progress stays in the data table.",
+			accept: "Disable",
+			reject: "Cancel"
+		},
+		toast: {
+			enabled: "MCP enabled.",
+			enableFailed: "MCP could not be enabled",
+			disabled: "MCP disabled.",
+			disableFailed: "MCP could not be disabled",
+			commentsSaved: "Setting saved.",
+			commentsFailed: "The setting could not be saved"
+		},
+		errors: {
+			missingToken: "Not signed in. Please reload the application.",
+			missingRole: "No permission – deploy rights missing.",
+			serverDisabled: "The MCP interface is switched off on the server.",
+			featureDisabled: "The mcp feature is not enabled for this installation.",
+			clientNotReadable: "The OAuth client that was created cannot be read by your account. Rights for OAuth clients are missing in Genesys.",
+			clientInvalid: "The OAuth client in Genesys does not fit (type, redirect URI or state). Please enable again.",
+			clientRights: "Genesys denies access to OAuth clients. Creating and deleting them needs oauth:client:add/delete.",
+			metaUnreadable: "The settings in the data table (row __meta) could not be read.",
+			throttled: "The service is busy. Please try again shortly.",
+			generic: "MCP error"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Web surveys",
