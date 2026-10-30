@@ -89,12 +89,12 @@ Vorgaben:
   - [x] `session.ts`: Tokens als Hash speichern, Genesys-Tokens KMS-verschlüsselt, Genesys-Refresh. Prüfkette pro Aufruf: Kill-Switch → Tenant/Epoch → `__meta`-Flag `mcp` → Token → Session → Rate-Limit.
   - [x] Tests: `mcpOAuth.test.ts` (PKCE, Allow-List, `resource`, Rotation, Wiederverwendung).
 
-- [ ] **M8 MCP-Server und lesende Tools** (siehe „Tools“) · Modell: Opus
-  - [ ] `server.ts` (Transport aus M1, Server-Instructions), `tools_v1.ts` (feste Feldabbildung).
-  - [ ] Tools: `get_authoring_guide`, `list_surveys`, `get_survey`, `list_web_themes`, `validate_survey`.
-  - [ ] Rollenprüfung pro Tool (`loadCallerRoles`, Cache 60 s), Audit-Log ohne Inhalte.
-  - [ ] Tests: `mcpToolsV1.test.ts` (Ausgabefelder).
-  - [ ] Erster Ende-zu-Ende-Lauf: Claude Code verbinden und lesen.
+- [x] **M8 MCP-Server und lesende Tools** (siehe „Tools“) · Modell: Opus · erledigt 2026-10-30 (Ende-zu-Ende-Lauf steht aus, siehe Abweichungen)
+  - [x] `server.ts` (Transport aus M1, Server-Instructions), `tools_v1.ts` (feste Feldabbildung).
+  - [x] Tools: `get_authoring_guide`, `list_surveys`, `get_survey`, `list_web_themes`, `validate_survey`.
+  - [x] Rollenprüfung pro Tool (`loadCallerRoles`, Cache 60 s), Audit-Log ohne Inhalte.
+  - [x] Tests: `mcpToolsV1.test.ts` (Ausgabefelder).
+  - [ ] Erster Ende-zu-Ende-Lauf: Claude Code verbinden und lesen. (braucht Deploy mit `MCP_ENABLED=true`)
 
 - [ ] **M9 Schreibende Tools mit Lock, Deploy und Rollback** (siehe „Lock“, „Validierungs-Pipeline“) · **Review danach**
   - [ ] Tools: `create_survey`, `begin_edit`, `save_draft`, `end_edit`, `deploy_survey`, `rollback_survey` (mit `confirm`, Annotationen `destructiveHint`).
@@ -248,6 +248,27 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
   - `/authorize` setzt immer ein neues Browser-Cookie und übernimmt kein mitgeschicktes.
 
 ### M8
+
+- **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json`, Test und einem lokalen esbuild-Bündel, nicht deployt und nicht mit einem MCP-Client erprobt.** Der Ende-zu-Ende-Lauf mit Claude Code fehlt. Beim ersten Lauf auf einer Branch-Umgebung (mit `MCP_ENABLED=true`) achten auf:
+  - Kaltstart auf AWS (lokal: Bündel 725 KB, Import ca. 80 ms; zod 4 hat davon ca. 450 KB, ajv aus dem SDK ca. 100 KB).
+  - Ob Claude Code nach `initialize` ein `GET` versucht und die 405 sauber hinnimmt.
+  - `users/me?expand=authorization` mit den Scopes des MCP-Clients (offen aus M1), sonst sind alle Tools `forbidden`.
+  - Dauer von `list_surveys` mit `includeVersions` bei vielen Umfragen (liest alle Zeilen seitenweise mit dem Token der Person).
+- **Abhängigkeiten:** `@modelcontextprotocol/sdk` 1.32.2 und `zod` 4.6.7 stehen direkt in `package.json` (Amplify behält seine zod-3-Kopien). `package-lock.json` ist mit `npm install` nachgezogen; das Lock enthält damit auch `@aws-sdk/client-kms` aus M6.
+- **Dateien:** Statt nur `server.ts` und `tools_v1.ts` gibt es zusätzlich `tool_handlers.ts` (Rolle, Eingabe, Tool-Logik, Audit-Log; ohne AWS-SDK über `McpToolDeps`) und `tool_deps.ts` (Standard-Zugriffe mit Rollen-Cache). So läuft der Test einschließlich JSON-RPC über den echten Transport ohne AWS und Genesys.
+- **Low-Level-`Server` statt `McpServer`:** Eingaben prüft der Server selbst mit zod (`invalid_input` im Format aus Abschnitt 4.2, M1-Befund), und `tools/list` hängt von `web_survey` ab. JSON Schemas kommen aus `z.toJSONSchema`; jedes Tool meldet auch ein `outputSchema`, der Test prüft jede Ausgabe dagegen.
+- **Abweichungen von der Spezifikation (dort nachgetragen):**
+  - `list_surveys` liefert ohne Optionen nur `surveyId` und `title` aus `survey_list` (sonst müsste jeder Aufruf alle Zeilen lesen). `name` und Versionen gibt es nur mit `includeVersions`, dazu `stageVersion`.
+  - `get_survey` liefert `lock` und `payloadSize` immer (ggf. `null`), `validation` als `{ valid, errors, translation?, warnings }`. Stage/Prod/Backup in der Abbildung der Kunden-API v1 (`toV1Question`, ohne Platzhalter-Bedingungen).
+  - `validate_survey` hat zusätzlich `surveyId?` (gegen den gespeicherten Draft, damit IDs und Namen wie beim Speichern gelten) und meldet `invalid_id`/`theme_unknown` als Eintrag in `errors`, nicht als Tool-Fehler.
+  - `list_web_themes` liefert zusätzlich `isDefault`.
+  - Neuer Fehlercode `internal_error` für unerwartete Fehler.
+  - Rollenprüfung zuerst, dann Eingabe: Ohne Rolle wird nichts über die Eingabe verraten.
+- **Rollen-Cache** pro Mandant und Person (`userId`) 60 s, Ladefehler werden nicht gemerkt und ergeben `upstream_error` mit `status`. Der Projekt-Tag kommt wie bisher aus `installation_meta.ts`.
+- **`resolveMcpTenant`** liefert jetzt auch die Feature Flags aus `__meta` (wurden dort schon gelesen), damit die Tools `web_survey` ohne zweiten Zugriff kennen.
+- **Gemeinsamer Zeilenabruf:** `forEachSurveyRow` in `shared/genesys_datatable.ts` (Seiten, Sonderzeilen, Zeitbudget). `listProdSurveys` (Kunden-API) nutzt ihn jetzt ebenfalls, mit unveränderten Fehlertexten; `survey_store.ts` hat dazu `readSurveyRows` mit dem Token der Person. Neu in `survey_pipeline.ts`: `checkDraft` (Schritte 6–8 ohne Deploy-Sperre) für `get_survey`.
+- **`validate_survey` mit `web_survey`:** `loadTenantThemesCached` liefert bei DynamoDB-Fehlern eine leere Liste; dann erscheint jede `web_theme_id` als `theme_unknown`. Für M9 (Schreiben) einen Loader verwenden, der Fehler meldet statt sie zu schlucken.
+- **CORS** unverändert (siehe M5): browserbasierte Clients wie der MCP Inspector bräuchten `mcp-protocol-version` in den erlaubten Headern.
 
 ### M9
 

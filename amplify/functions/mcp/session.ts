@@ -13,7 +13,7 @@ import { verifyAccessToken, type TokenTenant } from "./tokens";
 /**
  * Prüfkette Schritte 4 bis 6 pro MCP-Aufruf (`documentation/polly_mcp.md`, Abschnitt 3): Access-Token, Session
  * (bei Bedarf Genesys-Refresh), Rate-Limit pro Session. Schritte 1 bis 3 liegen in `tenant.ts`, die Rolle des Tools
- * und das Audit-Log kommen mit den Tools (M8). Das Genesys-Token verlässt den Server nie.
+ * und das Audit-Log in `tool_handlers.ts`. Das Genesys-Token verlässt den Server nie.
  */
 
 /** Genesys-Token wird so lange vor Ablauf erneuert. */
@@ -113,7 +113,7 @@ export async function checkSessionRate(store: OAuthStore, session: SessionRecord
   return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil(((minute + 1) * 60000 - now) / 1000)) };
 }
 
-/** Identität und Zugang eines geprüften MCP-Aufrufs, weitergereicht an die Tools (M8). */
+/** Identität und Zugang eines geprüften MCP-Aufrufs, weitergereicht an die Tools (`tool_handlers.ts`). */
 export interface McpCallContext {
   tenant: McpTenant;
   session: SessionRecord;

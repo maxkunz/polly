@@ -21,7 +21,7 @@ import {
   type SurveyRowPatch,
 } from "../../../src/domain/survey/surveyRow";
 import type { Survey } from "../../../src/domain/survey/surveyTypes";
-import { DataTableWriteError, addRow, getRow, putRow } from "./genesys_datatable";
+import { DataTableWriteError, addRow, forEachSurveyRow, getRow, putRow } from "./genesys_datatable";
 import { GENESYS_REQUEST_TIMEOUT_MS } from "./http";
 import { isValidSurveyId } from "./survey_id";
 import {
@@ -277,23 +277,46 @@ export interface SurveyRowView {
   versions: { draft: number | null; stage: number | null; prod: number | null; backup: number | null };
 }
 
+function toRowView(surveyId: string, row: Record<string, any>): SurveyRowView {
+  return {
+    surveyId,
+    row,
+    draft: parseSurveyDraft(row.Draft),
+    lock: parseSurveyLock(row.lock),
+    versions: {
+      draft: readFieldVersion(row.Draft),
+      stage: readFieldVersion(row.Stage),
+      prod: readFieldVersion(row.Prod),
+      backup: readFieldVersion(row.Backup),
+    },
+  };
+}
+
 /** Zeile `survey_<id>` mit geparstem Draft, Lock und Versionen. */
 export function readSurveyRow(ctx: SurveyStoreContext, surveyId: string): Promise<StoreResult<SurveyRowView>> {
   return run(ctx, "read", async () => {
     await assertNotDeleting(ctx, surveyId);
-    const row = await fetchSurveyRow(ctx, surveyId);
-    return {
-      surveyId,
-      row,
-      draft: parseSurveyDraft(row.Draft),
-      lock: parseSurveyLock(row.lock),
-      versions: {
-        draft: readFieldVersion(row.Draft),
-        stage: readFieldVersion(row.Stage),
-        prod: readFieldVersion(row.Prod),
-        backup: readFieldVersion(row.Backup),
-      },
-    };
+    return toRowView(surveyId, await fetchSurveyRow(ctx, surveyId));
+  });
+}
+
+/**
+ * Alle Zeilen `survey_<id>` (seitenweise, `forEachSurveyRow`), ohne Prüfung auf laufende Löschung (macht der
+ * Aufrufer für alle IDs auf einmal). Doppelt gelieferte Zeilen zählen einmal. Bricht ab, wenn das Zeitbudget
+ * nicht mehr für eine weitere Seite reicht.
+ */
+export function readSurveyRows(ctx: SurveyStoreContext): Promise<StoreResult<SurveyRowView[]>> {
+  return run(ctx, "list_rows", async (deadline) => {
+    const views = new Map<string, SurveyRowView>();
+    const access = { region: ctx.credentials.region, token: ctx.token, dataTableId: ctx.credentials.surveyDataTableId };
+    const rows = await forEachSurveyRow(access, (surveyId, row) => views.set(surveyId, toRowView(surveyId, row)), {
+      canContinue: () => Date.now() + GENESYS_REQUEST_TIMEOUT_MS <= deadline,
+    });
+    if (!rows.ok) {
+      console.error("[survey_store] cannot list survey rows", { tenantId: ctx.tenantId, reason: rows.reason, status: rows.status });
+      upstream(rows.status);
+    }
+    return [...views.values()];
   });
 }
 

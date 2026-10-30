@@ -1,6 +1,6 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
 import { baseUrlError, pickBaseUrl, usableBaseUrl } from "../../../src/domain/survey/invitationLinks";
-import { getRow, type SurveyTableAccess } from "./genesys_datatable";
+import { forEachSurveyRow, getRow, type SurveyRowsOptions, type SurveyTableAccess } from "./genesys_datatable";
 import { fetchWithTimeout } from "./http";
 import { loadDefaultBaseUrl } from "./installation_meta";
 import { isValidSurveyId } from "./survey_id";
@@ -318,28 +318,17 @@ export async function loadFlowSurvey(
   }
 }
 
-/** Zeilen pro Seite beim Lesen aller Umfragen: Eine Zeile hat bis zu vier Zellen mit je max. 32.000 Zeichen. */
-const SURVEY_ROWS_PAGE_SIZE = 25;
-/** Obergrenze gegen endlose Schleifen (25 × 80 = 2000 Zeilen). */
-const SURVEY_ROWS_MAX_PAGES = 80;
-
-const SURVEY_ROW_KEY_PREFIX = "survey_";
-
 export type ProdSurveyListResult =
   | { status: "ok"; surveys: FlowSurvey[] }
   | { status: "error"; reason: string; throttled?: boolean };
 
-export interface ProdSurveyListOptions {
-  /** Wird vor jeder Seite gefragt; `false` bricht mit Fehler ab (Zeitbudget der Lambda). */
-  canContinue?: () => boolean;
-}
+export type ProdSurveyListOptions = SurveyRowsOptions;
 
 /**
  * Alle Umfragen des Mandanten mit gültigem Prod-Stand, ohne Umfragen, deren Löschung läuft (`SurveyDeletionJobsTable`).
- * Liest die Zeilen der Data Table seitenweise; `__meta`, `__lock` und `survey_list` und Zeilen ohne gültige
- * Prod-Zelle werden übersprungen. `survey_list` genügt nicht, weil dort nur ID und Titel stehen.
- * Genesys blättert über den Offset: Ändert sich die Tabelle währenddessen, kann eine Zeile doppelt kommen
- * (wird nach ID entfernt) oder fehlen.
+ * Liest die Zeilen der Data Table seitenweise (`forEachSurveyRow`); Zeilen ohne gültige Prod-Zelle werden
+ * übersprungen. `survey_list` genügt nicht, weil dort nur ID und Titel stehen. Doppelt gelieferte Zeilen
+ * werden nach ID entfernt.
  */
 export async function listProdSurveys(
   tenantId: string,
@@ -352,32 +341,15 @@ export async function listProdSurveys(
   const surveys = new Map<string, FlowSurvey>();
   try {
     const access = await getSurveyTableAccess(tenantCredentials);
-    let pageNumber = 1;
-    let pageCount = 1;
-    do {
-      if (options.canContinue && !options.canContinue()) return { status: "error", reason: "Time budget exhausted" };
-      const url =
-        `https://api.${access.region}/api/v2/flows/datatables/${encodeURIComponent(access.dataTableId)}` +
-        `/rows?showbrief=false&pageSize=${SURVEY_ROWS_PAGE_SIZE}&pageNumber=${pageNumber}`;
-      const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${access.token}` } });
-      if (!res.ok) {
-        return { status: "error", reason: `Survey rows HTTP ${res.status}`, ...(res.status === 429 ? { throttled: true } : {}) };
-      }
-      const body: any = await res.json();
-      for (const row of Array.isArray(body?.entities) ? body.entities : []) {
-        const key = typeof row?.key === "string" ? row.key : "";
-        if (!key.startsWith(SURVEY_ROW_KEY_PREFIX) || key === "survey_list") continue;
-        const surveyId = key.slice(SURVEY_ROW_KEY_PREFIX.length);
-        if (!isValidSurveyId(surveyId)) continue;
+    const rows = await forEachSurveyRow(
+      access,
+      (surveyId, row) => {
         const survey = parseProdSurvey(row.Prod, surveyId);
         if (survey) surveys.set(survey.id, survey);
-      }
-      // Ohne Seitenzahl wäre unklar, ob weitere Seiten folgen: Fehler statt still gekürzter Liste
-      if (!Number.isInteger(body?.pageCount)) return { status: "error", reason: "Survey rows response without pageCount" };
-      pageCount = body.pageCount;
-      pageNumber += 1;
-    } while (pageNumber <= pageCount && pageNumber <= SURVEY_ROWS_MAX_PAGES);
-    if (pageNumber <= pageCount) return { status: "error", reason: "Too many rows in the survey data table" };
+      },
+      options
+    );
+    if (!rows.ok) return { status: "error", reason: rows.reason, ...(rows.status === 429 ? { throttled: true } : {}) };
 
     const deleting = await findSurveysBeingDeleted(tenantId, [...surveys.keys()]);
     return { status: "ok", surveys: [...surveys.values()].filter((survey) => !deleting.has(survey.id)) };

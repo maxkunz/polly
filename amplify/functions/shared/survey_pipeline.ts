@@ -260,6 +260,14 @@ export function prepareDraft(input: Survey, options: PrepareDraftOptions): Prepa
   return { ok: true, survey, warnings: [...warnings, ...checked.warnings], payloadSize: checked.payloadSize };
 }
 
+/**
+ * Schritte 6–8 auf einem gespeicherten Draft, ohne zu schreiben (`get_survey`): Prüffehler wie beim Speichern,
+ * ein zu großes Flow-JSON nur als Warnung.
+ */
+export function checkDraft(draft: Survey, options: { webSurvey: boolean }): DeployCheckResult {
+  return checkRulesAndPayload(draft, options.webSurvey, false);
+}
+
 /** Schritte 6–8 auf dem gespeicherten Draft vor dem Deploy; liefert das Flow-JSON für Stage bzw. Prod. */
 export function checkDeployable(draft: Survey, options: { webSurvey: boolean }): DeployCheckResult {
   return checkRulesAndPayload(draft, options.webSurvey, true);

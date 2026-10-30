@@ -31,6 +31,55 @@ export async function getRow(
   return { status: res.status };
 }
 
+/** Zeilen pro Seite beim Lesen aller Umfragen: Eine Zeile hat bis zu vier Zellen mit je max. 32.000 Zeichen. */
+const SURVEY_ROWS_PAGE_SIZE = 25;
+/** Obergrenze gegen endlose Schleifen (25 × 80 = 2000 Zeilen). */
+const SURVEY_ROWS_MAX_PAGES = 80;
+
+const SURVEY_ROW_KEY_PREFIX = "survey_";
+
+export type SurveyRowsResult = { ok: true } | { ok: false; reason: string; status?: number };
+
+export interface SurveyRowsOptions {
+  /** Wird vor jeder Seite gefragt; `false` bricht mit Fehler ab (Zeitbudget der Lambda). */
+  canContinue?: () => boolean;
+}
+
+/**
+ * Liest alle Zeilen `survey_<uuid>` seitenweise (mit beliebigem Token) und ruft `visit` je Zeile auf; `__meta`,
+ * `__lock`, `survey_list` und Schlüssel ohne gültige ID werden übersprungen. Genesys blättert über den Offset:
+ * Ändert sich die Tabelle währenddessen, kann eine Zeile doppelt kommen oder fehlen. Wirft bei Netzwerkfehlern.
+ */
+export async function forEachSurveyRow(
+  access: SurveyTableAccess,
+  visit: (surveyId: string, row: Record<string, any>) => void,
+  options: SurveyRowsOptions = {}
+): Promise<SurveyRowsResult> {
+  let pageNumber = 1;
+  let pageCount = 1;
+  do {
+    if (options.canContinue && !options.canContinue()) return { ok: false, reason: "Time budget exhausted" };
+    const url =
+      `https://api.${access.region}/api/v2/flows/datatables/${encodeURIComponent(access.dataTableId)}` +
+      `/rows?showbrief=false&pageSize=${SURVEY_ROWS_PAGE_SIZE}&pageNumber=${pageNumber}`;
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${access.token}` } });
+    if (!res.ok) return { ok: false, reason: `Survey rows HTTP ${res.status}`, status: res.status };
+    const body: any = await res.json();
+    for (const row of Array.isArray(body?.entities) ? body.entities : []) {
+      const key = typeof row?.key === "string" ? row.key : "";
+      if (!key.startsWith(SURVEY_ROW_KEY_PREFIX) || key === "survey_list") continue;
+      const surveyId = key.slice(SURVEY_ROW_KEY_PREFIX.length);
+      if (isValidSurveyId(surveyId)) visit(surveyId, row);
+    }
+    // Ohne Seitenzahl wäre unklar, ob weitere Seiten folgen: Fehler statt still gekürzter Liste
+    if (!Number.isInteger(body?.pageCount)) return { ok: false, reason: "Survey rows response without pageCount" };
+    pageCount = body.pageCount;
+    pageNumber += 1;
+  } while (pageNumber <= pageCount && pageNumber <= SURVEY_ROWS_MAX_PAGES);
+  if (pageNumber <= pageCount) return { ok: false, reason: "Too many rows in the survey data table" };
+  return { ok: true };
+}
+
 /** Region und Umfrage-Data-Table des Mandanten (Ausschnitt aus `TenantCredentials`), Ziel jedes Schreibzugriffs. */
 export type SurveyTableTarget = {
   region: string;

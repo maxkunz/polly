@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "tsx test/surveyFlowTranslator.test.ts && tsx test/surveyResponsesExport.test.ts && tsx test/surveyDeletion.test.ts && tsx test/genesysRegion.test.ts && tsx test/flowPayloadBudget.test.ts && tsx test/ttsTextLimit.test.ts && tsx test/technicalName.test.ts && tsx test/surveyValidation.test.ts && tsx test/surveyRow.test.ts && tsx test/invitationToken.test.ts && tsx test/flowNavigation.test.ts && tsx test/webSurveyBackend.test.ts && tsx test/invitationLinks.test.ts && tsx test/webSurveyPage.test.ts && tsx test/webTheme.test.ts && tsx test/featureFlags.test.ts && tsx test/surveyExistence.test.ts && tsx test/customerApi.test.ts && tsx test/ttlCache.test.ts && tsx test/surveyRules.test.ts && tsx test/domainImports.test.ts && tsx test/mcpSurveyPipeline.test.ts && tsx test/mcpPseudonym.test.ts && tsx test/mcpInfrastructure.test.ts && tsx test/mcpAdmin.test.ts && tsx test/mcpOAuth.test.ts"
+    "test": "tsx test/surveyFlowTranslator.test.ts && tsx test/surveyResponsesExport.test.ts && tsx test/surveyDeletion.test.ts && tsx test/genesysRegion.test.ts && tsx test/flowPayloadBudget.test.ts && tsx test/ttsTextLimit.test.ts && tsx test/technicalName.test.ts && tsx test/surveyValidation.test.ts && tsx test/surveyRow.test.ts && tsx test/invitationToken.test.ts && tsx test/flowNavigation.test.ts && tsx test/webSurveyBackend.test.ts && tsx test/invitationLinks.test.ts && tsx test/webSurveyPage.test.ts && tsx test/webTheme.test.ts && tsx test/featureFlags.test.ts && tsx test/surveyExistence.test.ts && tsx test/customerApi.test.ts && tsx test/ttlCache.test.ts && tsx test/surveyRules.test.ts && tsx test/domainImports.test.ts && tsx test/mcpSurveyPipeline.test.ts && tsx test/mcpPseudonym.test.ts && tsx test/mcpInfrastructure.test.ts && tsx test/mcpAdmin.test.ts && tsx test/mcpOAuth.test.ts && tsx test/mcpToolsV1.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.975.0",
@@ -17,6 +17,7 @@
     "@aws-sdk/client-sqs": "^3.975.0",
     "@aws-sdk/lib-dynamodb": "^3.975.0",
     "@heroicons/vue": "^2.2.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@primeuix/themes": "^2.0.2",
     "buffer": "5.6.0",
     "pinia": "^2.2.0",
@@ -25,7 +26,8 @@
     "purecloud-platform-client-v2": "^262.0.0",
     "vue": "^3.5.0",
     "vue-i18n": "^10.0.8",
-    "vue-router": "^4.4.0"
+    "vue-router": "^4.4.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.2.1",

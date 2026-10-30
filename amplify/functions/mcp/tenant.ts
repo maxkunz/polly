@@ -1,6 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { isFeatureEnabled } from "../../../src/domain/features/featureFlags";
+import { isFeatureEnabled, type FeatureFlags } from "../../../src/domain/features/featureFlags";
 import { isGenesysRegion, normalizeGenesysRegion } from "../shared/genesys_regions";
 import { getSurveyTableAccess } from "../shared/genesys_survey_check";
 import { loadInstallationMeta } from "../shared/installation_meta";
@@ -80,7 +80,8 @@ async function lookupBackendClientId(tenantKey: string): Promise<string | null> 
 }
 
 export type McpTenantResolution =
-  | { ok: true; tenant: McpTenant; credentials: TenantCredentials }
+  /** `features`: Feature Flags aus `__meta` (60 s gemerkt), z. B. `web_survey` für die Tools. */
+  | { ok: true; tenant: McpTenant; credentials: TenantCredentials; features: FeatureFlags }
   | { ok: false; reason: "not_found" }
   /** Genesys oder Secrets nicht erreichbar: vorübergehend, kein „nicht gefunden“ */
   | { ok: false; reason: "unavailable" };
@@ -95,17 +96,16 @@ export async function resolveMcpTenant(tenantKey: unknown): Promise<McpTenantRes
   if (!tenant) return { ok: false, reason: "not_found" };
 
   let credentials: TenantCredentials | undefined;
-  let featureEnabled: boolean;
+  let features: FeatureFlags;
   try {
     credentials = await loadTenantCredentials(tenant.tenantId, item);
     if (!credentials) return { ok: false, reason: "not_found" };
-    const meta = await loadInstallationMeta(tenant.tenantId, await getSurveyTableAccess(credentials));
-    featureEnabled = isFeatureEnabled(meta.features, "mcp");
+    features = (await loadInstallationMeta(tenant.tenantId, await getSurveyTableAccess(credentials))).features;
   } catch (err: any) {
     console.error("[mcp] cannot read installation meta", { tenantId: tenant.tenantId, name: err?.name, status: err?.status });
     return { ok: false, reason: "unavailable" };
   }
   // Das Flag kann nur abschalten, nie allein einschalten (mcpEnabled ist maßgeblich)
-  if (!featureEnabled) return { ok: false, reason: "not_found" };
-  return { ok: true, tenant, credentials };
+  if (!isFeatureEnabled(features, "mcp")) return { ok: false, reason: "not_found" };
+  return { ok: true, tenant, credentials, features };
 }

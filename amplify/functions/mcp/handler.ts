@@ -10,6 +10,7 @@ import { isMcpEnabled, parseAllowedRedirectUris } from "../shared/mcp_config";
 import { exchangeGenesysCode, loadGenesysTokenInfo, revokeGenesysToken } from "../shared/mcp_genesys";
 import { decryptClientSecret, decryptGenesysTokens, encryptGenesysTokens } from "../shared/mcp_secret";
 import { getAuthorizationToken, type TenantCredentials } from "../shared/tenant_auth";
+import type { FeatureFlags } from "../../../src/domain/features/featureFlags";
 import {
   AUTH_CODE_TTL_SECONDS,
   AUTH_REQUEST_TTL_SECONDS,
@@ -39,11 +40,13 @@ import {
 import { pageHeaders, pickLang, renderConsentPage, renderErrorPage, type PageErrorKey, type PageLang } from "./oauth_pages";
 import { createDynamoOAuthStore, type AuthRequestRecord, type AuthRequestStatus, type ClientRecord } from "./oauth_store";
 import { authenticateMcpCall, ensureGenesysAccess, kmsGenesysDeps, revokeSessionGenesys } from "./session";
+import { handleMcpPost } from "./server";
 import { resolveMcpTenant, type McpTenant } from "./tenant";
+import { defaultToolDeps } from "./tool_deps";
 import { redeemAuthorizationCode, revokeToken, rotateRefreshToken, type TokenTenant } from "./tokens";
 
 /**
- * Lambda `mcp`: OAuth-Fassade (M7) und MCP-Endpunkt (M8). Ablauf und Prüfkette: `documentation/polly_mcp.md`,
+ * Lambda `mcp`: OAuth-Fassade (M7) und MCP-Endpunkt (M8, Tools in `server.ts`). Ablauf und Prüfkette: `documentation/polly_mcp.md`,
  * Abschnitte 2 und 3. Kill-Switch, unbekannter Schlüssel, MCP aus (egal auf welcher Ebene) und Mandant nicht
  * `APPROVED` ergeben auf allen Routen dieselbe 404. Tokens, Codes und Secrets stehen nie im Log.
  */
@@ -90,6 +93,7 @@ interface RouteContext {
   event: AnyApiGwEvent;
   tenant: McpTenant;
   credentials: TenantCredentials;
+  features: FeatureFlags;
   urls: McpUrls;
   tokenTenant: TokenTenant;
   lang: PageLang;
@@ -440,6 +444,8 @@ async function revoke(ctx: RouteContext): Promise<AnyResult> {
 // --- MCP-Endpunkt ------------------------------------------------------------------------------------------------
 
 async function mcpEndpoint(ctx: RouteContext): Promise<AnyResult> {
+  // Nur POST (JSON-Modus, kein SSE-Stream, keine MCP-Session); vor der Prüfkette, damit Clients nicht neu anmelden
+  if (ctx.event?.requestContext?.http?.method !== "POST") return jsonResponse(405, { error: "method_not_allowed" }, { Allow: "POST" });
   const auth = await authenticateMcpCall(genesysDeps, ctx.tenant, ctx.tokenTenant, getAuthorizationToken(ctx.event), ctx.now);
   if (!auth.ok) {
     if (auth.kind === "unauthorized") {
@@ -453,8 +459,11 @@ async function mcpEndpoint(ctx: RouteContext): Promise<AnyResult> {
     }
     return jsonResponse(503, { error: "temporarily_unavailable" }, { "Retry-After": "5" });
   }
-  // Der MCP-Server mit den Tools kommt in M8
-  return jsonResponse(501, { error: "not_implemented" });
+  return handleMcpPost(
+    ctx.event,
+    { call: auth.context, credentials: ctx.credentials, features: ctx.features, now: ctx.now },
+    defaultToolDeps
+  );
 }
 
 const ROUTES: Record<string, Route> = {
@@ -487,11 +496,11 @@ export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
         ? jsonResponse(503, { error: "temporarily_unavailable" }, { "Retry-After": "5" })
         : notFound();
     }
-    const { tenant, credentials } = resolution;
+    const { tenant, credentials, features } = resolution;
     tenantId = tenant.tenantId;
     const urls = buildMcpUrls(MCP_PUBLIC_BASE_URL, tenant.mcpTenantKey);
     const tokenTenant: TokenTenant = { tenantId: tenant.tenantId, mcpTenantKey: tenant.mcpTenantKey, epoch: tenant.epoch, mcpUrl: urls.mcpUrl };
-    return await route.handle({ event, tenant, credentials, urls, tokenTenant, lang, now: Date.now() });
+    return await route.handle({ event, tenant, credentials, features, urls, tokenTenant, lang, now: Date.now() });
   } catch (err: any) {
     console.error("[mcp] unhandled error", { tenantId, routeKey: event?.routeKey, name: err?.name, message: err?.message });
     return route.html ? errorPage(500, lang, "internal") : jsonResponse(500, { error: "server_error" });
