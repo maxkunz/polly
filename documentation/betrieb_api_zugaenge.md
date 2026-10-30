@@ -4,6 +4,8 @@ Diese Anleitung beschreibt, wie das Betriebsteam Zugänge zur Kunden-API (`/ext/
 
 > **Stand:** Entwurf. Die Verwaltung der Zugänge und die Anmeldung stehen. Die APIs selbst (Reporting, Einladungen, Umfragedetails) stehen, der Ende-zu-Ende-Test folgt, siehe [implementationsplan_external_api.md](implementationsplan_external_api.md).
 
+> **Nutzerbezogener Zugriff für KI-Clients:** [polly_mcp.md](polly_mcp.md), getrennte Anmeldung. MCP-Zugänge legt nicht das Betriebsteam an, sondern der Kunde selbst in den Polly-Einstellungen. Sie sind nicht Teil dieser Anleitung und werden beim Löschen eines API-Clients nicht berührt.
+
 Ein Zugang (API-Client) ist ein Cognito-Client mit Client Credentials im User Pool der Umgebung und ein Eintrag in der DynamoDB-Tabelle `ApiClientsTable`. Der Eintrag ordnet den Client einem Mandanten zu. Jeder Aufruf der Kunden-API prüft:
 
 1. das Token

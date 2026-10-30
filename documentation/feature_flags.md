@@ -1,6 +1,6 @@
 # Feature Flags
 
-Feature Flags schalten Funktionen pro Installation ein oder aus. Sie gelten nur im Frontend und schützen dort vor Fehlbedienung. Wie bei den Rollen (siehe [permissions.md](permissions.md)) sind sie **keine** Sicherheitsgrenze: Das Backend prüft sie nicht.
+Feature Flags schalten Funktionen pro Installation ein oder aus. Sie gelten nur im Frontend und schützen dort vor Fehlbedienung. Wie bei den Rollen (siehe [permissions.md](permissions.md)) sind sie **keine** Sicherheitsgrenze: Das Backend prüft sie nicht. Einzige Ausnahme ist `mcp`: Dort wertet die MCP-Lambda das Flag als zusätzliche Sperre aus (nur abschaltend, siehe Tabelle unten).
 
 ## Speicherort
 
@@ -28,6 +28,7 @@ Die Flags stehen in der Zeile `__meta` der Umfrage-Data-Table (`<projectTag>_pol
 
 | Key | Wirkung, wenn aus |
 |---|---|
+| `mcp` | Ausgeblendet wird die Karte „MCP“ in den Einstellungen ([polly_mcp.md](polly_mcp.md)). Serverseitig liest die MCP-Lambda das Flag zusätzlich (Cache 60 s) und antwortet ohne Flag mit 404. Das Flag kann MCP **nur abschalten, nie allein einschalten**: Zum Einschalten ist immer `mcpEnabled` im Mandanteneintrag nötig (Einstellungen, Rolle `polly_deploy`). Vorauswahl im Onboarding: aus. |
 | `web_survey` | Ausgeblendet werden: Einstellungen → Web-Designs und Standard-Basis-URL; im Umfrage-Editor Basis-URL, Sprache, Design und der Button „Einladungslinks“ (auch `?invite=1` öffnet die Einladungsansicht nicht). Beim Speichern einer Umfrage werden die Standardwerte gesetzt: `base_url: ""`, `language: "de"`, `web_theme_id` entfernt. Der Validator prüft diese Felder dann nicht. Schon erzeugte Einladungslinks und die öffentliche Umfrageseite funktionieren weiter. |
 
 ## Technik

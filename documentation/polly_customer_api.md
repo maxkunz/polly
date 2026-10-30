@@ -13,6 +13,8 @@ Mit der Kunden-API rufen Sie Daten aus Polly maschinell ab, ohne Genesys-Login:
 
 Alle Anfragen und Antworten sind JSON in UTF-8. Zeitangaben sind UTC.
 
+> **Nutzerbezogener Zugriff für KI-Clients:** Die Kunden-API kennt keine Personen und keine Polly-Rollen. Für KI-Clients wie Claude, die im Namen einer angemeldeten Person Umfragen bearbeiten oder Ergebnisse auswerten, gibt es einen eigenen Zugang mit getrennter Anmeldung: [polly_mcp.md](polly_mcp.md).
+
 ---
 
 ## 1. Zugangsdaten
