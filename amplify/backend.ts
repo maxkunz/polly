@@ -5,6 +5,7 @@ import * as cdk from "aws-cdk-lib";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as kms from "aws-cdk-lib/aws-kms";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as events from "aws-cdk-lib/aws-events";
@@ -24,6 +25,9 @@ import { pollyArchyUpload } from "./functions/polly_archy_upload/resource";
 import { invitations } from "./functions/invitations/resource";
 import { webSurvey } from "./functions/web_survey/resource";
 import { webThemes } from "./functions/web_themes/resource";
+import { mcp } from "./functions/mcp/resource";
+import { mcpAdmin } from "./functions/mcp_admin/resource";
+import { DEFAULT_MCP_REDIRECT_HOSTS } from "./functions/shared/mcp_config";
 import { API_RESOURCE_SERVER, API_SCOPES, API_SCOPE_DESCRIPTIONS } from "./functions/shared/api_scopes";
 
 const rawBranchName = (
@@ -71,6 +75,18 @@ const WEB_SURVEY_SUBMIT_THROTTLE = { rateLimit: 100, burstLimit: 300 };
 // reservierte Ausführungen verlangt und der Deploy auf Konten mit kleinem Kontingent sonst scheitert.
 const webSurveyReservedConcurrency = Number.parseInt(process.env.WEB_SURVEY_RESERVED_CONCURRENCY ?? "0", 10);
 
+
+// MCP-Schnittstelle (documentation/polly_mcp.md). Globaler Kill-Switch: ohne MCP_ENABLED=true antworten alle
+// MCP-Routen mit 404. Basis-URL für Metadaten und Redirects: Standard ist die execute-api-URL dieser API
+// (aus apiId gebaut, nicht aus httpApi.url, sonst entstünde ein Zyklus über Stage und Routen); mit eigener
+// Domain MCP_PUBLIC_BASE_URL setzen. Beide Variablen sind Amplify-Umgebungsvariablen und wirken nach dem Deploy.
+const mcpEnabled = process.env.MCP_ENABLED?.trim().toLowerCase() === "true" ? "true" : "false";
+const mcpPublicBaseUrlFromEnv = process.env.MCP_PUBLIC_BASE_URL?.trim().replace(/\/+$/, "");
+const mcpAllowedRedirectHosts = process.env.MCP_ALLOWED_REDIRECT_HOSTS?.trim() || DEFAULT_MCP_REDIRECT_HOSTS.join(",");
+// Reservierte Parallelität der Lambda mcp (wie bei web_survey nur per Variable, AWS verlangt mindestens 100
+// nicht reservierte Ausführungen im Konto)
+const mcpReservedConcurrency = Number.parseInt(process.env.MCP_RESERVED_CONCURRENCY ?? "0", 10);
+
 const backend = defineBackend({
   auth,
   onboarding,
@@ -82,6 +98,8 @@ const backend = defineBackend({
   invitations,
   webSurvey,
   webThemes,
+  mcp,
+  mcpAdmin,
   reportingApi,
   surveysApi,
 });
@@ -118,6 +136,13 @@ const tenantsTable = new dynamodb.Table(stack, "TenantsTable", {
 tenantsTable.addGlobalSecondaryIndex({
   indexName: "byTenantId",
   partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.ALL,
+});
+
+// Mandanten mit aktiviertem MCP über den URL-Schlüssel finden (sparse: nur Einträge mit mcpTenantKey)
+tenantsTable.addGlobalSecondaryIndex({
+  indexName: "byMcpTenantKey",
+  partitionKey: { name: "mcpTenantKey", type: dynamodb.AttributeType.STRING },
   projectionType: dynamodb.ProjectionType.ALL,
 });
 
@@ -216,6 +241,44 @@ apiClientsTable.addGlobalSecondaryIndex({
 const webSurveyJwtSecret = new secretsmanager.Secret(stack, "WebSurveyJwtSecret", {
   secretName: `polly-web-survey-jwt-${envSuffix}`,
   description: "Signaturschlüssel der Einladungslinks des Web-Kanals (HS256)",
+  generateSecretString: {
+    passwordLength: 64,
+    excludePunctuation: true,
+  },
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// OAuth-Zustand der MCP-Fassade (Clients, Anmeldeanfragen, Codes, Sessions, Tokens als Hash, Zustimmung, Zähler),
+// Schema und Lebensdauern: documentation/polly_mcp.md. Jeder Eintrag trägt ttl (DynamoDB-TTL) und tenantId.
+const mcpOAuthTable = new dynamodb.Table(stack, "McpOAuthTable", {
+  partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "sk", type: dynamodb.AttributeType.STRING },
+  billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+  timeToLiveAttribute: "ttl",
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Alle Einträge eines Mandanten (Widerruf beim Abschalten, Aufräumen beim Löschen des Mandanten)
+mcpOAuthTable.addGlobalSecondaryIndex({
+  indexName: "byTenant",
+  partitionKey: { name: "tenantId", type: dynamodb.AttributeType.STRING },
+  sortKey: { name: "pk", type: dynamodb.AttributeType.STRING },
+  projectionType: dynamodb.ProjectionType.KEYS_ONLY,
+});
+
+// Verschlüsselt die Genesys-Tokens in den MCP-Sessions und das Client-Secret des Genesys-Clients. RETAIN:
+// Ohne den Schlüssel wären gespeicherte Sessions unlesbar.
+const mcpTokenKey = new kms.Key(stack, "McpTokenKey", {
+  description: `Polly MCP: Genesys-Tokens und Client-Secret (${envSuffix})`,
+  enableKeyRotation: true,
+  removalPolicy: RemovalPolicy.RETAIN,
+});
+
+// Ausgangsschlüssel für Pseudonyme und versiegelte Cursor (HKDF in shared/pseudonym.ts). RETAIN, weil ein neuer
+// Wert alle Pseudonyme ändern und offene Cursor ungültig machen würde.
+const mcpPseudonymSecret = new secretsmanager.Secret(stack, "McpPseudonymSecret", {
+  secretName: `polly-mcp-pseudonym-${envSuffix}`,
+  description: "Polly MCP: Ausgangsschlüssel für Pseudonyme und Cursor",
   generateSecretString: {
     passwordLength: 64,
     excludePunctuation: true,
@@ -676,6 +739,111 @@ const surveysApiRoutes = [
   }),
 ];
 
+// ---------------------------------------------------------------------------
+// MCP-Schnittstelle: Server mit OAuth-Fassade (mcp) und Schalter pro Mandant (mcp_admin), Gerüst (M5)
+// ---------------------------------------------------------------------------
+
+const mcpPublicBaseUrl =
+  mcpPublicBaseUrlFromEnv || `https://${httpApi.apiId}.execute-api.${stack.region}.amazonaws.com`;
+
+const mcpLambda = backend.mcp.resources.lambda as lambda.Function;
+
+mcpOAuthTable.grantReadWriteData(mcpLambda);
+mcpLambda.addEnvironment("MCP_OAUTH_TABLE_NAME", mcpOAuthTable.tableName);
+mcpTokenKey.grantEncryptDecrypt(mcpLambda);
+mcpLambda.addEnvironment("MCP_TOKEN_KEY_ARN", mcpTokenKey.keyArn);
+mcpPseudonymSecret.grantRead(mcpLambda);
+mcpLambda.addEnvironment("MCP_PSEUDONYM_SECRET_ARN", mcpPseudonymSecret.secretArn);
+mcpLambda.addEnvironment("MCP_ENABLED", mcpEnabled);
+mcpLambda.addEnvironment("MCP_PUBLIC_BASE_URL", mcpPublicBaseUrl);
+mcpLambda.addEnvironment("MCP_ALLOWED_REDIRECT_HOSTS", mcpAllowedRedirectHosts);
+mcpLambda.addEnvironment("TENANTS_MCP_KEY_INDEX", "byMcpTenantKey");
+// Lesende Tools (Ergebnisse, Löschstatus, Designs); Schreiben in die Data Table läuft über Genesys, nicht DynamoDB
+surveyResponsesTable.grantReadData(mcpLambda);
+mcpLambda.addEnvironment("SURVEY_RESPONSES_TABLE_NAME", surveyResponsesTable.tableName);
+surveyAggregatesTable.grantReadData(mcpLambda);
+mcpLambda.addEnvironment("SURVEY_AGGREGATES_TABLE_NAME", surveyAggregatesTable.tableName);
+surveyDeletionJobsTable.grantReadData(mcpLambda);
+mcpLambda.addEnvironment("SURVEY_DELETION_JOBS_TABLE_NAME", surveyDeletionJobsTable.tableName);
+webSurveyThemesTable.grantReadData(mcpLambda);
+mcpLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
+attachTenantAuth(mcpLambda);
+
+if (Number.isInteger(mcpReservedConcurrency) && mcpReservedConcurrency > 0) {
+  (mcpLambda.node.defaultChild as lambda.CfnFunction).reservedConcurrentExecutions = mcpReservedConcurrency;
+}
+
+const mcpInteg = new integrations.HttpLambdaIntegration("McpInteg", mcpLambda);
+
+const mcpRoutes = [
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}",
+    methods: [apigw.HttpMethod.ANY],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/.well-known/oauth-protected-resource/mcp/{tenantKey}",
+    methods: [apigw.HttpMethod.GET],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/.well-known/oauth-authorization-server/mcp/{tenantKey}",
+    methods: [apigw.HttpMethod.GET],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}/oauth/register",
+    methods: [apigw.HttpMethod.POST],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}/oauth/authorize",
+    methods: [apigw.HttpMethod.GET],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}/oauth/callback",
+    methods: [apigw.HttpMethod.GET],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}/oauth/consent",
+    methods: [apigw.HttpMethod.GET, apigw.HttpMethod.POST],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}/oauth/token",
+    methods: [apigw.HttpMethod.POST],
+    integration: mcpInteg,
+  }),
+  ...httpApi.addRoutes({
+    path: "/mcp/{tenantKey}/oauth/revoke",
+    methods: [apigw.HttpMethod.POST],
+    integration: mcpInteg,
+  }),
+];
+
+// Schalter pro Mandant: schreibt TenantsTable (mcpEnabled, mcpTenantKey, …) und räumt die MCP-Einträge ab
+const mcpAdminLambda = backend.mcpAdmin.resources.lambda as lambda.Function;
+
+tenantsTable.grantReadWriteData(mcpAdminLambda);
+mcpOAuthTable.grantReadWriteData(mcpAdminLambda);
+mcpAdminLambda.addEnvironment("MCP_OAUTH_TABLE_NAME", mcpOAuthTable.tableName);
+mcpTokenKey.grantEncryptDecrypt(mcpAdminLambda);
+mcpAdminLambda.addEnvironment("MCP_TOKEN_KEY_ARN", mcpTokenKey.keyArn);
+mcpAdminLambda.addEnvironment("MCP_ENABLED", mcpEnabled);
+mcpAdminLambda.addEnvironment("MCP_PUBLIC_BASE_URL", mcpPublicBaseUrl);
+mcpAdminLambda.addEnvironment("TENANTS_MCP_KEY_INDEX", "byMcpTenantKey");
+attachTenantAuth(mcpAdminLambda);
+
+const mcpAdminInteg = new integrations.HttpLambdaIntegration("McpAdminInteg", mcpAdminLambda);
+
+const mcpAdminRoutes = httpApi.addRoutes({
+  path: "/mcp-settings",
+  methods: [apigw.HttpMethod.GET, apigw.HttpMethod.PUT, apigw.HttpMethod.DELETE],
+  integration: mcpAdminInteg,
+});
+
 // Drosselung der Kunden-API pro Route, für alle Mandanten und Clients zusammen (keine Grenze pro Client).
 // Ein Client in einer Schleife kann damit andere ausbremsen; dokumentiert in polly_customer_api.md, Abschnitt 3.
 const REPORTING_API_THROTTLE = { rateLimit: 20, burstLimit: 40 };
@@ -688,6 +856,16 @@ const EXT_SURVEYS_THROTTLE = { rateLimit: 10, burstLimit: 20 };
 // Export liest alle Designs des Mandanten, der Import schreibt bis zu 50 in einer Transaktion
 const EXT_THEMES_EXPORT_THROTTLE = { rateLimit: 10, burstLimit: 20 };
 const EXT_THEMES_IMPORT_THROTTLE = { rateLimit: 5, burstLimit: 10 };
+// MCP, pro Route für alle Mandanten zusammen. Der MCP-Endpunkt trägt jeden Tool-Aufruf (Genesys-Aufrufe,
+// Ergebnis-Scans); die Werte sind vorläufig, M11 legt sie nach Messungen fest.
+const MCP_ENDPOINT_THROTTLE = { rateLimit: 20, burstLimit: 40 };
+// Metadaten sind billig, werden aber bei jeder Verbindung geholt
+const MCP_METADATA_THROTTLE = { rateLimit: 20, burstLimit: 40 };
+// Anmelde-Routen: wenige Aufrufe pro Verbindung, jeder schreibt in DynamoDB oder ruft Genesys
+const MCP_OAUTH_THROTTLE = { rateLimit: 10, burstLimit: 20 };
+// Registrierung ist öffentlich und legt Einträge an
+const MCP_REGISTER_THROTTLE = { rateLimit: 2, burstLimit: 5 };
+const MCP_SETTINGS_THROTTLE = { rateLimit: 5, burstLimit: 10 };
 
 // Drosselung pro Route in der Default-Stage (L2 kennt nur stage-weite Werte)
 const defaultStage = httpApi.defaultStage;
@@ -734,9 +912,61 @@ if (defaultStage) {
       ThrottlingRateLimit: EXT_THEMES_IMPORT_THROTTLE.rateLimit,
       ThrottlingBurstLimit: EXT_THEMES_IMPORT_THROTTLE.burstLimit,
     },
+    "ANY /mcp/{tenantKey}": {
+      ThrottlingRateLimit: MCP_ENDPOINT_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_ENDPOINT_THROTTLE.burstLimit,
+    },
+    "GET /.well-known/oauth-protected-resource/mcp/{tenantKey}": {
+      ThrottlingRateLimit: MCP_METADATA_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_METADATA_THROTTLE.burstLimit,
+    },
+    "GET /.well-known/oauth-authorization-server/mcp/{tenantKey}": {
+      ThrottlingRateLimit: MCP_METADATA_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_METADATA_THROTTLE.burstLimit,
+    },
+    "POST /mcp/{tenantKey}/oauth/register": {
+      ThrottlingRateLimit: MCP_REGISTER_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_REGISTER_THROTTLE.burstLimit,
+    },
+    "GET /mcp/{tenantKey}/oauth/authorize": {
+      ThrottlingRateLimit: MCP_OAUTH_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_OAUTH_THROTTLE.burstLimit,
+    },
+    "GET /mcp/{tenantKey}/oauth/callback": {
+      ThrottlingRateLimit: MCP_OAUTH_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_OAUTH_THROTTLE.burstLimit,
+    },
+    "GET /mcp/{tenantKey}/oauth/consent": {
+      ThrottlingRateLimit: MCP_OAUTH_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_OAUTH_THROTTLE.burstLimit,
+    },
+    "POST /mcp/{tenantKey}/oauth/consent": {
+      ThrottlingRateLimit: MCP_OAUTH_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_OAUTH_THROTTLE.burstLimit,
+    },
+    "POST /mcp/{tenantKey}/oauth/token": {
+      ThrottlingRateLimit: MCP_OAUTH_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_OAUTH_THROTTLE.burstLimit,
+    },
+    "POST /mcp/{tenantKey}/oauth/revoke": {
+      ThrottlingRateLimit: MCP_OAUTH_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_OAUTH_THROTTLE.burstLimit,
+    },
+    "GET /mcp-settings": {
+      ThrottlingRateLimit: MCP_SETTINGS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_SETTINGS_THROTTLE.burstLimit,
+    },
+    "PUT /mcp-settings": {
+      ThrottlingRateLimit: MCP_SETTINGS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_SETTINGS_THROTTLE.burstLimit,
+    },
+    "DELETE /mcp-settings": {
+      ThrottlingRateLimit: MCP_SETTINGS_THROTTLE.rateLimit,
+      ThrottlingBurstLimit: MCP_SETTINGS_THROTTLE.burstLimit,
+    },
   };
   // Die Routen müssen existieren, bevor die Stage auf sie verweist
-  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes, ...surveysApiRoutes);
+  defaultStage.node.addDependency(...webSurveyRoutes, ...reportingApiRoutes, ...extInvitationsRoutes, ...surveysApiRoutes, ...mcpRoutes, ...mcpAdminRoutes);
 }
 
 // Pflege der Web-Designs (lesen: jeder App-Nutzer, schreiben: Genesys-User mit polly_deploy)

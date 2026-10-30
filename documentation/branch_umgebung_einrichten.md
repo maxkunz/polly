@@ -22,6 +22,7 @@ Mandanten lassen sich **nicht** aus einer anderen Umgebung in die Tenants-Tabell
 4. Optionale Branch-Umgebungsvariablen (Hosting → Environment variables, als Override für den Branch):
    - `GENESYS_REGION`, falls die Test-Org nicht in `mypurecloud.de` liegt
    - `WEB_SURVEY_RESERVED_CONCURRENCY`, siehe [polly_web.md](polly_web.md)
+   - `MCP_ENABLED`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS`, `MCP_RESERVED_CONCURRENCY` für die MCP-Schnittstelle, siehe [polly_mcp.md](polly_mcp.md). Ohne `MCP_ENABLED=true` antworten alle MCP-Routen mit 404; ohne `MCP_PUBLIC_BASE_URL` gilt die execute-api-URL der Branch-API (mit Custom Domain setzen, die `.well-known`-Routen müssen an der Wurzel der Domain liegen); `MCP_ALLOWED_REDIRECT_HOSTS` ist kommagetrennt, Default `claude.ai,claude.com`
    - `WEB_SURVEY_ORIGIN`, falls die Umfrageseite unter einer eigenen Domain erreichbar ist (Links der Kunden-API ohne `base_url`); ohne sie `https://<branch>.<appId>.amplifyapp.com`, siehe [betrieb_api_zugaenge.md](betrieb_api_zugaenge.md#10-umgebungsvariable-web_survey_origin)
 
 Der Branchname wird für die Ressourcennamen bereinigt (Kleinbuchstaben, Sonderzeichen → `-`) und auf 20 Zeichen gekürzt. Aus `feature/websurveys` wird `feature-websurveys`.

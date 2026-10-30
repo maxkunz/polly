@@ -61,12 +61,12 @@ Vorgaben:
   - [x] `shared/pseudonym.ts`: HMAC-Pseudonym sowie `sealCursor`/`openCursor`.
   - [x] Tests: `mcpSurveyPipeline.test.ts` (Store mit gemocktem Data-Table-Zugriff) und `mcpPseudonym.test.ts`; `customerApi.test.ts` bleibt grün.
 
-- [ ] **M5 Infrastruktur** (siehe „Infrastruktur“) · Modell: Sonnet
-  - [ ] `backend.ts`: `McpOAuthTable` (RETAIN, TTL, GSI `byTenant`), KMS-Key `McpTokenKey`, Secret `McpPseudonymSecret`.
-  - [ ] `TenantsTable`: GSI `byMcpTenantKey` (sparse).
-  - [ ] Lambdas `mcp` und `mcp_admin` als Gerüst. Der Kill-Switch `MCP_ENABLED` (Default `false`) liefert 404.
-  - [ ] Routen, Drosselung in `routeSettings`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS`.
-  - [ ] `branch_umgebung_einrichten.md`: neue Env-Variablen.
+- [x] **M5 Infrastruktur** (siehe „Infrastruktur“) · Modell: Sonnet · erledigt 2026-10-30 (Deploy und Synthese stehen aus, siehe Abweichungen)
+  - [x] `backend.ts`: `McpOAuthTable` (RETAIN, TTL, GSI `byTenant`), KMS-Key `McpTokenKey`, Secret `McpPseudonymSecret`.
+  - [x] `TenantsTable`: GSI `byMcpTenantKey` (sparse).
+  - [x] Lambdas `mcp` und `mcp_admin` als Gerüst. Der Kill-Switch `MCP_ENABLED` (Default `false`) liefert 404.
+  - [x] Routen, Drosselung in `routeSettings`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS`.
+  - [x] `branch_umgebung_einrichten.md`: neue Env-Variablen.
 
 - [ ] **M6 Schalter: `mcp_admin`, Einstellungen-Karte, Setup/Uninstall** (siehe „Abschaltung“) · **Review danach** (kurz, Fokus Rechte und Aufräumen)
   - [ ] `mcp_admin`: `GET`/`PUT`/`DELETE /mcp-settings`, nur Genesys-Bearer, `requireCallerRole(..., "polly_deploy")`.
@@ -184,7 +184,15 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 
 ### M5
 
-### M6
+- **Nur geprüft per `vue-tsc` und Test, nicht synthetisiert oder deployt.** `npx ampx`/`cdk synth` lief nicht (braucht AWS-Zugang). Beim ersten Deploy auf einer Branch-Umgebung achten auf: zyklische Abhängigkeiten, die GSI `byMcpTenantKey` an der bestehenden `TenantsTable`, und ob `MCP_ENABLED=false` überall 404 ergibt (Kaltstart auf AWS messen, offen aus M1).
+- **`MCP_PUBLIC_BASE_URL`-Default** ist `https://<apiId>.execute-api.<region>.amazonaws.com`, aus `httpApi.apiId` gebaut und nicht aus `httpApi.url`: `url` hängt an der Default-Stage, die von den Routen und damit von der Lambda abhängt (Zyklus über die Umgebungsvariable). Mit Custom Domain die Variable setzen.
+- **Neue Build-Variablen:** `MCP_ENABLED` (nur `true` schaltet ein), `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS`, zusätzlich `MCP_RESERVED_CONCURRENCY` (wie `WEB_SURVEY_RESERVED_CONCURRENCY`, ohne sie keine Reservierung; der Plan nannte „begrenzt“, AWS verlangt aber 100 freie Ausführungen im Konto). Die Lambda `mcp` bekommt alle drei MCP-Variablen, `mcp_admin` `MCP_ENABLED` und `MCP_PUBLIC_BASE_URL` (für die MCP-URL in `GET /mcp-settings`).
+- **`mcp_admin` liefert im Gerüst 501**, nicht 404: Die Lambda soll den Kill-Switch später im Status melden (M6) und nicht verstecken. `mcp` liefert bei `MCP_ENABLED != "true"` 404, sonst 501. Die Prüfung steckt in `shared/mcp_config.ts` (`isMcpEnabled`, `parseAllowedRedirectHosts`), Test `test/mcpInfrastructure.test.ts` (im `test`-Script).
+- **`McpOAuthTable`:** Schlüssel `pk`/`sk` (Präfixe wie im Abschnitt „Infrastruktur“), TTL-Attribut `ttl`, GSI `byTenant` über `tenantId` + `pk` (nur Schlüssel projiziert). Jeder Eintrag braucht daher `tenantId`. Die Lambdas bekommen `MCP_OAUTH_TABLE_NAME`, `MCP_TOKEN_KEY_ARN`, `MCP_PSEUDONYM_SECRET_ARN` (nur `mcp`) und `TENANTS_MCP_KEY_INDEX` (`byMcpTenantKey`). Das Secret heißt `polly-mcp-pseudonym-<envSuffix>`, der KMS-Schlüssel hat Rotation.
+- **Rechte vorab:** `mcp` liest zusätzlich Ergebnisse, Aggregate, Löschjobs und Web-Designs (für M8–M10), `mcp_admin` schreibt `TenantsTable`. Die Tabellen-Berechtigungen stehen schon, damit M6/M8 nur noch Code liefern.
+- **Drosselung** pro Route vorläufig (MCP-Endpunkt 20/40, Metadaten 20/40, OAuth 10/20, `register` 2/5, `mcp-settings` 5/10 pro Sekunde); M11 legt sie nach Messungen fest.
+- **CORS** der HttpApi ist unverändert (`content-type`, `authorization`, `x-genesys-region`). Browserbasierte MCP-Clients (z. B. MCP Inspector) bräuchten weitere Header (`mcp-protocol-version`); claude.ai ruft serverseitig auf. Bei Bedarf in M8 nachziehen.
+- `npm test` läuft ohne neue Fehler; `test/setupLogin.test.ts` (nicht im `test`-Script, unverändert) scheitert schon vorher.### M6
 
 ### M7
 
