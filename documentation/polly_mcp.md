@@ -1,6 +1,6 @@
 # Polly MCP – Spezifikation
 
-> **Stand:** Spezifikation, noch nicht umgesetzt. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Was dort im Spike (M1) geklärt wird, ist unten als **offen** markiert.
+> **Stand:** Spezifikation, noch nicht umgesetzt. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
 
 Über MCP (Model Context Protocol) können KI-Clients wie Claude Desktop, claude.ai und Claude Code Umfragen anlegen, bearbeiten, deployen und zurückrollen sowie Ergebnisse auswerten. Der Zugriff erfolgt **im Namen einer angemeldeten Person** mit deren Polly-Rollen.
 
@@ -29,7 +29,7 @@ Die Lambda `mcp` ist ein MCP-Server (Spec 2025-06-18, Streamable HTTP im JSON-Mo
 **Warum eine eigene Anmeldung statt Cognito:**
 1. Der Genesys-Token der Person wird gebraucht: Die Data Table wird als Person beschrieben (Genesys-Rechte und -Audit gelten), und die Rollenprüfung braucht ihn ebenfalls. Ein Cognito-Token trägt das nicht.
 2. MCP-Clients verlangen Dynamic Client Registration (DCR), `resource` (RFC 8707) und Protected Resource Metadata pro Mandanten-URL. Cognito bietet das nicht.
-3. Genesys als OIDC-Anbieter in Cognito wäre je Mandant ein eigener IdP im gemeinsamen Pool (**offen**, Prüfung in M1).
+3. Genesys taugt nicht als OIDC-Anbieter für Cognito (geprüft in M1): Es gibt kein `/.well-known/openid-configuration`, kein `id_token`, keine `jwks_uri` und keinen Userinfo-Endpunkt (Abschnitt 13).
 4. Getrennte Angriffsflächen und Lebenszyklen: Die Kunden-API ist M2M und wird vom Betrieb angelegt, MCP ist ein Nutzer-Login, den der Kunde selbst schaltet.
 
 **Gemeinsam genutzt** werden der fachliche Kern und die Leseschicht (`iterateSessions`, `sessionToAnswerRecords`, `summarizeSlices`, `loadSurveyAggregates`, `isSurveyBeingDeleted`, `paginate`), die Grenzwerte (`shared/reporting_limits.ts`), `genesys_survey_check.ts`, `loadTenantThemesCached` und `caller_roles.ts`. Das Prinzip „Kern in `shared/` ohne Protokoll- und Feldwissen, feste Feldabbildung pro Schnittstelle“ gilt auch hier: Die Abbildung steht in `amplify/functions/mcp/tools_v1.ts`.
@@ -92,7 +92,9 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**
 9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`) in der Session.
 
-**Offen (M1):** Refresh-Tokens des Genesys-Clients (Laufzeit, Rotation) und minimale Scopes. Gibt es keine Refresh-Tokens, gilt: Session ≤ `accessTokenValiditySeconds` des Genesys-Clients, danach ist eine neue Anmeldung nötig. Außerdem als Folgeschritt: Client ID Metadata Documents der MCP-Spec 2025-11-25 vor DCR.
+**Genesys-Client (Ergebnis M1, Details in Abschnitt 13):** Ein öffentlicher PKCE-Client ohne Secret bekommt keinen Refresh-Token. Der Token-Endpunkt von Genesys kennt nur `client_secret_basic`/`client_secret_post`. Empfohlen ist deshalb ein **vertraulicher** CODE-Client mit Secret (zusätzlich PKCE S256). Das Secret liegt nur im Backend. Nur so lassen sich Sessions über `accessTokenValiditySeconds` (höchstens 48 h) hinaus verlängern. Entscheidung vor M6. Ohne Secret gilt: Session ≤ `accessTokenValiditySeconds`, danach ist eine neue Anmeldung nötig.
+
+**Folgeschritt:** Client ID Metadata Documents der MCP-Spec 2025-11-25 vor DCR.
 
 ## 4. Tool-Katalog
 
@@ -301,3 +303,52 @@ Bei Team/Enterprise fügt ein Org-Owner den Connector zentral hinzu. Jede Person
 - Die URL muss öffentlich erreichbar sein, weil Claude über die Anthropic-Server verbindet.
 - Ohne Polly-Rolle wird der Login abgelehnt.
 - Vor der Freigabe die Menünamen gegen die aktuelle Claude-Desktop-Version prüfen.
+
+## 13. Ergebnisse des Spikes (M1, 2026-10-30)
+
+Legende: **belegt** = Genesys-Doku, Swagger oder eigener Aufruf; **Forum** = nur Aussage im Genesys-Forum; **offen** = vor M6/M7 in einer Test-Org prüfen.
+
+### 13.1 Genesys-OAuth
+
+| Frage | Ergebnis | Quelle |
+|---|---|---|
+| Refresh-Token beim PKCE-Client ohne Secret | Keiner. Refresh-Tokens gibt es nur beim Code Grant mit Secret | Forum ([Link](https://community.genesys.com/discussion/missing-refresh-token-when-using-s256-code-challenge-method)), offen |
+| Refresh ohne Secret | Nicht möglich: `token_endpoint_auth_methods_supported` ist nur `client_secret_basic`, `client_secret_post` | belegt (`https://login.<region>/.well-known/oauth-authorization-server`) |
+| Rotation | Ein Refresh-Token gilt einmal, die Antwort enthält einen neuen | belegt (Developer Center „Authorization Code“) |
+| Laufzeit Refresh-Token | nicht dokumentiert; Widerruf bei Logout, Passwortänderung, Token-Invalidierung | Forum, offen |
+| `accessTokenValiditySeconds` | 300 bis 172.800 s (5 min bis 48 h), Default 86.400 s, für alle Grant-Typen gleich | belegt (Swagger `OAuthClientRequest`, Resource Center) |
+| PKCE per API | `authorizedGrantType` kennt nur `CODE` (kein eigener PKCE-Typ); PKCE ergibt sich aus `code_challenge`. Methoden: nur `S256` | belegt (Swagger, AS-Metadaten); ob `CODE` ohne Secret nutzbar ist: offen |
+| Widerruf | `DELETE /api/v2/tokens/me` (eigenes Token); Client `state: disabled` macht seine Tokens ungültig. Kein `/oauth/revoke` (405) | belegt |
+| `GET /api/v2/tokens/me` | `organization.id`, `homeOrganization`, `OAuthClient.id`, `authorizedScope`, `dateTokenIdles`; **keine** Benutzer-ID | belegt (Swagger `TokenInfo`) |
+| Clients anlegen/löschen | `oauth:client:add` / `oauth:client:delete` (Scope `oauth`); Rollen am Client nur, wenn der Nutzer sie selbst hat | belegt |
+| OIDC | kein `openid-configuration` (404), kein `id_token`, keine `jwks_uri`, kein Userinfo | belegt (eigener Aufruf) |
+
+**Minimale Scopes** des MCP-Clients (Swagger):
+- `user-basic-info`: `users/me`, `tokens/me`
+- `architect`: Data-Table-Zeilen lesen und schreiben (`architect:readonly` reicht nicht zum Schreiben)
+- Der Nutzer braucht dazu `architect:datatableRow:view/add/edit`.
+
+Offen bleibt, ob `users/me?expand=authorization` einen weiteren Scope braucht. Wirksam ist immer die Schnittmenge aus Nutzerrechten und Scopes. Die Org prüft Scopes nur, wenn der Admin das einschaltet.
+
+**Folgerungen:**
+1. **Genesys-Client mit Secret** (CODE, zusätzlich PKCE S256): `enableMcp()` legt ihn an und übergibt das Secret einmalig an `PUT /mcp-settings`. Dort wird es KMS-verschlüsselt (`McpTokenKey`) in `TenantsTable` gespeichert und verlässt das Backend nie. Der Genesys-Refresh in der Session (Abschnitt 3, Schritt 8.5) funktioniert dann mit Rotation.
+2. **Ohne Secret**, falls das in M6 verworfen wird: Session und MCP-Refresh-Token höchstens `accessTokenValiditySeconds` (Vorschlag 12 h). Danach ist eine neue Anmeldung im MCP-Client nötig.
+3. **`accessTokenValiditySeconds`** des MCP-Clients: Vorschlag 3.600 s. Mit Refresh bestimmt das nur, wie oft im Hintergrund erneuert wird.
+4. **Personen-ID** kommt aus `users/me`, nicht aus `tokens/me`. Org und Client-ID kommen aus `tokens/me`.
+5. **Widerruf beim Abschalten:** `DELETE /api/v2/tokens/me` je Session mit deren Token. Danach löscht das Frontend den Client (`disableMcp()`). Ein Client, der älter als 30 Tage ist, wird von Genesys zunächst 7 Tage deaktiviert; laut Swagger sind seine Tokens damit schon ungültig.
+6. **Cognito** bleibt verworfen (kein OIDC).
+
+### 13.2 MCP-SDK in der Lambda
+
+Gemessen mit `@modelcontextprotocol/sdk` 1.32.2, gebündelt wie Amplify (esbuild, ESM, minify, Sourcemap).
+
+- **Transport:** `WebStandardStreamableHTTPServerTransport` mit `sessionIdGenerator: undefined` (zustandslos) und `enableJsonResponse: true`. Ein Shim setzt das HttpApi-Event (Payload v2) in `Request` und `Response` in das Lambda-Ergebnis um, ohne Express und Hono. Pro Aufruf werden `McpServer` und Transport neu gebaut (ca. 1 ms).
+- **Nur POST:** GET (eigener SSE-Stream) und DELETE (Session) beantwortet der Handler **vor** dem Transport mit `405`. Ein GET am Transport öffnet einen Stream, der nie endet, und die Lambda läuft bis zum Timeout.
+- **Accept-Header:** Ohne `application/json, text/event-stream` antwortet der Transport auch im JSON-Modus mit 406 (spec-konform). Notifications ergeben 202 ohne Body.
+- **Identität:** `handleRequest(req, { authInfo })` reicht die Daten aus der Prüfkette an die Tool-Handler weiter (`extra.authInfo`).
+- **Protokoll:** Das SDK unterstützt `2025-11-25` bis `2024-11-05` und handelt die Version mit dem Client aus. `2025-06-18` funktioniert.
+- **Eingabefehler:** Bei Schemafehlern liefert das SDK selbst ein `isError`-Ergebnis mit eigenem Text (`MCP error -32602: Input validation error …`), nicht `{ code: "invalid_input" }`. Für das Format aus Abschnitt 4.2 muss M8 die Eingabe selbst prüfen (lockeres `inputSchema`, eigenes `safeParse`) oder das SDK-Format übernehmen.
+- **Bundle:** 0,45 bis 0,73 MB minifiziert (gzip 120 bis 170 KB), je nach zod-Version. Den größten Anteil haben zod (bis 500 KB mit zod 4) und ajv (100 KB). Express, Hono und die OAuth-Teile des SDK landen nicht im Bundle, solange nur `server/mcp.js` und `server/webStandardStreamableHttp.js` importiert werden.
+- **zod:** Im Repo ist zod 3.25.17 (über Amplify). Das SDK zieht dann zusätzlich zod 4 als eigene Kopie. Beides funktioniert nebeneinander. In M8 `zod` (4.x) und das SDK als direkte Abhängigkeiten eintragen und nur `zod` 4 importieren.
+- **Kaltstart (lokal, Node 26):** Import ca. 25 ms, erster Request ca. 22 ms, RSS ca. 40 MB. Die Init-Zeit von Node 20 in Lambda kommt dazu. Auf AWS gemessen wird in M5/M8.
+- **Spike-Code** wird nicht übernommen.

@@ -30,14 +30,14 @@ Vorgaben:
   - [x] `polly_customer_api.md`, `betrieb_api_zugaenge.md`: Verweis „Nutzerbezogener Zugriff für KI-Clients: `polly_mcp.md`, getrennte Anmeldung“.
   - [x] `CLAUDE.md`: Verweis auf diesen Plan (MCP in Arbeit).
 
-- [ ] **M1 Spike: Genesys-PKCE-Client und MCP-Transport in Lambda** (siehe „Offene Punkte“) · Modell: Opus
-  - [ ] Genesys-OAuth-Client (CODE, ohne Secret) testweise anlegen. Prüfen:
-    - Gibt es Refresh-Tokens (Laufzeit, Rotation)?
-    - Welche minimalen Scopes reichen für Data Table lesen/schreiben und `users/me?expand=authorization`?
-    - Welche `accessTokenValiditySeconds` sind sinnvoll?
-  - [ ] Prüfen, ob Genesys als OIDC-Anbieter taugt (`id_token`, Discovery). Das dient nur zur Bestätigung der Cognito-Entscheidung.
-  - [ ] `@modelcontextprotocol/sdk` in einer Lambda hinter HttpApi: Web-Standard-Transport oder Shim, JSON-Modus, Bundle-Größe, Cold Start.
-  - [ ] Ergebnisse in `polly_mcp.md` und hier unter „Abweichungen“ eintragen. Spike-Code nicht übernehmen.
+- [x] **M1 Spike: Genesys-PKCE-Client und MCP-Transport in Lambda** (siehe „Offene Punkte“) · Modell: Opus · erledigt 2026-10-30 (ohne Test-Org, siehe Abweichungen)
+  - [ ] Genesys-OAuth-Client (CODE, ohne Secret) testweise anlegen. Geklärt per Doku, Swagger, Forum und AS-Metadaten; die Gegenprüfung in einer Test-Org ist offen:
+    - Gibt es Refresh-Tokens (Laufzeit, Rotation)? → Ohne Secret keine; mit Secret Rotation, Laufzeit nicht dokumentiert.
+    - Welche minimalen Scopes reichen für Data Table lesen/schreiben und `users/me?expand=authorization`? → `architect`, `user-basic-info` (offen: ob `expand=authorization` mehr braucht).
+    - Welche `accessTokenValiditySeconds` sind sinnvoll? → 300–172.800 s erlaubt, Vorschlag 3.600 s mit Refresh.
+  - [x] Prüfen, ob Genesys als OIDC-Anbieter taugt (`id_token`, Discovery): nein.
+  - [x] `@modelcontextprotocol/sdk` in einer Lambda hinter HttpApi: Web-Standard-Transport, JSON-Modus, Bundle-Größe, Kaltstart lokal.
+  - [x] Ergebnisse in `polly_mcp.md` (Abschnitt 13) und hier unter „Abweichungen“ eingetragen. Spike-Code nicht übernommen.
 
 - [ ] **M2 Domain-Module Lambda-fähig machen** (siehe „Domain-Refactoring“) · **Review danach**
   - [ ] `surveyLock.ts`: Import relativ, optionales Feld `via`.
@@ -129,6 +129,19 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Die Karte `McpSettingsCard` und `/mcp-settings` sind nur beschrieben, nicht gebaut. Die Anleitung nennt `oauth:client:add/delete` als Voraussetzung (aus „Offene Punkte“ 2).
 
 ### M1
+
+- Kein Code im Repo, nur Doku. Der Spike lief im Scratchpad. `npm test` und `vue-tsc` sind nicht berührt.
+- **Keine Test-Org verfügbar:** Die Genesys-Fragen wurden über Resource Center, Swagger, Forum und einen eigenen Abruf der AS-Metadaten geklärt. Diese drei Punkte vor M6 in einer Test-Org gegenprüfen:
+  1. Liefert ein `CODE`-Client mit PKCE ohne Secret wirklich keinen Refresh-Token?
+  2. Wie lange gilt der Refresh-Token beim Client mit Secret?
+  3. Reicht `user-basic-info` für `users/me?expand=authorization` bei aktiver Scope-Prüfung?
+- **Abweichung von Entscheidung 1** („ohne Secret wie der Frontend-Client“): Ohne Secret gibt es keinen Genesys-Refresh. Der Token-Endpunkt erlaubt nur `client_secret_basic`/`client_secret_post`. Die Session wäre damit auf höchstens 48 h begrenzt. **Vorschlag:** vertraulicher CODE-Client mit Secret plus PKCE. Das Secret liegt KMS-verschlüsselt in `TenantsTable` und wird bei `PUT /mcp-settings` einmalig übergeben. Die Entscheidung fällt vor M6; sie betrifft `createCodeGrantClient` und den Body von `PUT /mcp-settings`.
+- `tokens/me` liefert keine Personen-ID, die kommt aus `users/me`. Widerruf über `DELETE /api/v2/tokens/me`; einen Endpunkt nach RFC 7009 gibt es bei Genesys nicht.
+- **MCP-Transport:**
+  - GET und DELETE muss der Handler vor dem Transport mit 405 beantworten, sonst hängt die Lambda bis zum Timeout.
+  - Schemafehler meldet das SDK in eigenem Format. Für `invalid_input` braucht M8 eine eigene Prüfung.
+  - zod 4 und das SDK in M8 als direkte Abhängigkeiten eintragen.
+- Der Kaltstart wurde nur lokal gemessen (ca. 50 ms für Import und ersten Request). Auf AWS wird in M5/M8 gemessen.
 
 ### M2
 
@@ -464,7 +477,10 @@ Bei Team/Enterprise fügt ein Org-Owner den Connector zentral hinzu. Jeder Nutze
 
 ## Offene Punkte
 
-Diese Punkte klärt M1.
+Diese Punkte klärt M1. Die Ergebnisse stehen in `polly_mcp.md`, Abschnitt 13:
+- Punkte 1, 3 und 5 sind geklärt, Punkt 1 unter Vorbehalt der Prüfung in einer Test-Org.
+- Zu Punkt 2 sind die Rechtenamen belegt.
+- Punkt 4 bleibt ein Folgeschritt.
 1. **Genesys-PKCE-Client:** Gibt es Refresh-Tokens (Laufzeit, Rotation)? Ohne sie gilt: Session ≤ `accessTokenValiditySeconds`. Außerdem die minimalen Scopes klären.
 2. **Rechte beim Aktivieren:** Der aktivierende Nutzer braucht `oauth:client:add/delete`; ohne diese Rechte braucht es eine klare Fehlermeldung.
 3. **SDK-Transport in der Lambda:** Web-Standard-Transport oder Shim; Cold Start messen.
