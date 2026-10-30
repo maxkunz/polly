@@ -27,7 +27,7 @@ import { webSurvey } from "./functions/web_survey/resource";
 import { webThemes } from "./functions/web_themes/resource";
 import { mcp } from "./functions/mcp/resource";
 import { mcpAdmin } from "./functions/mcp_admin/resource";
-import { DEFAULT_MCP_REDIRECT_HOSTS } from "./functions/shared/mcp_config";
+import { DEFAULT_MCP_REDIRECT_URIS } from "./functions/shared/mcp_config";
 import { API_RESOURCE_SERVER, API_SCOPES, API_SCOPE_DESCRIPTIONS } from "./functions/shared/api_scopes";
 
 const rawBranchName = (
@@ -82,7 +82,7 @@ const webSurveyReservedConcurrency = Number.parseInt(process.env.WEB_SURVEY_RESE
 // Domain MCP_PUBLIC_BASE_URL setzen. Beide Variablen sind Amplify-Umgebungsvariablen und wirken nach dem Deploy.
 const mcpEnabled = process.env.MCP_ENABLED?.trim().toLowerCase() === "true" ? "true" : "false";
 const mcpPublicBaseUrlFromEnv = process.env.MCP_PUBLIC_BASE_URL?.trim().replace(/\/+$/, "");
-const mcpAllowedRedirectHosts = process.env.MCP_ALLOWED_REDIRECT_HOSTS?.trim() || DEFAULT_MCP_REDIRECT_HOSTS.join(",");
+const mcpAllowedRedirectUris = process.env.MCP_ALLOWED_REDIRECT_URIS?.trim() || DEFAULT_MCP_REDIRECT_URIS.join(",");
 // Reservierte Parallelität der Lambda mcp (wie bei web_survey nur per Variable, AWS verlangt mindestens 100
 // nicht reservierte Ausführungen im Konto)
 const mcpReservedConcurrency = Number.parseInt(process.env.MCP_RESERVED_CONCURRENCY ?? "0", 10);
@@ -747,7 +747,7 @@ const surveysApiRoutes = [
 ];
 
 // ---------------------------------------------------------------------------
-// MCP-Schnittstelle: Server mit OAuth-Fassade (mcp) und Schalter pro Mandant (mcp_admin), Gerüst (M5)
+// MCP-Schnittstelle: Server mit OAuth-Fassade (mcp) und Schalter pro Mandant (mcp_admin)
 // ---------------------------------------------------------------------------
 
 const mcpPublicBaseUrl =
@@ -763,7 +763,7 @@ mcpPseudonymSecret.grantRead(mcpLambda);
 mcpLambda.addEnvironment("MCP_PSEUDONYM_SECRET_ARN", mcpPseudonymSecret.secretArn);
 mcpLambda.addEnvironment("MCP_ENABLED", mcpEnabled);
 mcpLambda.addEnvironment("MCP_PUBLIC_BASE_URL", mcpPublicBaseUrl);
-mcpLambda.addEnvironment("MCP_ALLOWED_REDIRECT_HOSTS", mcpAllowedRedirectHosts);
+mcpLambda.addEnvironment("MCP_ALLOWED_REDIRECT_URIS", mcpAllowedRedirectUris);
 mcpLambda.addEnvironment("TENANTS_MCP_KEY_INDEX", "byMcpTenantKey");
 // Lesende Tools (Ergebnisse, Löschstatus, Designs); Schreiben in die Data Table läuft über Genesys, nicht DynamoDB
 surveyResponsesTable.grantReadData(mcpLambda);

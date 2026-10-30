@@ -65,7 +65,7 @@ Vorgaben:
   - [x] `backend.ts`: `McpOAuthTable` (RETAIN, TTL, GSI `byTenant`), KMS-Key `McpTokenKey`, Secret `McpPseudonymSecret`.
   - [x] `TenantsTable`: GSI `byMcpTenantKey` (sparse).
   - [x] Lambdas `mcp` und `mcp_admin` als Gerüst. Der Kill-Switch `MCP_ENABLED` (Default `false`) liefert 404.
-  - [x] Routen, Drosselung in `routeSettings`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS`.
+  - [x] Routen, Drosselung in `routeSettings`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_HOSTS` (nach dem Security-Review zu M7 ersetzt durch `MCP_ALLOWED_REDIRECT_URIS`).
   - [x] `branch_umgebung_einrichten.md`: neue Env-Variablen.
 
 - [x] **M6 Schalter: `mcp_admin`, Einstellungen-Karte, Setup/Uninstall** (siehe „Abschaltung“) · **Review danach** (kurz, Fokus Rechte und Aufräumen) · erledigt 2026-10-30 (Review und Deploy stehen aus, siehe Abweichungen)
@@ -77,17 +77,17 @@ Vorgaben:
   - [x] `tools/api_tests.py`: `/mcp-settings` gibt 403 ohne `polly_deploy` und 403 mit Cognito-Token. (`tests_mcp_settings`, Fälle M1–M10)
   - [x] Tests: `mcpAdmin.test.ts` (Body, Client-Prüfung, Status), im `test`-Script.
 
-- [ ] **M7 OAuth-Fassade** (siehe „Auth-Ablauf“) · **Security-Review danach** (`secreview-de`)
-  - [ ] Metadaten: Protected Resource Metadata und AS-Metadaten.
-  - [ ] Endpunkte:
+- [x] **M7 OAuth-Fassade** (siehe „Auth-Ablauf“) · **Security-Review danach** (`secreview-de`) · erledigt 2026-10-30, Security-Review 2026-10-30 (drei Härtungen umgesetzt, siehe Abweichungen; Deploy steht aus)
+  - [x] Metadaten: Protected Resource Metadata und AS-Metadaten.
+  - [x] Endpunkte:
     - `/register`: DCR mit Redirect-Allow-List
     - `/authorize`: PKCE S256, `resource`
     - `/callback`: Genesys-Code tauschen; über `tokens/me` müssen Client-ID und Org-ID passen; mindestens eine Polly-Rolle
     - `/consent`: CSRF-Schutz, `frame-ancestors 'none'`
     - `/token`: Code und Refresh mit Rotation; bei Wiederverwendung wird die ganze Token-Familie widerrufen
     - `/revoke`
-  - [ ] `session.ts`: Tokens als Hash speichern, Genesys-Tokens KMS-verschlüsselt, Genesys-Refresh. Prüfkette pro Aufruf: Kill-Switch → Tenant/Epoch → `__meta`-Flag `mcp` → Token → Session → Rate-Limit.
-  - [ ] Tests: `mcpOAuth.test.ts` (PKCE, Allow-List, `resource`, Rotation, Wiederverwendung).
+  - [x] `session.ts`: Tokens als Hash speichern, Genesys-Tokens KMS-verschlüsselt, Genesys-Refresh. Prüfkette pro Aufruf: Kill-Switch → Tenant/Epoch → `__meta`-Flag `mcp` → Token → Session → Rate-Limit.
+  - [x] Tests: `mcpOAuth.test.ts` (PKCE, Allow-List, `resource`, Rotation, Wiederverwendung).
 
 - [ ] **M8 MCP-Server und lesende Tools** (siehe „Tools“) · Modell: Opus
   - [ ] `server.ts` (Transport aus M1, Server-Instructions), `tools_v1.ts` (feste Feldabbildung).
@@ -210,6 +210,42 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Review (Rechte, Aufräumen) und Deploy stehen aus.**
 
 ### M7
+
+- **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json` und Test, nicht deployt und nicht gegen Genesys oder einen MCP-Client erprobt.** Beim ersten Lauf auf einer Branch-Umgebung (mit `MCP_ENABLED=true`) achten auf:
+  - Cookie über `cookies` im Lambda-Ergebnis (Payload 2.0) und beim Callback von Genesys (`SameSite=Lax`, Top-Level-Navigation).
+  - Antwort von `login.<region>/oauth/token` mit Basic-Auth plus `code_verifier`; ob `refresh_token` kommt (offen aus M1).
+  - `tokens/me` mit den Scopes `architect`/`user-basic-info`; ob `users/me?expand=authorization` reicht (offen aus M1).
+  - Ablauf mit Claude Code und claude.ai: DCR, `resource`, Redirect auf `http://localhost:<port>`.
+- **Dateien:** Statt nur `session.ts` ist die Fassade aufgeteilt:
+  - `oauth.ts`: reine Prüfungen, Metadaten, PKCE.
+  - `oauth_pages.ts`: HTML.
+  - `tokens.ts`: Code, Rotation, Widerruf, Access-Token.
+  - `oauth_store.ts`: Interface `OAuthStore` und DynamoDB-Umsetzung.
+  - `tenant.ts`: Prüfkette Schritte 1–3.
+  - `session.ts`: Schritte 4–6 und Genesys-Refresh.
+
+  So laufen Rotation und Wiederverwendung im Test gegen einen Speicher im RAM. Genesys-OAuth liegt in `shared/mcp_genesys.ts`, die Session-Verschlüsselung in `shared/mcp_secret.ts` (`encryptGenesysTokens`/`decryptGenesysTokens`, Kontext mit Mandant und Session).
+- **Session entsteht erst bei der Zustimmung**, nicht im Callback: Bis dahin liegen die verschlüsselten Genesys-Tokens in der Anmeldeanfrage (`AUTHREQ#`, Zustand `pending` → `authenticated` → `consumed`, jeder Schritt bedingt und einmalig). Abgebrochene Anmeldungen hinterlassen so keine Sessions; Ablehnen und Fehler nach dem Code-Tausch widerrufen das Genesys-Token sofort.
+- **Zusätzlich zum Plan:**
+  - Browser-Bindung per Cookie `polly_mcp_auth` (nur Hash in `AUTHREQ#`) gegen untergeschobene Login-Links.
+  - `iss` in der Autorisierungsantwort (RFC 9207, `authorization_response_iss_parameter_supported`).
+  - Doppelte Parameter sind ungültig.
+  - Ein wiederverwendeter Code widerruft die Session (RFC 9700).
+  - Beim Refresh wird die Genesys-Sitzung geprüft.
+- **Familie = Session:** Widerruf löscht nur die Session. Die Tokens verweisen darauf und sind danach ungültig; ihre Einträge verfallen per TTL. Eine eigene `familyId` gibt es deshalb nicht.
+- **Vorläufige Werte aus M11 vorgezogen** (Mechanik steht, Werte legt M11 fest): Rate-Limit 120 Aufrufe pro Minute und Session (`RATE#`, festes Fenster) und höchstens 200 DCR-Clients pro Mandant. **Gemerkte Zustimmung (`CONSENT#`) fehlt noch** (M11); die Seite erscheint bei jeder Anmeldung.
+- **Redirect-URIs:** Loopback (`localhost`, `127.0.0.1`, `[::1]`, `http` oder `https`) mit beliebigem Port bei der Registrierung. In `/authorize` gilt aber der exakte Vergleich, auch beim Port (strenger als RFC 8252, 7.3). Claude Code registriert mit dem Port, den es benutzt. Auf erlaubten Hosts ist kein eigener Port erlaubt.
+- **Genesys-Tokens beim Abschalten (offen aus M6):** `mcp_admin` widerruft vor `clearMcpEntries` die Genesys-Tokens aller Sessions (`shared/mcp_session_revoke.ts`, 5 parallel, Timeout je 3 s, Budget 4 s), bei `DELETE` und beim Wechsel des Genesys-Clients. Die Onboarding-Routen widerrufen nicht (kein KMS im Bundle); dort macht das Löschen des Genesys-Clients die Tokens ungültig.
+- **Fehlerverhalten:**
+  - Kann `__meta` nicht gelesen werden (Genesys/Secrets nicht erreichbar), antworten alle Routen mit 503 `temporarily_unavailable` statt 404. Das verrät, dass der Schlüssel existiert, aber der Schlüssel ist laut Spezifikation kein Geheimnis.
+  - Fehlt `MCP_PUBLIC_BASE_URL`, gibt es 404 mit Log.
+- **MCP-Endpunkt:** Nach bestandener Prüfkette 501, ohne Token 401 mit `WWW-Authenticate` (`resource_metadata`), mit ungültigem Token zusätzlich `error="invalid_token"`. Die Methodenprüfung (405 für GET/DELETE) kommt mit dem Transport in M8.
+- **Nicht gecacht:** Mandanteneintrag (Schalter, Epoch) wird pro Aufruf mit `ConsistentRead` gelesen, nur Schlüssel → `backendClientId` ist 5 min gemerkt. Das Genesys-Token wird pro Aufruf per KMS entschlüsselt; ein Cache ist ein Kandidat für M8/M11.
+- `mcpInfrastructure.test.ts`: Der Gerüst-Fall (501) entfällt. Geprüft wird jetzt 404 bei Kill-Switch, unbekannter Route und ungültigem Schlüssel.
+- **Security-Review (`secreview-de`):** keine ausnutzbare Lücke, drei Härtungen umgesetzt:
+  - Redirect-Allow-List mit Ursprung **und Pfad** statt nur Host. Die Variable heißt jetzt `MCP_ALLOWED_REDIRECT_URIS` (`parseAllowedRedirectUris` in `shared/mcp_config.ts`), eine gesetzte `MCP_ALLOWED_REDIRECT_HOSTS` wird nicht mehr gelesen. Sonst könnte ein Open Redirect auf `claude.ai` den Code an einen Angreifer leiten, der den Fluss mit eigener PKCE-Challenge begonnen hat.
+  - DCR-Clients ohne Token verfallen nach einem Tag (`CLIENT_UNUSED_TTL_SECONDS`), volle Frist ab dem ersten Token (`needsClientTouch`). `countClients` zählt nur nicht abgelaufene; weil der Index `byTenant` nur Schlüssel projiziert, liest es `expiresAt` per BatchGet nach (die Projektion lässt sich nicht ohne Löschen des Index ändern).
+  - `/authorize` setzt immer ein neues Browser-Cookie und übernimmt kein mitgeschicktes.
 
 ### M8
 
@@ -369,7 +405,7 @@ Neu in `amplify/functions/shared/`:
 **Umgebungsvariablen:**
 - `MCP_ENABLED` (Default `false`)
 - `MCP_PUBLIC_BASE_URL`: execute-api oder Custom Domain. `.well-known` muss an der Domain-Wurzel liegen; der Amplify-Rewrite hinter `API_PREFIX` reicht dafür nicht.
-- `MCP_ALLOWED_REDIRECT_HOSTS` (Default `claude.ai,claude.com`, Loopback ist immer erlaubt)
+- `MCP_ALLOWED_REDIRECT_URIS` (Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`, Ursprung und Pfad exakt, Loopback ist immer erlaubt)
 
 ## Abschaltung
 

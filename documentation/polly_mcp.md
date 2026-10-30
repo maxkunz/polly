@@ -1,6 +1,6 @@
 # Polly MCP – Spezifikation
 
-> **Stand:** Spezifikation; umgesetzt sind bisher nur die Backend-Bausteine (M4: `survey_pipeline.ts`, `survey_store.ts`, `pseudonym.ts` u. a. in `amplify/functions/shared/`), noch keine Lambda. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
+> **Stand:** umgesetzt sind die Backend-Bausteine (M4), die Infrastruktur (M5), der Schalter `/mcp-settings` (M6) und die OAuth-Fassade (M7, Lambda `mcp`). Die Tools fehlen noch: Der MCP-Endpunkt antwortet nach bestandener Prüfkette mit 501. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
 
 Über MCP (Model Context Protocol) können KI-Clients wie Claude Desktop, claude.ai und Claude Code Umfragen anlegen, bearbeiten, deployen und zurückrollen sowie Ergebnisse auswerten. Der Zugriff erfolgt **im Namen einer angemeldeten Person** mit deren Polly-Rollen.
 
@@ -65,32 +65,47 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
 
 1. **Ohne Token** → 401 mit `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp/{key}"`.
 2. **Metadaten des Autorisierungsservers:** Issuer `<base>/mcp/{key}`, nur PKCE S256, `token_endpoint_auth_methods_supported: ["none"]`, Grants `authorization_code` und `refresh_token`.
-3. **DCR:** `redirect_uris` nur `https` auf erlaubten Hosts (`MCP_ALLOWED_REDIRECT_HOSTS`, Default `claude.ai,claude.com`) oder Loopback (RFC 8252, immer erlaubt). Keine Wildcards. Höchstens N Clients pro Mandant (Wert legt M11 fest).
+3. **DCR:** `redirect_uris` nur `https` mit Ursprung und Pfad exakt aus der Allow-List (`MCP_ALLOWED_REDIRECT_URIS`, Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`; ein anderer Pfad auf demselben Host ist nicht erlaubt, damit kein Open Redirect dort den Code abgreift) oder Loopback (RFC 8252, immer erlaubt). Keine Wildcards. Höchstens N Clients pro Mandant (Wert legt M11 fest), gezählt werden nur nicht abgelaufene. Ein neuer Client verfällt nach einem Tag, wenn er bis dahin kein Token bekommen hat; mit dem ersten Token gilt die Frist von 90 Tagen nach letzter Nutzung. So belegen anonyme Registrierungen die Plätze nicht dauerhaft.
 4. **`/authorize`:**
    - `client_id` muss an den Key gebunden sein, `redirect_uri` muss exakt passen.
    - Pflicht sind PKCE S256 und `resource` = MCP-URL dieses Mandanten.
-   - Fehler **vor** der geprüften `redirect_uri` werden als Seite angezeigt und nie umgeleitet.
+   - Fehler **vor** der geprüften `redirect_uri` werden als Seite angezeigt und nie umgeleitet. Fehler danach gehen als `error` mit `state` und `iss` (RFC 9207) an den Client.
+   - Mehrfach angegebene Parameter sind ungültig.
    - Danach Weiterleitung zu `https://login.<region>/oauth/authorize` mit eigenem State und eigenem PKCE.
+   - Ein Cookie `polly_mcp_auth` (Pfad `/mcp/{key}/oauth`, `Secure`, `HttpOnly`, `SameSite=Lax`, 10 min) bindet die Anmeldung an den Browser. Callback und Zustimmung verlangen dasselbe Cookie. So lässt sich ein begonnener Login-Link nicht einer anderen Person unterschieben. Jedes `/authorize` setzt einen neuen Wert, ein mitgeschicktes Cookie wird nie übernommen (sonst genügte ein untergeschobenes Cookie). Eine zweite, parallel begonnene Anmeldung im selben Browser macht die erste damit ungültig.
 5. **`/callback`:**
-   - Den Code bei Genesys tauschen (öffentlicher Client mit `code_verifier`).
+   - Den Code bei Genesys tauschen (`code_verifier`, Client-Secret per HTTP Basic).
    - `tokens/me`: Client-ID muss `mcpGenesysClientId`, Org-ID muss `genesysOrgId` entsprechen.
    - `loadCallerRoles`: Mindestens eine Polly-Rolle ist nötig, sonst Fehlerseite.
-   - Session anlegen.
-6. **Zustimmungsseite:** zeigt Client, Redirect-Host, Installation und Person. Geschützt durch `X-Frame-Options: DENY`, `frame-ancestors 'none'`, CSP und CSRF-Nonce. Die Zustimmung wird pro (Person, Client, Redirect) gemerkt.
+   - Bei Ablehnung wird das Genesys-Token sofort widerrufen.
+   - Die Genesys-Tokens kommen KMS-verschlüsselt in die Anmeldeanfrage. Die Session entsteht erst mit der Zustimmung, damit abgebrochene Anmeldungen keine Sessions hinterlassen.
+6. **Zustimmungsseite:** zeigt Client (Name wie selbst angegeben), Redirect-Host (bei Loopback „ein Programm auf diesem Rechner“), Installation (`tenantName`) und Person.
+   - Geschützt durch `X-Frame-Options: DENY`, CSP mit `frame-ancestors 'none'` und `form-action` (eigener Ursprung und Ursprung der Redirect-URI), CSRF-Nonce und das Browser-Cookie. Kein Skript.
+   - Sprache Deutsch oder Englisch nach `Accept-Language`.
+   - „Zulassen“ legt Session und Einmal-Code an. „Ablehnen“ widerruft das Genesys-Token und leitet mit `access_denied` zurück. Jede Anmeldeanfrage lässt sich nur einmal bestätigen.
+   - Die Zustimmung wird pro (Person, Client, Redirect) gemerkt; das kommt mit M11, bis dahin erscheint die Seite bei jeder Anmeldung.
 7. **`/token`:**
    - Der Code ist einmalig. PKCE, `redirect_uri`, `client_id` und `resource` müssen mit der Anfrage übereinstimmen.
    - Tokens sind opake Zufallswerte mit 256 bit und werden nur als SHA-256 gespeichert.
    - Refresh-Tokens rotieren. Bei Wiederverwendung wird die ganze Token-Familie widerrufen und die Session gelöscht.
-8. **Prüfkette pro Aufruf** (erste Verletzung beendet den Aufruf):
+   - **Familie = Session:** Jedes Token verweist auf seine Session, ohne Session ist keins mehr gültig. Ein schon eingelöster Code widerruft ebenso die daraus entstandene Session (RFC 9700).
+   - Beim Refresh muss die Genesys-Sitzung noch leben (bei Bedarf Genesys-Refresh). Lehnt Genesys ab, wird die Session gelöscht (`invalid_grant`, neue Anmeldung). Ist Genesys nur nicht erreichbar, bleibt sie bestehen.
+   - `client_id` kommt aus dem Body oder aus HTTP Basic (ohne Secret).
+   - Ein Refresh-Token reicht nie über das Ende der Session hinaus (30 Tage ab Anmeldung).
+   - `/revoke` (RFC 7009): Ein Refresh-Token widerruft die Familie samt Genesys-Token, ein Access-Token nur sich selbst. Tokens anderer Clients bleiben unberührt, die Antwort ist immer 200.
+8. **Prüfkette pro Aufruf** (erste Verletzung beendet den Aufruf; Schritte 1–3 gelten auch für alle `oauth/*`- und `.well-known`-Routen):
    1. Kill-Switch `MCP_ENABLED`
    2. Mandant per Key: `mcpEnabled`, `APPROVED`, Epoch der Session = `mcpEpoch`
    3. `__meta`-Flag `mcp` (Cache 60 s)
    4. Access-Token (`ConsistentRead`)
-   5. Session, bei Bedarf Genesys-Refresh
-   6. Rate-Limit
+   5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`.
+   6. Rate-Limit pro Session (feste Fenster pro Minute, vorläufig 120; 429 mit `Retry-After`)
    7. Rolle des Tools (Abschnitt 4)
    8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**
-9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`) in der Session.
+9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`, `EncryptionContext` mit Mandant und Session) in der Session.
+10. **Abschalten:** `DELETE /mcp-settings` und ein Wechsel des Genesys-Clients widerrufen vor dem Löschen der Einträge die Genesys-Tokens aller Sessions (`DELETE /api/v2/tokens/me`). Das geschieht nach Möglichkeit mit Zeitbudget von 4 s; was dann fehlt, macht das Löschen des Genesys-Clients ungültig. Die Onboarding-Routen widerrufen nicht.
+
+Umsetzung (M7): Lambda `mcp` (`amplify/functions/mcp/`): `handler.ts` (Routen nach `routeKey`), `oauth.ts` (reine Prüfungen und Metadaten), `oauth_pages.ts`, `tokens.ts`, `oauth_store.ts`, `tenant.ts`, `session.ts`; dazu `shared/mcp_genesys.ts`, `shared/mcp_secret.ts`, `shared/mcp_session_revoke.ts`. Tests: `test/mcpOAuth.test.ts`.
 
 **Genesys-Client (Ergebnis M1, Details in Abschnitt 13):** Ein öffentlicher PKCE-Client ohne Secret bekommt keinen Refresh-Token. Der Token-Endpunkt von Genesys kennt nur `client_secret_basic`/`client_secret_post`. Empfohlen ist deshalb ein **vertraulicher** CODE-Client mit Secret (zusätzlich PKCE S256). Das Secret liegt nur im Backend. Nur so lassen sich Sessions über `accessTokenValiditySeconds` (höchstens 48 h) hinaus verlängern. **Entscheidung in M6: mit Secret** (Umsetzung in `SetupMcp.ts`). Ohne Secret gilt: Session ≤ `accessTokenValiditySeconds`, danach ist eine neue Anmeldung nötig.
 
@@ -251,6 +266,11 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | `CONSENT#` | gemerkte Zustimmung | 90 Tage |
 | `RATE#` | Zähler pro Session | 2 min |
 
+- `sk` ist `MAIN`, bei `RATE#<sessionId>` die Minute (Zeitfenster).
+- IDs von Client, Anmeldeanfrage und Session sind Zufallswerte mit 256 bit. Codes und Tokens stehen nur als SHA-256 im `pk`.
+- Fachlich gilt `expiresAt` (ms). `ttl` liegt 60 s dahinter, weil DynamoDB abgelaufene Einträge erst verzögert löscht.
+- Eingelöste Codes und Refresh-Tokens bleiben mit `usedAt` bis zu ihrem Ablauf stehen, damit eine Wiederverwendung erkannt wird.
+
 **`TenantsTable`** bekommt: `mcpEnabled`, `mcpAllowComments`, `mcpTenantKey`, `mcpGenesysClientId`, `mcpEpoch`, `genesysOrgId`. Dazu der sparse GSI `byMcpTenantKey`. `surveyDataTableId` ist schon vorhanden.
 
 **Weitere Ressourcen:** KMS-Key `McpTokenKey` und Secret `McpPseudonymSecret` (beide RETAIN). Lambda `mcp` (Timeout 28 s, 1024 MB, begrenzte Reserved Concurrency, `attachTenantAuth`), Lambda `mcp_admin` (`attachTenantAuth`).
@@ -269,7 +289,11 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | Lock-Dauer | 60 Minuten | `SURVEY_LOCK_TTL_MINUTES` |
 | Access-Token | 60 Minuten | `McpOAuthTable` |
 | Refresh-Token / Session | 30 Tage | `McpOAuthTable` |
-| Rate-Limit pro Session, DCR-Clients pro Mandant | wird in M11 festgelegt | |
+| Rate-Limit pro Session | vorläufig 120 pro Minute, endgültig in M11 | `SESSION_RATE_LIMIT_PER_MINUTE` in `mcp/oauth.ts` |
+| DCR-Clients pro Mandant | vorläufig 200, endgültig in M11 | `MAX_DCR_CLIENTS_PER_TENANT` |
+| DCR-Client ohne Token / nach letzter Nutzung | 1 / 90 Tage | `CLIENT_UNUSED_TTL_SECONDS` / `CLIENT_IDLE_TTL_SECONDS` |
+| Anmeldeanfrage / Einmal-Code | 10 / 2 Minuten | `mcp/oauth.ts` |
+| Redirect-URIs pro Client | 10 | DCR |
 
 Zusätzlich gilt die Drosselung pro Route in `routeSettings` (`backend.ts`).
 

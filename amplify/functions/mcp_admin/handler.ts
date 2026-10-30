@@ -14,6 +14,7 @@ import {
   newMcpTenantKey,
 } from "../shared/mcp_tenant";
 import { encryptClientSecret } from "../shared/mcp_secret";
+import { revokeMcpSessionTokens } from "../shared/mcp_session_revoke";
 import {
   getAuthorizationToken,
   getGenesysRegion,
@@ -45,6 +46,11 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const TENANTS_TABLE_NAME = process.env.TENANTS_TABLE_NAME ?? "";
 const MCP_PUBLIC_BASE_URL = (process.env.MCP_PUBLIC_BASE_URL ?? "").trim();
+/**
+ * Zeitbudget für den Widerruf der Genesys-Tokens beim Abschalten; der letzte Durchgang braucht bis zu 3 s dazu
+ * (Lambda-Timeout 20 s, Token- und Rollenprüfung davor je bis 6 s).
+ */
+const SESSION_REVOKE_BUDGET_MS = 4000;
 
 function jsonResponse(statusCode: number, body: unknown): AnyResult {
   return {
@@ -214,7 +220,11 @@ async function enableMcp(
       },
     })
   );
-  if (clientChanged) await clearMcpEntries(tenantId);
+  if (clientChanged) {
+    const revocation = await revokeMcpSessionTokens(tenantId, SESSION_REVOKE_BUDGET_MS);
+    await clearMcpEntries(tenantId);
+    console.log("[mcp_admin] sessions of previous client revoked", { tenantId, ...revocation });
+  }
 
   console.log("[mcp_admin] enabled", { tenantId, userId: params.userId, clientChanged });
   const saved = await loadTenantItem(backendClientId).catch(() => undefined);
@@ -252,8 +262,10 @@ async function disableMcp(params: {
   const { tenantId, backendClientId, credentials } = params;
   // Zuerst sperren (Epoch), dann aufräumen: Bricht das Aufräumen ab, ist MCP trotzdem schon aus und der Aufruf wiederholbar
   await disableTenantMcp(backendClientId);
+  // Genesys-Tokens nach Möglichkeit widerrufen, solange die Sessions noch gespeichert sind
+  const revocation = await revokeMcpSessionTokens(tenantId, SESSION_REVOKE_BUDGET_MS);
   const cleared = await clearMcpEntries(tenantId);
-  console.log("[mcp_admin] disabled", { tenantId, userId: params.userId, cleared });
+  console.log("[mcp_admin] disabled", { tenantId, userId: params.userId, cleared, ...revocation });
   const saved = await loadTenantItem(backendClientId).catch(() => undefined);
   return buildStatus(tenantId, saved ?? { ...params.item, mcpEnabled: false, mcpGenesysClientId: undefined }, credentials, {
     featureEnabled: true,
