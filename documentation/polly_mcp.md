@@ -65,7 +65,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
 
 1. **Ohne Token** → 401 mit `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp/{key}"`.
 2. **Metadaten des Autorisierungsservers:** Issuer `<base>/mcp/{key}`, nur PKCE S256, `token_endpoint_auth_methods_supported: ["none"]`, Grants `authorization_code` und `refresh_token`.
-3. **DCR:** `redirect_uris` nur `https` mit Ursprung und Pfad exakt aus der Allow-List (`MCP_ALLOWED_REDIRECT_URIS`, Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`; ein anderer Pfad auf demselben Host ist nicht erlaubt, damit kein Open Redirect dort den Code abgreift) oder Loopback (RFC 8252, immer erlaubt). Keine Wildcards. Höchstens N Clients pro Mandant (Wert legt M11 fest), gezählt werden nur nicht abgelaufene. Ein neuer Client verfällt nach einem Tag, wenn er bis dahin kein Token bekommen hat; mit dem ersten Token gilt die Frist von 90 Tagen nach letzter Nutzung. So belegen anonyme Registrierungen die Plätze nicht dauerhaft.
+3. **DCR:** `redirect_uris` nur `https` mit Ursprung und Pfad exakt aus der Allow-List (`MCP_ALLOWED_REDIRECT_URIS`, Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`; ein anderer Pfad auf demselben Host ist nicht erlaubt, damit kein Open Redirect dort den Code abgreift) oder Loopback (RFC 8252, immer erlaubt). Keine Wildcards. Höchstens 200 Clients pro Mandant, gezählt werden nur nicht abgelaufene. Ein neuer Client verfällt nach einem Tag, wenn er bis dahin kein Token bekommen hat; mit dem ersten Token gilt die Frist von 90 Tagen nach letzter Nutzung. So belegen anonyme Registrierungen die Plätze nicht dauerhaft.
 4. **`/authorize`:**
    - `client_id` muss an den Key gebunden sein, `redirect_uri` muss exakt passen.
    - Pflicht sind PKCE S256 und `resource` = MCP-URL dieses Mandanten.
@@ -83,7 +83,8 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    - Geschützt durch `X-Frame-Options: DENY`, CSP mit `frame-ancestors 'none'` und `form-action` (eigener Ursprung und Ursprung der Redirect-URI), CSRF-Nonce und das Browser-Cookie. Kein Skript.
    - Sprache Deutsch oder Englisch nach `Accept-Language`.
    - „Zulassen“ legt Session und Einmal-Code an. „Ablehnen“ widerruft das Genesys-Token und leitet mit `access_denied` zurück. Jede Anmeldeanfrage lässt sich nur einmal bestätigen.
-   - Die Zustimmung wird pro (Person, Client, Redirect) gemerkt; das kommt mit M11, bis dahin erscheint die Seite bei jeder Anmeldung.
+   - Mit „Zulassen“ wird die Zustimmung pro (Mandant, Person, Client) 30 Tage gemerkt (`CONSENT#`, Schlüssel als Hash), zusammen mit den bestätigten Redirect-URIs (höchstens 10). Sie gilt nur für eine dieser Redirect-URIs und denselben `mcpEpoch`: Abschalten von MCP oder Wechsel des Genesys-Clients macht sie ungültig. Bei gültiger Zustimmung überspringt der Callback die Seite und stellt den Code sofort aus; der Genesys-Login bleibt Pflicht. Ein anderer Client oder eine noch nicht bestätigte Redirect-URI fragt neu.
+   - Zurückgenommen wird sie durch „Ablehnen“, durch den Widerruf eines Refresh-Tokens (`/revoke`) und bei erkannter Wiederverwendung von Code oder Refresh-Token. Endet nur die Genesys-Sitzung, bleibt sie bestehen. Gespeichert wird sie erst, wenn Session und Code angelegt sind; scheitert das Speichern, erscheint die Seite beim nächsten Mal wieder.
 7. **`/token`:**
    - Der Code ist einmalig. PKCE, `redirect_uri`, `client_id` und `resource` müssen mit der Anfrage übereinstimmen.
    - Tokens sind opake Zufallswerte mit 256 bit und werden nur als SHA-256 gespeichert.
@@ -99,7 +100,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    3. `__meta`-Flag `mcp` (Cache 60 s)
    4. Access-Token (`ConsistentRead`)
    5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`.
-   6. Rate-Limit pro Session (feste Fenster pro Minute, vorläufig 120; 429 mit `Retry-After`)
+   6. Rate-Limit pro Session (feste Fenster pro Minute, 120; 429 mit `Retry-After`)
    7. Rolle des Tools (Abschnitt 4)
    8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**; bei der Auswertung zusätzlich Zeitraum, Filter, Anzahl der ausgegebenen Sitzungen, Folgeseite ja/nein und ob Kommentare freigegeben waren
 9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`, `EncryptionContext` mit Mandant und Session) in der Session.
@@ -286,7 +287,7 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | `CODE#` | Einmal-Code (Hash) | 2 min |
 | `SESSION#` | Person, Mandant, `mcpEpoch`, Genesys-Tokens (KMS-verschlüsselt) | höchstens 30 Tage |
 | `AT#` / `RT#` | Access-/Refresh-Token (Hash), Rotation, `familyId` | 60 min / 30 Tage |
-| `CONSENT#` | gemerkte Zustimmung | 90 Tage |
+| `CONSENT#` | gemerkte Zustimmung (Client, bestätigte Redirect-URIs, `mcpEpoch`) | 30 Tage |
 | `RATE#` | Zähler pro Session | 2 min |
 
 - `sk` ist `MAIN`, bei `RATE#<sessionId>` die Minute (Zeitfenster).
@@ -313,8 +314,8 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | Lock-Dauer | 60 Minuten | `SURVEY_LOCK_TTL_MINUTES` |
 | Access-Token | 60 Minuten | `McpOAuthTable` |
 | Refresh-Token / Session | 30 Tage | `McpOAuthTable` |
-| Rate-Limit pro Session | vorläufig 120 pro Minute, endgültig in M11 | `SESSION_RATE_LIMIT_PER_MINUTE` in `mcp/oauth.ts` |
-| DCR-Clients pro Mandant | vorläufig 200, endgültig in M11 | `MAX_DCR_CLIENTS_PER_TENANT` |
+| Rate-Limit pro Session | 120 pro Minute | `SESSION_RATE_LIMIT_PER_MINUTE` in `mcp/oauth.ts` |
+| DCR-Clients pro Mandant | 200 | `MAX_DCR_CLIENTS_PER_TENANT` |
 | DCR-Client ohne Token / nach letzter Nutzung | 1 / 90 Tage | `CLIENT_UNUSED_TTL_SECONDS` / `CLIENT_IDLE_TTL_SECONDS` |
 | Anmeldeanfrage / Einmal-Code | 10 / 2 Minuten | `mcp/oauth.ts` |
 | Redirect-URIs pro Client | 10 | DCR |

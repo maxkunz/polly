@@ -1,5 +1,6 @@
 import {
   ACCESS_TOKEN_TTL_SECONDS,
+  consentKey,
   hashToken,
   isOpaqueToken,
   matchesResource,
@@ -57,9 +58,19 @@ export function isSessionValid(session: SessionRecord | undefined, tenant: Token
   );
 }
 
-/** Widerruft die Familie: Session löschen. Gibt die gelöschte Session zurück (für den Widerruf bei Genesys). */
-export async function revokeFamily(store: OAuthStore, sessionId: string): Promise<SessionRecord | undefined> {
-  return store.deleteSession(sessionId);
+/**
+ * Widerruft die Familie: Session löschen. Gibt die gelöschte Session zurück (für den Widerruf bei Genesys).
+ * Nimmt auch die gemerkte Zustimmung von Person und Client zurück (Widerruf durch den Client, Wiederverwendung),
+ * außer bei `keepConsent` (nur die Genesys-Sitzung ist abgelaufen, kein Anzeichen für Missbrauch).
+ */
+export async function revokeFamily(
+  store: OAuthStore,
+  sessionId: string,
+  options: { keepConsent?: boolean } = {}
+): Promise<SessionRecord | undefined> {
+  const session = await store.deleteSession(sessionId);
+  if (session && !options.keepConsent) await store.deleteConsent(consentKey(session.tenantId, session.userId, session.clientId));
+  return session;
 }
 
 /** Neues Paar aus Access- und Refresh-Token. Das Refresh-Token reicht nie über das Ende der Session hinaus. */
@@ -146,7 +157,7 @@ export async function rotateRefreshToken(
   const session = await store.getSession(token.sessionId);
   if (!isSessionValid(session, tenant, now)) return tokenError("invalid_grant", "Session no longer valid");
   if (checkSession && !(await checkSession(session))) {
-    const revoked = await revokeFamily(store, session.sessionId);
+    const revoked = await revokeFamily(store, session.sessionId, { keepConsent: true });
     return tokenError("invalid_grant", "Session no longer valid", revoked);
   }
   return { ok: true, response: await issueTokenPair(store, session, token.clientId, token.resource, now), session };

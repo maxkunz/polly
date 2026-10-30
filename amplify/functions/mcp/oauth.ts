@@ -18,7 +18,9 @@ export const CLIENT_IDLE_TTL_SECONDS = 90 * 24 * 60 * 60;
 export const CLIENT_UNUSED_TTL_SECONDS = 24 * 60 * 60;
 /** `lastUsedAt` eines Clients wird höchstens einmal am Tag geschrieben. */
 export const CLIENT_TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
-/** Vorläufige Grenzwerte, endgültig in M11 nach Messungen. */
+/** Gemerkte Zustimmung pro Person und Client; danach entfällt die Zustimmungsseite (Genesys-Login bleibt Pflicht). */
+export const CONSENT_TTL_SECONDS = 30 * 24 * 60 * 60;
+/** Grenzwerte (M11): höchstens 200 nicht abgelaufene DCR-Clients je Mandant, 120 Tool-Aufrufe je Minute und Session. */
 export const MAX_DCR_CLIENTS_PER_TENANT = 200;
 export const SESSION_RATE_LIMIT_PER_MINUTE = 120;
 
@@ -39,6 +41,44 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 /** Zufallswert mit 256 bit (base64url, 43 Zeichen) für Tokens, Codes, IDs und Nonces. */
 export function randomToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+/** Schlüssel der gemerkten Zustimmung: Mandant, Person und Client; Hash, damit keine Klar-IDs im Schlüssel stehen. */
+export function consentKey(tenantId: string, userId: string, clientId: string): string {
+  return createHash("sha256").update(JSON.stringify([tenantId, userId, clientId])).digest("base64url");
+}
+
+interface ConsentFields {
+  tenantId: string;
+  clientId: string;
+  redirectUris: string[];
+  epoch: number;
+  expiresAt: number;
+}
+
+/** Gemerkte Zustimmung gilt nur für Mandant, Client, eine der bestätigten Redirect-URIs und denselben Epoch (Abschalten widerruft sie). */
+export function isConsentValid(
+  consent: ConsentFields | undefined,
+  current: { tenantId: string; clientId: string; redirectUri: string; epoch: number },
+  now: number
+): boolean {
+  return (
+    !!consent &&
+    consent.expiresAt > now &&
+    consent.tenantId === current.tenantId &&
+    consent.clientId === current.clientId &&
+    consent.epoch === current.epoch &&
+    consent.redirectUris.includes(current.redirectUri)
+  );
+}
+
+/**
+ * Bestätigte Redirect-URIs nach einem „Zulassen“: bei gleichem Epoch die bisherigen plus die neue (höchstens
+ * `MAX_REDIRECT_URIS`, so viele kann ein Client registrieren), sonst nur die neue. Die Frist beginnt neu.
+ */
+export function mergeConsentRedirects(existing: ConsentFields | undefined, redirectUri: string, epoch: number, now: number): string[] {
+  const previous = existing && existing.epoch === epoch && existing.expiresAt > now ? existing.redirectUris : [];
+  return [redirectUri, ...previous.filter((uri) => uri !== redirectUri)].slice(0, MAX_REDIRECT_URIS);
 }
 
 /** Tokens und Codes werden nur als SHA-256 gespeichert. */

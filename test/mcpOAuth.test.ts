@@ -18,6 +18,11 @@ import {
 	randomToken,
 	readCookie,
 	SESSION_RATE_LIMIT_PER_MINUTE,
+	CONSENT_TTL_SECONDS,
+	consentKey,
+	isConsentValid,
+	MAX_REDIRECT_URIS,
+	mergeConsentRedirects,
 	verifyPkce,
 	type RegisteredClient,
 } from "../amplify/functions/mcp/oauth";
@@ -25,6 +30,7 @@ import type {
 	AuthCodeRecord,
 	AuthRequestRecord,
 	ClientRecord,
+	ConsentRecord,
 	OAuthStore,
 	SessionRecord,
 	TokenRecord,
@@ -61,6 +67,7 @@ class MemoryStore implements OAuthStore {
 	sessions = new Map<string, SessionRecord>();
 	tokens = new Map<string, TokenRecord>();
 	rates = new Map<string, number>();
+	consents = new Map<string, ConsentRecord>();
 
 	async getClient(id: string) { return this.clients.get(id); }
 	async putClient(client: ClientRecord) { this.clients.set(client.clientId, { ...client }); }
@@ -106,6 +113,9 @@ class MemoryStore implements OAuthStore {
 		return true;
 	}
 	async deleteToken(kind: "AT" | "RT", hash: string) { this.tokens.delete(`${kind}#${hash}`); }
+	async getConsent(key: string) { const c = this.consents.get(key); return c && { ...c }; }
+	async putConsent(consent: ConsentRecord) { this.consents.set(consent.consentKey, { ...consent }); }
+	async deleteConsent(key: string) { this.consents.delete(key); }
 	async incrementRate(_tenantId: string, sessionId: string, bucket: string) {
 		const key = `${sessionId}#${bucket}`;
 		const next = (this.rates.get(key) ?? 0) + 1;
@@ -539,6 +549,83 @@ await test("Rate-Limit pro Session und Minute", async () => {
 	const limited = await checkSessionRate(store, s, NOW + 15_000);
 	assert.deepEqual(limited, { ok: false, retryAfterSeconds: 45 });
 	assert.equal((await checkSessionRate(store, s, NOW + 60_000)).ok, true, "neue Minute");
+});
+
+const CLAUDE_COM = "https://claude.com/api/mcp/auth_callback";
+
+/** Gemerkte Zustimmung wie nach „Zulassen“ für Person `user-1` und `CLIENT_ID`. */
+async function seedConsent(store: MemoryStore, redirectUris = [REDIRECT]): Promise<string> {
+	const key = consentKey(TENANT.tenantId, "user-1", CLIENT_ID);
+	await store.putConsent({ consentKey: key, tenantId: TENANT.tenantId, clientId: CLIENT_ID, redirectUris, epoch: TENANT.epoch, expiresAt: NOW + CONSENT_TTL_SECONDS * 1000 });
+	return key;
+}
+
+await test("Gemerkte Zustimmung: nur gleicher Mandant, Client, bestätigte Redirect-URI, Epoch und vor Ablauf", async () => {
+	const store = new MemoryStore();
+	const key = await seedConsent(store);
+	assert.notEqual(key, consentKey(TENANT.tenantId, "user-2", CLIENT_ID));
+	assert.notEqual(key, consentKey("tenant-b", "user-1", CLIENT_ID));
+	assert.ok(!key.includes("user-1"));
+	const stored = await store.getConsent(key);
+	const current = { tenantId: TENANT.tenantId, clientId: CLIENT_ID, redirectUri: REDIRECT, epoch: TENANT.epoch };
+	assert.equal(isConsentValid(stored, current, NOW), true);
+	assert.equal(isConsentValid(undefined, current, NOW), false);
+	assert.equal(isConsentValid(stored, { ...current, epoch: TENANT.epoch + 1 }, NOW), false, "Abschalten widerruft");
+	assert.equal(isConsentValid(stored, { ...current, redirectUri: CLAUDE_COM }, NOW), false);
+	assert.equal(isConsentValid(stored, { ...current, clientId: "other" }, NOW), false);
+	assert.equal(isConsentValid(stored, { ...current, tenantId: "tenant-b" }, NOW), false);
+	assert.equal(isConsentValid(stored, current, NOW + CONSENT_TTL_SECONDS * 1000), false, "abgelaufen");
+});
+
+await test("Gemerkte Zustimmung: mehrere Redirect-URIs eines Clients bleiben bestätigt", async () => {
+	const store = new MemoryStore();
+	const stored = await store.getConsent(await seedConsent(store));
+	const merged = mergeConsentRedirects(stored, CLAUDE_COM, TENANT.epoch, NOW);
+	assert.deepEqual(merged, [CLAUDE_COM, REDIRECT]);
+	assert.deepEqual(mergeConsentRedirects(stored, REDIRECT, TENANT.epoch, NOW), [REDIRECT], "keine Dubletten");
+	assert.deepEqual(mergeConsentRedirects(stored, CLAUDE_COM, TENANT.epoch + 1, NOW), [CLAUDE_COM], "neuer Epoch verwirft die alten");
+	assert.deepEqual(mergeConsentRedirects(stored, CLAUDE_COM, TENANT.epoch, NOW + CONSENT_TTL_SECONDS * 1000), [CLAUDE_COM], "abgelaufen");
+	const many = Array.from({ length: 12 }, (_, i) => `http://localhost:${4000 + i}/cb`);
+	const capped = many.reduce<string[]>((uris, uri) => mergeConsentRedirects({ ...stored!, redirectUris: uris }, uri, TENANT.epoch, NOW), []);
+	assert.equal(capped.length, MAX_REDIRECT_URIS);
+	assert.equal(capped[0], many[11]);
+});
+
+await test("Gemerkte Zustimmung: Widerruf durch den Client und Wiederverwendung nehmen sie zurück", async () => {
+	// Widerruf des Refresh-Tokens (Connector getrennt)
+	let store = new MemoryStore();
+	let key = await seedConsent(store);
+	let first = await redeem(store, (await seedCode(store)).code);
+	assert.ok(first.ok);
+	await revokeToken(store, TENANT.tenantId, { clientId: CLIENT_ID, token: first.response.refresh_token });
+	assert.equal(await store.getConsent(key), undefined);
+
+	// Wiederverwendung eines Refresh-Tokens (Anzeichen für Missbrauch)
+	store = new MemoryStore();
+	key = await seedConsent(store);
+	first = await redeem(store, (await seedCode(store)).code);
+	assert.ok(first.ok);
+	assert.ok((await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW)).ok);
+	assert.equal((await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW)).ok, false);
+	assert.equal(await store.getConsent(key), undefined);
+
+	// Ein Access-Token widerruft nur sich selbst, die Zustimmung bleibt
+	store = new MemoryStore();
+	key = await seedConsent(store);
+	first = await redeem(store, (await seedCode(store)).code);
+	assert.ok(first.ok);
+	await revokeToken(store, TENANT.tenantId, { clientId: CLIENT_ID, token: first.response.access_token, hint: "access_token" });
+	assert.ok(await store.getConsent(key));
+});
+
+await test("Gemerkte Zustimmung: tote Genesys-Sitzung lässt sie bestehen", async () => {
+	const store = new MemoryStore();
+	const key = await seedConsent(store);
+	const first = await redeem(store, (await seedCode(store)).code);
+	assert.ok(first.ok);
+	const dead = await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW, async () => false);
+	assert.equal(dead.ok, false);
+	assert.ok(await store.getConsent(key));
 });
 
 // --- Mandant und Seiten ---------------------------------------------------------------------------------------------

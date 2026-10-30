@@ -111,10 +111,11 @@ Vorgaben:
   - [x] Review (Datenschutz) umgesetzt: Verteilungen und `choice` nur mit typgerechten Werten bzw. Labels der Umfrage, grobe Zeitpunkte, Existenzprüfung in allen drei Tools, Audit-Log mit Umfang, Pseudonym pro Umfrage, `questionId` bereinigt, Folgeseiten lesen ab der Cursor-Position.
 
 - [ ] **M11 Härtung, Ende-zu-Ende-Test, Abschluss** (siehe „Prüfung“) · **Abschluss-Review und Security-Review**
-  - [ ] Rate-Limits pro Session, gemerkte Zustimmung, maximale Anzahl DCR-Clients pro Mandant.
-  - [ ] `tools/api_tests.py`: Metadaten, 401-Header, Kill-Switch.
-  - [ ] Prüfung nach „Prüfung“ auf einer Branch-Umgebung (braucht Deploy und Zugangsdaten).
-  - [ ] Doku abschließend prüfen: `polly_mcp.md`, `permissions.md`, `feature_flags.md`, `CLAUDE.md` (Architektur, Stolperfalle „MCP-Login ≠ Cognito“).
+  - [x] Rate-Limits pro Session (120/min), gemerkte Zustimmung (`CONSENT#`, 30 Tage), maximale Anzahl DCR-Clients pro Mandant (200). · erledigt 2026-10-30
+  - [x] `tools/api_tests.py`: Metadaten, 401-Header, falscher Schlüssel, DCR-Prüfung ([M11]–[M17], Kill-Switch über 404 abgedeckt). · erledigt 2026-10-30
+  - [ ] Prüfung nach „Prüfung“ auf einer Branch-Umgebung (braucht Deploy und Zugangsdaten) – offen, nur vom Entwickler ausführbar.
+  - [x] Doku geprüft: `polly_mcp.md`, `permissions.md`, `feature_flags.md` (unverändert gültig), `CLAUDE.md` (Stand, Stolperfalle „MCP-Login ≠ Cognito“).
+  - [x] Abschluss-Review des Branch-Diffs (`review-de`) und `secreview-de`. · erledigt 2026-10-30
 
 ## Abweichungen vom Plan
 
@@ -313,6 +314,13 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
   - Offen bleibt: keine Mindestgröße (k-Anonymität) bei Aggregaten oder kleinen Zeiträumen.
 
 ### M11
+
+- **Gemerkte Zustimmung:** `CONSENT#<Hash aus Mandant, Person, Client>` (`consentKey`) mit Liste der bestätigten Redirect-URIs (`mergeConsentRedirects`, höchstens 10; sonst fragte ein Client mit claude.ai- und claude.com-Callback bei jedem Wechsel neu). Gespeichert wird beim „Zulassen“ erst nach Session und Code, nicht fatal. Gültig 30 Tage (nicht 90 wie im ersten Entwurf: entspricht der Session-Höchstdauer) und nur bei bestätigter Redirect-URI und gleichem `mcpEpoch` (`isConsentValid`). Der Callback prüft sie vor dem Übergang nach `authenticated` und schließt direkt `pending → consumed` ab, über dieselbe Funktion `approveRequest` wie die Zustimmungsseite; scheitert das, widerruft er das Genesys-Token. Zurückgenommen wird sie durch „Ablehnen“ und in `revokeFamily` (Widerruf per `/revoke`, Wiederverwendung von Code oder Refresh-Token), nicht bei toter Genesys-Sitzung (`keepConsent`). Das Aufräumen beim Abschalten erfasst die Einträge über das GSI `byTenant` (`tenantId` steht im Eintrag).
+- **Endgültige Werte:** 120 Aufrufe je Minute und Session, 200 DCR-Clients je Mandant, Drosselung der Routen unverändert (Werte aus M5). Es gab keine Messung auf einer Umgebung; die Werte bleiben nach Bedarf anpassbar (Konstanten in `mcp/oauth.ts`).
+- **`api_tests.py`:** [M11]–[M17] laufen ohne Anmeldung und schreiben nichts; sie nehmen die MCP-URL aus [M10] und werden übersprungen, wenn MCP in der Umgebung aus ist (alle Routen 404). Der Kill-Switch selbst lässt sich ohne Änderung der Lambda-Variablen nicht prüfen.
+- **Review (`review-de`) umgesetzt:** Rücknahme der Zustimmung, Speichern erst nach Session und Code, Genesys-Widerruf auf dem Weg ohne Seite, mehrere Redirect-URIs, Vorprüfung in `api_tests.py` gegen Netzfehler abgesichert, verwaister Kommentar an `hashToken`. Tests decken Rücknahme und Redirect-Liste ab; der Handler selbst bleibt ohne Unit-Test (DynamoDB/KMS).
+- **Security-Review (`secreview-de`):** keine ausnutzbare Lücke. Eine Härtung umgesetzt: Der Callback prüft vor dem Abschluss ohne Seite den Client erneut (`loadBoundClient`); ist er abgelaufen oder gelöscht, geht es zur Zustimmungsseite, die dann mit „abgelaufen“ endet.
+- **Nicht ausgeführt:** die Prüfung auf einer Branch-Umgebung (Deploy, Genesys-Login, Claude-Client) und die Abschluss-Reviews.
 
 ## Modelle und Reviews
 

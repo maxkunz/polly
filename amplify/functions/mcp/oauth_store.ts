@@ -99,6 +99,16 @@ export interface TokenRecord {
   usedAt?: number;
 }
 
+/** Gemerkte Zustimmung; gilt nur für die bestätigten `redirectUris` und denselben `epoch` des Mandanten. */
+export interface ConsentRecord {
+  consentKey: string;
+  tenantId: string;
+  clientId: string;
+  redirectUris: string[];
+  epoch: number;
+  expiresAt: number;
+}
+
 export interface OAuthStore {
   getClient(clientId: string): Promise<ClientRecord | undefined>;
   putClient(client: ClientRecord): Promise<void>;
@@ -139,6 +149,10 @@ export interface OAuthStore {
   consumeToken(kind: TokenKind, tokenHash: string, now: number): Promise<boolean>;
   deleteToken(kind: TokenKind, tokenHash: string): Promise<void>;
 
+  getConsent(consentKey: string): Promise<ConsentRecord | undefined>;
+  putConsent(consent: ConsentRecord): Promise<void>;
+  deleteConsent(consentKey: string): Promise<void>;
+
   /** Zählt einen Aufruf im Zeitfenster `bucket` und gibt den neuen Stand zurück. */
   incrementRate(tenantId: string, sessionId: string, bucket: string, expiresAt: number): Promise<number>;
 }
@@ -154,6 +168,7 @@ export const PK_PREFIX = {
   code: "CODE#",
   session: "SESSION#",
   rate: "RATE#",
+  consent: "CONSENT#",
 } as const;
 
 function tokenPk(kind: TokenKind, tokenHash: string): string {
@@ -332,6 +347,12 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
     consumeToken: (kind, tokenHash, now) => consume(tokenPk(kind, tokenHash), now),
     async deleteToken(kind, tokenHash) {
       await remove(tokenPk(kind, tokenHash));
+    },
+
+    getConsent: (key) => get<ConsentRecord>(PK_PREFIX.consent + key),
+    putConsent: (consent) => put(PK_PREFIX.consent + consent.consentKey, consent, consent.expiresAt),
+    async deleteConsent(key) {
+      await remove(PK_PREFIX.consent + key);
     },
 
     async incrementRate(tenantId, sessionId, bucket, expiresAt) {

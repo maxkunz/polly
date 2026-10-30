@@ -22,9 +22,13 @@ import {
   buildRedirect,
   checkAuthorizeRequest,
   CLIENT_IDLE_TTL_SECONDS,
+  CONSENT_TTL_SECONDS,
+  consentKey,
   CLIENT_UNUSED_TTL_SECONDS,
   hashToken,
+  isConsentValid,
   isOpaqueToken,
+  mergeConsentRedirects,
   MAX_DCR_CLIENTS_PER_TENANT,
   needsClientTouch,
   parseClientRegistration,
@@ -293,12 +297,33 @@ async function callback(ctx: RouteContext): Promise<AnyResult> {
     accessToken: genesys.accessToken,
     refreshToken: genesys.refreshToken,
   });
-  const authenticated = await store.transitionAuthRequest(request.id, "pending", "authenticated", {
+  const signedIn = {
     sessionId,
     userId: caller.userId,
     userName: caller.userName ?? "",
     genesysTokensEnc,
     genesysExpiresAt: genesys.expiresAt,
+  };
+
+  // Gemerkte Zustimmung (gleiche Person, gleicher Client, bestätigte Redirect-URI): Zustimmungsseite überspringen
+  try {
+    const consent = await store.getConsent(consentKey(tenant.tenantId, caller.userId, request.clientId));
+    const current = { tenantId: tenant.tenantId, clientId: request.clientId, redirectUri: request.redirectUri, epoch: tenant.epoch };
+    // Client erneut prüfen (Härtung): ein inzwischen abgelaufener oder gelöschter Client bekommt keinen Code ohne Seite
+    if (isConsentValid(consent, current, now) && (await loadBoundClient(request.clientId, ctx))) {
+      const approved = await approveRequest(ctx, { ...request, ...signedIn }, "pending");
+      if (!approved) return reject(400, "expired");
+      console.log("[mcp] consent remembered", { tenantId: tenant.tenantId, clientId: request.clientId, userId: caller.userId });
+      return approved;
+    }
+  } catch (err) {
+    // Genesys-Token nicht gültig liegen lassen, wenn Session oder Code nicht angelegt werden konnten
+    await revokeGenesysToken(tenant.region, genesys.accessToken);
+    throw err;
+  }
+
+  const authenticated = await store.transitionAuthRequest(request.id, "pending", "authenticated", {
+    ...signedIn,
     csrfNonce: randomToken(),
   });
   if (!authenticated) return reject(400, "expired");
@@ -326,24 +351,41 @@ async function consentPage(ctx: RouteContext): Promise<AnyResult> {
 }
 
 async function consentDecision(ctx: RouteContext): Promise<AnyResult> {
-  const { tenant, urls, lang, now } = ctx;
+  const { tenant, urls, lang } = ctx;
   const body = readRequestBody(ctx.event, CONSENT_MAX_BODY_BYTES);
   const form = body.ok ? parseParams(body.text) : null;
   const request = form ? await loadAuthRequest(form.request, "authenticated", ctx) : undefined;
   if (!form || !request) return errorPage(400, lang, "expired");
   if (!request.csrfNonce || !form.nonce || !safeEqual(form.nonce, request.csrfNonce)) return errorPage(400, lang, "invalid_request");
-  if (!request.sessionId || !request.userId || !request.genesysTokensEnc || request.genesysExpiresAt === undefined) {
-    return errorPage(400, lang, "expired");
+
+  if (form.decision === "allow") {
+    return (await approveRequest(ctx, request, "authenticated", { remember: true })) ?? errorPage(400, lang, "expired");
   }
   // Einmalig: ein zweites Absenden findet die Anfrage nicht mehr im Zustand „authenticated“
   if (!(await store.transitionAuthRequest(request.id, "authenticated", "consumed"))) return errorPage(400, lang, "expired");
+  await revokeRequestGenesys(request, tenant.region);
+  // Ablehnen nimmt auch eine früher gemerkte Zustimmung dieses Clients zurück
+  if (request.userId) await store.deleteConsent(consentKey(tenant.tenantId, request.userId, request.clientId));
+  await store.deleteAuthRequest(request.id);
+  console.log("[mcp] consent denied", { tenantId: tenant.tenantId, clientId: request.clientId, userId: request.userId });
+  return clientErrorRedirect(request, urls, "access_denied");
+}
 
-  if (form.decision !== "allow") {
-    await revokeRequestGenesys(request, tenant.region);
-    await store.deleteAuthRequest(request.id);
-    console.log("[mcp] consent denied", { tenantId: tenant.tenantId, clientId: request.clientId, userId: request.userId });
-    return clientErrorRedirect(request, urls, "access_denied");
-  }
+/**
+ * Schließt eine Anmeldeanfrage mit Zustimmung ab: einmaliger Übergang aus `from` nach `consumed`, Session und
+ * Einmal-Code, bei `remember` danach die gemerkte Zustimmung. `undefined`, wenn die Anfrage unvollständig oder
+ * schon verbraucht ist.
+ */
+async function approveRequest(
+  ctx: RouteContext,
+  request: AuthRequestRecord,
+  from: AuthRequestStatus,
+  options: { remember?: boolean } = {}
+): Promise<AnyResult | undefined> {
+  const { tenant, urls, now } = ctx;
+  if (!request.sessionId || !request.userId || !request.genesysTokensEnc || request.genesysExpiresAt === undefined) return undefined;
+  // Einmalig: ein zweites Absenden oder ein paralleler Callback findet die Anfrage nicht mehr im Zustand `from`
+  if (!(await store.transitionAuthRequest(request.id, from, "consumed"))) return undefined;
 
   await store.putSession({
     sessionId: request.sessionId,
@@ -371,6 +413,22 @@ async function consentDecision(ctx: RouteContext): Promise<AnyResult> {
     sessionId: request.sessionId,
     expiresAt: now + AUTH_CODE_TTL_SECONDS * 1000,
   });
+  if (options.remember) {
+    // Nicht fatal: Session und Code stehen, ohne gemerkte Zustimmung erscheint die Seite beim nächsten Mal wieder
+    const key = consentKey(tenant.tenantId, request.userId, request.clientId);
+    try {
+      await store.putConsent({
+        consentKey: key,
+        tenantId: tenant.tenantId,
+        clientId: request.clientId,
+        redirectUris: mergeConsentRedirects(await store.getConsent(key), request.redirectUri, tenant.epoch, now),
+        epoch: tenant.epoch,
+        expiresAt: now + CONSENT_TTL_SECONDS * 1000,
+      });
+    } catch (err: any) {
+      console.warn("[mcp] consent not stored", { tenantId: tenant.tenantId, clientId: request.clientId, name: err?.name });
+    }
+  }
   await store.deleteAuthRequest(request.id);
   console.log("[mcp] session created", { tenantId: tenant.tenantId, clientId: request.clientId, userId: request.userId });
   return redirect(buildRedirect(request.redirectUri, { code, state: request.state, iss: urls.issuer }), 303);
