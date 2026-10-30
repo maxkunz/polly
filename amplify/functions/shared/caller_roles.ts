@@ -1,6 +1,7 @@
 import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
-import { getSurveyTableAccess, loadProjectTag } from "./genesys_survey_check";
+import { getSurveyTableAccess } from "./genesys_survey_check";
 import { fetchWithTimeout } from "./http";
+import { loadProjectTag } from "./installation_meta";
 import type { TenantCredentials } from "./tenant_auth";
 
 /**
@@ -41,10 +42,10 @@ export async function loadCallerRoles(region: string, token: string): Promise<Ca
 
 export type ProjectTagResult = { ok: true; projectTag: string | undefined } | { ok: false; httpStatus?: number; error: string };
 
-/** Projekt-Tag der Installation, damit die präfixierte Rolle wie im Frontend erkannt wird. */
-export async function loadInstallationProjectTag(credentials: TenantCredentials): Promise<ProjectTagResult> {
+/** Projekt-Tag der Installation (60 s gemerkt), damit die präfixierte Rolle wie im Frontend erkannt wird. */
+export async function loadInstallationProjectTag(tenantId: string, credentials: TenantCredentials): Promise<ProjectTagResult> {
   try {
-    return { ok: true, projectTag: await loadProjectTag(await getSurveyTableAccess(credentials)) };
+    return { ok: true, projectTag: await loadProjectTag(tenantId, await getSurveyTableAccess(credentials)) };
   } catch (err: any) {
     return { ok: false, httpStatus: err?.status, error: String(err?.message ?? err) };
   }
@@ -69,7 +70,7 @@ export async function requireCallerRole(params: {
   const { logPrefix, tenantId, region, token, credentials, role } = params;
   const [caller, projectTag] = await Promise.all([
     loadCallerRoles(region, token),
-    loadInstallationProjectTag(credentials),
+    loadInstallationProjectTag(tenantId, credentials),
   ]);
   if (caller.status === "unauthorized") {
     return { ok: false, httpStatus: 401, code: "unauthorized", message: "Genesys token invalid" };

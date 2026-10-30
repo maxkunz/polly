@@ -4,7 +4,7 @@ import { createDefaultChoiceOptions, createEmptyQuestion } from "../src/domain/s
 import { surveyRules } from "../src/domain/survey/surveyRules";
 import { FlowTranslationError, translateSurveyForFlow } from "../src/domain/survey/flowTranslator";
 import { measureFlowPayload } from "../src/domain/survey/flowPayload";
-import { parseSurveyLock } from "../src/domain/survey/surveyLock";
+import { checkSurveyLockConflict, isSurveyLockOwnedBy, isSurveyLockStale, parseSurveyLock, surveyLockExpiresAtMs } from "../src/domain/survey/surveyLock";
 import { validateSurvey } from "../src/domain/survey/surveyValidator";
 import { SurveyFlowTranslationError } from "../src/services/surveyFlowTranslator";
 import { TTS_TEXT_MAX_CHARS, SURVEY_MAX_QUESTIONS } from "../src/constants/surveyConstants";
@@ -115,6 +115,21 @@ test("Lock: via wird gelesen, unbekannte Werte verworfen", () => {
 	assert.deepEqual(parseSurveyLock({ ...lock, via: "ui" }), { ...lock, via: "ui" });
 	assert.deepEqual(parseSurveyLock({ ...lock, via: "bot" }), lock);
 	assert.deepEqual(parseSurveyLock(lock), lock);
+});
+
+test("Lock: Besitz, Ablauf und Konflikt mit übergebener Uhr", () => {
+	const lock = { locked_by: " Anna ", locked_since: "2026-10-30T10:00:00.000Z" };
+	const since = Date.parse(lock.locked_since);
+	assert.ok(isSurveyLockOwnedBy(lock, "anna"));
+	assert.ok(!isSurveyLockOwnedBy(lock, "  "));
+	assert.equal(surveyLockExpiresAtMs(lock, 60), since + 60 * 60 * 1000);
+	assert.equal(surveyLockExpiresAtMs({ locked_by: "Anna", locked_since: "kaputt" }), null);
+	assert.ok(!isSurveyLockStale(lock, 60, since + 59 * 60 * 1000));
+	assert.ok(isSurveyLockStale(lock, 60, since + 60 * 60 * 1000));
+	assert.ok(isSurveyLockStale({ locked_by: "", locked_since: lock.locked_since }, 60, since));
+	assert.ok(checkSurveyLockConflict(lock, "Bert", 60, since).hasConflict);
+	assert.ok(!checkSurveyLockConflict(lock, "Bert", 60, since + 2 * 60 * 60 * 1000).hasConflict);
+	assert.ok(!checkSurveyLockConflict(lock, "ANNA", 60, since).hasConflict);
 });
 
 test("Choice-Vorgaben kommen vom Aufrufer", () => {

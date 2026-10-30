@@ -2,6 +2,7 @@ import { compareCodeUnits, type AnswerRecord } from "../shared/answer_records";
 import type { ExportSummary } from "../shared/session_summary";
 import type { SurveyAggregateItem } from "../shared/survey_results";
 import { isValidSurveyId } from "../shared/survey_id";
+import { MAX_RANGE_MS, MAX_SESSIONS, MAX_SUMMARY_RANGE_MS } from "../shared/reporting_limits";
 import type { PageInfo } from "./pagination";
 
 /**
@@ -11,12 +12,8 @@ import type { PageInfo } from "./pagination";
 
 export const MAX_LIMIT = 1000;
 export const DEFAULT_LIMIT = 1000;
-/** Größter erlaubter Zeitraum (`to − from`). */
-export const MAX_RANGE_MS = 24 * 60 * 60 * 1000;
-/** Größter erlaubter Zeitraum bei `/summary`: gezählt wird nur, die Antworten werden nicht gelesen. */
-export const MAX_SUMMARY_RANGE_MS = 31 * 24 * 60 * 60 * 1000;
-/** Mehr Sitzungen im Zeitraum werden nicht im Speicher aufgebaut (413). */
-export const MAX_SESSIONS = 10000;
+// Zeiträume und Sitzungsgrenze gemeinsam mit MCP, siehe shared/reporting_limits.ts
+export { MAX_RANGE_MS, MAX_SESSIONS, MAX_SUMMARY_RANGE_MS };
 /** Lambda-Antworten hinter API Gateway sind auf 6 MB begrenzt; darüber 413 mit Hinweis auf ein kleineres `limit`. */
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 

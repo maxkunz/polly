@@ -37,6 +37,7 @@ const ENTRY_MODULES = [
 	"src/domain/survey/invitationLinks.ts",
 	"src/domain/webTheme/webTheme.ts",
 	"src/domain/permissions/roleCheck.ts",
+	"src/domain/features/featureFlags.ts",
 	"src/constants/surveyConstants.ts"
 ];
 

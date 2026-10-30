@@ -53,13 +53,13 @@ Vorgaben:
   - [x] Feature Flag `{ key: "mcp", defaultOnSetup: false }` in `FEATURE_FLAGS`, Texte `features.mcp.*`.
   - [x] i18n in allen fünf Locales; `featureFlags.test.ts` erweitern.
 
-- [ ] **M4 Gemeinsame Backend-Bausteine** (siehe „Backend-Bausteine“) · **Review danach**
-  - [ ] `shared/installation_meta.ts`: liest `__meta` einmal (Projekt-Tag, `features`) mit `TtlCache`; `loadProjectTag`/`loadInstallationProjectTag` darauf umstellen.
-  - [ ] `shared/genesys_datatable_write.ts`: `putRow`/`addRow` mit Timeout, 429-Retry und Allow-List auf `surveyDataTableId`.
-  - [ ] `shared/survey_store.ts`: `updateSurveyRow`, `syncSurveyInList`, `createSurvey`, `saveDraft`, `deploySurvey`, `rollbackSurvey`, Lock-Entscheidungen. Fehler als Codes.
-  - [ ] `shared/reporting_limits.ts`: Grenzwerte aus `reporting_api/v1.ts`; die Kunden-API importiert sie von dort, ohne Verhaltensänderung.
-  - [ ] `shared/pseudonym.ts`: HMAC-Pseudonym sowie `sealCursor`/`openCursor`.
-  - [ ] Tests: `mcpSurveyPipeline.test.ts` (Store mit gemocktem Data-Table-Zugriff) und `mcpPseudonym.test.ts`; `customerApi.test.ts` bleibt grün.
+- [x] **M4 Gemeinsame Backend-Bausteine** (siehe „Backend-Bausteine“) · **Review danach** · erledigt 2026-10-30
+  - [x] `shared/installation_meta.ts`: liest `__meta` einmal (Projekt-Tag, `features`) mit `TtlCache`; `loadProjectTag`/`loadInstallationProjectTag` darauf umstellen.
+  - [x] `shared/genesys_datatable_write.ts`: `putRow`/`addRow` mit Timeout, 429-Retry und Allow-List auf `surveyDataTableId`. (als `genesys_datatable.ts`, siehe Abweichungen)
+  - [x] `shared/survey_store.ts`: `updateSurveyRow`, `syncSurveyInList`, `createSurvey`, `saveDraft`, `deploySurvey`, `rollbackSurvey`, Lock-Entscheidungen. Fehler als Codes.
+  - [x] `shared/reporting_limits.ts`: Grenzwerte aus `reporting_api/v1.ts`; die Kunden-API importiert sie von dort, ohne Verhaltensänderung.
+  - [x] `shared/pseudonym.ts`: HMAC-Pseudonym sowie `sealCursor`/`openCursor`.
+  - [x] Tests: `mcpSurveyPipeline.test.ts` (Store mit gemocktem Data-Table-Zugriff) und `mcpPseudonym.test.ts`; `customerApi.test.ts` bleibt grün.
 
 - [ ] **M5 Infrastruktur** (siehe „Infrastruktur“) · Modell: Sonnet
   - [ ] `backend.ts`: `McpOAuthTable` (RETAIN, TTL, GSI `byTenant`), KMS-Key `McpTokenKey`, Secret `McpPseudonymSecret`.
@@ -159,6 +159,28 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - `featureFlags.test.ts` prüft zusätzlich, dass jedes Flag in allen fünf Locales Texte hat. `npm test` und `vue-tsc` laufen durch.
 
 ### M4
+
+- **`genesys_datatable.ts` statt `genesys_datatable_write.ts`:** `getRow` ist aus `genesys_survey_check.ts` mit umgezogen (dort re-exportiert), sonst entstünde ein Import-Zyklus mit `installation_meta.ts`. Die Allow-List prüft neben `surveyDataTableId` auch den Zeilenschlüssel: nur `survey_<uuid>` und `survey_list`, nie `__meta`/`__lock`. 429 wird höchstens zweimal wiederholt, Wartezeit aus `Retry-After`, gedeckelt auf 3 s.
+- **`installation_meta.ts`** liest Projekt-Tag, `features` und `web.defaultBaseUrl` in einem Zugriff, gemerkt 60 s pro Data Table. `loadDefaultBaseUrl` ist mit umgezogen (Parameter `tenantId` nur noch fürs Log, siehe „Nach dem Review“). **Verhaltensänderung:** Der Projekt-Tag für die Rollenprüfung in `invitations`/`web_themes` war bisher ungecacht, jetzt bis zu 60 s alt; er ändert sich nach dem Setup nicht.
+- **Pipeline als eigenes, reines Modul `survey_pipeline.ts`** (Schritte 2–8 aus „Validierungs-Pipeline“, `prepareDraft` und `checkDeployable`), damit sie ohne Data Table testbar ist und `validate_survey` (M8) sie direkt nutzt. Schritt 1 (Größe, zod, Whitelist-Kopie) bleibt in `tools_v1.ts` (M8). Web-Reset und `theme_unknown` sind schon hier; die Designs (`knownThemeIds`) und das Flag `webSurvey` übergibt der Aufrufer (M9).
+- **IDs:** Auch die IDs der Auswahloptionen werden vergeben und geprüft. IDs, die schon in der gespeicherten Fassung stehen, müssen keine UUIDs sein (ältere Umfragen). `invalid_id` hat `details: { path, reason: "not_uuid" | "duplicate" }`.
+- **Technische Namen:** Neue Elemente bekommen ihren Namen immer aus Titel + ID, auch wenn die Eingabe einen Namen nennt; jede Abweichung der Eingabe ergibt `name_immutable_ignored` mit `path`, `id` und dem gültigen `name`.
+- **Translator-Fehler** kommen als `validation_failed` mit `details: { errors: [], translation: { key, params, questionId? } }`.
+- **Lock bei `save_draft`:** Ein abgelaufenes **eigenes** Lock reicht (hätte jemand anderes übernommen, stünde dessen Name im Lock); verlangt wird nur, dass der Name passt. `lock_lost` ohne Lock hat leere `details`.
+- **Neue Warnung `survey_list_not_updated`:** Scheitert nach dem Schreiben der Umfrage die Pflege von `survey_list`, gibt es keinen Fehler (sonst legte die KI erneut an), sondern diese Warnung.
+- **Deploy prüft zusätzlich die Prüfregeln** (`surveyRules`), wie in der Spezifikation; die App prüft beim Deploy nur Translator und Budget.
+- **`upstream_error`** trägt bei HTTP-Fehlern `details: { status }`, bei 429 zusätzlich `throttled: true`. Geloggt werden nur Mandant, Vorgang, Fehlername und Status, keine Inhalte.
+- **Pseudonym** auf 128 bit gekürzt (`r_` + 22 Zeichen). Mandant und Wert gehen mit Längenpräfix in den HMAC ein. Das Secret muss mindestens 32 Bytes haben; Laden aus Secrets Manager kommt mit M5/M10. Cursor: Version-Byte, 12-Byte-IV, Tag, Chiffrat als base64url, höchstens 4.096 Zeichen.
+- `domainImports.test.ts` prüft zusätzlich `featureFlags.ts` (von `installation_meta.ts` gebündelt).
+- `MAX_RESPONSE_BYTES` und `MAX_LIMIT` bleiben in `reporting_api/v1.ts` (nur Kunden-API); `v1.ts` re-exportiert die gemeinsamen Grenzwerte, Handler und Tests bleiben unverändert.
+- **Nach dem Review (2026-10-30):**
+  - `putRow`/`addRow` bekommen `SurveyTableTarget` (`region`, `surveyDataTableId` aus `TenantCredentials`) und das Token; die Tabelle kommt nur noch daraus, die frühere Vergleichsprüfung zweier Parameter entfällt. `genesys_survey_check.ts` re-exportiert nur noch `isValidSurveyId`.
+  - Fehlt `Retry-After` oder ist er leer, gilt die Standardwartezeit 1 s (vorher 0 s). Zeitbudget pro Store-Operation 24 s (`OPERATION_BUDGET_MS`, überschreibbar über `ctx.deadline`): Wiederholungen nach 429 nur, wenn Wartezeit plus Aufruf hineinpassen; reicht es nicht mehr für die Pflege von `survey_list`, gibt es direkt `survey_list_not_updated`. So kommt kein 504 für einen schon geschriebenen Draft.
+  - `upstream_error` trägt den Status bei allen HTTP-Fehlern, auch beim Schreiben.
+  - Neue Warnung `payload_budget_exceeded` beim Speichern über dem Budget (statt `payload_budget_75`).
+  - Frage- und Options-IDs dürfen nicht gleich der Umfrage-ID sein (`invalid_id`, `duplicate`), sonst überschrieben sich die technischen Namen.
+  - Lock-Regeln gemeinsam für App und Server in `surveyLock.ts`: `isSurveyLockOwnedBy`, `surveyLockExpiresAtMs`, `isSurveyLockStale`/`checkSurveyLockConflict` mit optionalem `now`; der Store prüft den Ablauf mit `ctx.now`. `parseSurveyDraft`, `withSurveyListItem` und `buildSurveyListPayload` liegen in `surveyRow.ts` und werden von `surveyService.ts` und `survey_store.ts` genutzt.
+  - `loadInstallationMeta`, `loadProjectTag`, `loadDefaultBaseUrl` und `loadInstallationProjectTag` haben wieder `tenantId` (nur fürs Log der Warnung zu ungültiger Basis-URL; Cache weiter pro Data Table).
 
 ### M5
 

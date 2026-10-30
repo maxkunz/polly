@@ -1,6 +1,6 @@
 # Polly MCP – Spezifikation
 
-> **Stand:** Spezifikation, noch nicht umgesetzt. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
+> **Stand:** Spezifikation; umgesetzt sind bisher nur die Backend-Bausteine (M4: `survey_pipeline.ts`, `survey_store.ts`, `pseudonym.ts` u. a. in `amplify/functions/shared/`), noch keine Lambda. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
 
 Über MCP (Model Context Protocol) können KI-Clients wie Claude Desktop, claude.ai und Claude Code Umfragen anlegen, bearbeiten, deployen und zurückrollen sowie Ergebnisse auswerten. Der Zugriff erfolgt **im Namen einer angemeldeten Person** mit deren Polly-Rollen.
 
@@ -155,8 +155,8 @@ Fehler kommen als Tool-Ergebnis mit `isError: true` und `{ code, message, detail
 | `forbidden` | Polly-Rolle für das Tool fehlt | `requiredRole` |
 | `not_found` | Umfrage unbekannt oder in Löschung | – |
 | `invalid_input` | Eingabe entspricht nicht dem Schema | `issues` |
-| `invalid_id` | ID keine UUID oder doppelt | `path` |
-| `validation_failed` | Validierung der Umfrage fehlgeschlagen, nichts geschrieben | `errors` |
+| `invalid_id` | ID keine UUID oder doppelt | `path`, `reason` (`not_uuid` \| `duplicate`) |
+| `validation_failed` | Validierung der Umfrage fehlgeschlagen, nichts geschrieben | `errors`, bei Translator-Fehlern `translation` (`key`, `params`, `questionId?`) |
 | `survey_locked` | Fremdes, gültiges Lock | `lockedBy`, `since`, `expiresAt`, `via` |
 | `lock_lost` | Eigenes Lock fehlt oder gehört jetzt anderen | `lockedBy`, `since`, `via` |
 | `draft_conflict` | Draft-Version passt nicht | `current` (Draft-Version) |
@@ -169,11 +169,11 @@ Fehler kommen als Tool-Ergebnis mit `isError: true` und `{ code, message, detail
 | `range_too_large` | Zeitraum größer als erlaubt | `maxMs` |
 | `cursor_invalid` | Cursor ungültig, abgelaufen oder für eine andere Umfrage | – |
 | `rate_limited` | Zu viele Aufrufe | `retryAfterSeconds` |
-| `upstream_error` | Genesys antwortet nicht oder mit Fehler | – |
+| `upstream_error` | Genesys antwortet nicht oder mit Fehler | `status` (HTTP-Status von Genesys, fehlt bei Zeitüberschreitung), bei 429 zusätzlich `throttled` |
 
 Protokollfehler (Authentifizierung, unbekannter Key, MCP aus) sind keine Tool-Fehler, sondern HTTP-Antworten nach Abschnitt 2 und 3.
 
-**Warnungen** (kein Fehler, Umfrage wird gespeichert): `name_immutable_ignored`, `web_settings_reset`, `payload_budget_75` (Flow-JSON ab 75 % des Budgets).
+**Warnungen** (kein Fehler, Umfrage wird gespeichert): `name_immutable_ignored`, `web_settings_reset`, `payload_budget_75` (Flow-JSON ab 75 % des Budgets), `payload_budget_exceeded` (Flow-JSON über dem Budget; gespeichert, aber Deploy wird mit `payload_too_large` abgelehnt; beide mit `size`, `limit`, `percent`), `survey_list_not_updated` (Umfrage gespeichert, aber der Index `survey_list` nicht, auch wenn das Zeitbudget des Aufrufs dafür nicht mehr reicht; sie erscheint in der App-Übersicht erst nach dem nächsten Speichern).
 
 ## 5. Lock
 
@@ -186,7 +186,7 @@ Es gilt das bestehende Umfrage-Lock im Feld `lock` der Zeile `survey_<id>` (TTL 
   - Lock fremd und gültig → `lock_lost`.
   - Version passt nicht → `draft_conflict { current }`.
   - Sonst Pipeline durchlaufen, schreiben und `locked_since` verlängern bzw. bei `release: true` leeren.
-  - Ohne eigenes Lock wird nicht geschrieben (`lock_lost`).
+  - Ohne eigenes Lock wird nicht geschrieben (`lock_lost`). Ein abgelaufenes eigenes Lock zählt noch: Hätte jemand anderes übernommen, stünde dessen Name im Lock.
 - **`end_edit`:** gibt nur das **eigene** Lock frei.
 - **`deploy_survey`/`rollback_survey`:** Fremdes, gültiges Lock → `survey_locked`. Das gelesene Lock wird unverändert zurückgeschrieben (Deploy nimmt oder löscht kein Lock).
 - **Kennzeichen `via`:** `"ui"` (App) oder `"mcp"`. Fehlt es, gilt `"ui"`. Die App zeigt bei `via === "mcp"` einen eigenen Hinweis; „Trotzdem bearbeiten“ bleibt möglich und übernimmt das MCP-Lock. Die KI bekommt danach beim Speichern `lock_lost`.
@@ -211,12 +211,12 @@ MCP ist nur erreichbar, wenn **alle drei Ebenen** an sind. Jede Ebene schaltet a
 
 ## 7. Validierungs-Pipeline
 
-Sie gilt für `create_survey`, `save_draft` und `validate_survey`. `deploy_survey` durchläuft die Schritte 6 bis 8 auf dem gespeicherten Draft. Es wird erst geschrieben, wenn alle Schritte bestanden sind.
+Sie gilt für `create_survey`, `save_draft` und `validate_survey`. `deploy_survey` durchläuft die Schritte 6 bis 8 auf dem gespeicherten Draft. Es wird erst geschrieben, wenn alle Schritte bestanden sind. Schritt 1 macht die Schnittstelle (`mcp/tools_v1.ts`), die Schritte 2 bis 8 `amplify/functions/shared/survey_pipeline.ts` (`prepareDraft`, `checkDeployable`).
 
 1. Body ≤ 256 KB (`readRequestBody`), zod-Strukturprüfung, Whitelist-Kopie (unbekannte Felder werden verworfen).
 2. Servergeführte Felder (`version`, `created_at`, `updated_at`, `id`) setzt der Server.
-3. IDs sind UUIDs und eindeutig. Fehlende vergibt der Server, Duplikate ergeben `invalid_id`.
-4. Technische Namen: bereits gespeicherte bleiben unverändert (`ensureSurveyTechnicalNames`, `collectTechnicalNames`), neue entstehen aus Titel + erste 8 Zeichen der ID. Weicht die Eingabe ab, wird der gespeicherte Name behalten und die Warnung `name_immutable_ignored` gemeldet (der Name ist Reporting-Schlüssel).
+3. IDs von Fragen und Auswahloptionen sind UUIDs und über die Umfrage eindeutig. Fehlende vergibt der Server, Duplikate ergeben `invalid_id`. IDs, die schon gespeichert sind, bleiben erlaubt (ältere Umfragen).
+4. Technische Namen: bereits gespeicherte bleiben unverändert (`ensureSurveyTechnicalNames`, `collectTechnicalNames`), neue entstehen immer aus Titel + erste 8 Zeichen der ID. Weicht die Eingabe ab, gilt der Name des Servers und die Warnung `name_immutable_ignored` wird gemeldet (der Name ist Reporting-Schlüssel).
 5. Web-Felder:
    - Ist `web_survey` aus, wird `resetWebSettings` angewendet (Warnung `web_settings_reset`).
    - Ist es an, muss `web_theme_id` beim Mandanten existieren (`theme_unknown`).
@@ -231,7 +231,7 @@ Beim Deploy gelten zusätzlich die Regeln der App: Prod → Backup vor dem Über
 
 Gilt für `get_responses`.
 
-- **Ersetzte Kennungen:** `responseId`, `conversationId` und `tokenId` werden zu `r_<base64url(HMAC-SHA256)>`. Das Pseudonym ist pro Mandant stabil (gleiche Antwort → gleiches Pseudonym) und ohne das Secret `McpPseudonymSecret` nicht umkehrbar. Der Schlüssel wird per HKDF aus dem Secret abgeleitet.
+- **Ersetzte Kennungen:** `responseId`, `conversationId` und `tokenId` werden zu `r_<base64url(HMAC-SHA256)>`, gekürzt auf 128 bit. Das Pseudonym ist pro Mandant stabil (gleiche Antwort → gleiches Pseudonym) und ohne das Secret `McpPseudonymSecret` nicht umkehrbar. Der Schlüssel wird per HKDF aus dem Secret abgeleitet.
 - **Cursor:** versiegelt mit AES-256-GCM (Schlüssel per HKDF abgeleitet), die AAD bindet ihn an Mandant und Umfrage, dazu ein Ablaufzeitpunkt. Klar-IDs kommen nie in Ausgabe oder Cursor. Fremde, manipulierte oder abgelaufene Cursor → `cursor_invalid`.
 - **Kommentare** (Telefon und Web): Ohne `mcpAllowComments` erscheint `{ type: "comment", redacted: true, hasText }`. Mit Flag wird der Text auf 2.000 Zeichen gekürzt und von Steuerzeichen bereinigt. Der Text ist weiterhin Daten, keine Anweisung (Server-Instructions).
 - **Weitere Einschränkungen:** Zeitraum höchstens 24 Stunden, höchstens 100 Antworten pro Seite, Filter `channel` (`flow`/`web`), `status`, `version`.

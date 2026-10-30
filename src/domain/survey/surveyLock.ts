@@ -41,34 +41,46 @@ export function parseSurveyLock(lockRaw: unknown): SurveyLockData {
 	return defaultLock;
 }
 
-export function isSurveyLockStale(
+/** Lock gehört der Person: Name getrimmt und ohne Groß-/Kleinschreibung verglichen. */
+export function isSurveyLockOwnedBy(lock: SurveyLockData, username: string): boolean {
+	const cleanCurrent = username.trim().toLowerCase();
+	return Boolean(cleanCurrent && lock.locked_by.trim().toLowerCase() === cleanCurrent);
+}
+
+/** Ablaufzeitpunkt (ms) oder null, wenn `locked_since` fehlt bzw. unlesbar ist. */
+export function surveyLockExpiresAtMs(
 	lock: SurveyLockData,
 	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES
-): boolean {
-	if (!lock.locked_by || !lock.locked_since) {
-		return true;
-	}
+): number | null {
+	if (!lock.locked_since) return null;
 	const lockedAt = new Date(lock.locked_since).getTime();
-	if (Number.isNaN(lockedAt)) {
+	return Number.isNaN(lockedAt) ? null : lockedAt + ttlMinutes * 60 * 1000;
+}
+
+/** `now` in ms; Standard ist die aktuelle Zeit (der Server übergibt seine eigene Uhr, siehe survey_store.ts). */
+export function isSurveyLockStale(
+	lock: SurveyLockData,
+	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES,
+	now: number = Date.now()
+): boolean {
+	if (!lock.locked_by) {
 		return true;
 	}
-	const diffMinutes = (Date.now() - lockedAt) / (1000 * 60);
-	return diffMinutes >= ttlMinutes;
+	const expiresAt = surveyLockExpiresAtMs(lock, ttlMinutes);
+	return expiresAt === null || now >= expiresAt;
 }
 
 export function checkSurveyLockConflict(
 	lock: SurveyLockData,
 	currentUsername: string,
-	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES
+	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES,
+	now: number = Date.now()
 ): { hasConflict: boolean; lock: SurveyLockData } {
-	if (isSurveyLockStale(lock, ttlMinutes)) {
+	if (isSurveyLockStale(lock, ttlMinutes, now)) {
 		return { hasConflict: false, lock };
 	}
-	const cleanCurrent = currentUsername.trim().toLowerCase();
-	const cleanLockBy = lock.locked_by.trim().toLowerCase();
-	const isOwnedByMe = Boolean(cleanCurrent && cleanLockBy === cleanCurrent);
 	return {
-		hasConflict: !isOwnedByMe,
+		hasConflict: !isSurveyLockOwnedBy(lock, currentUsername),
 		lock
 	};
 }

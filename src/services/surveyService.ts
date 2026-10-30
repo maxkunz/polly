@@ -3,13 +3,18 @@ import type { Survey } from "@/domain/survey/surveyTypes";
 import { collectTechnicalNames, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
 import {
 	EMPTY_SURVEY_LOCK,
+	SURVEY_LIST_ROW_KEY,
+	buildSurveyListPayload,
 	buildSurveyRowPayload,
+	parseSurveyDraft,
 	readFieldVersion,
 	surveyRowKey,
+	withSurveyListItem,
+	type SurveyListItem,
 	type SurveyRowPatch
 } from "@/domain/survey/surveyRow";
 import { useAppStore } from "@/stores/appStore";
-import { isSurveyLockStale, parseSurveyLock, type SurveyLockData } from "@/domain/survey/surveyLock";
+import { isSurveyLockOwnedBy, isSurveyLockStale, parseSurveyLock, type SurveyLockData } from "@/domain/survey/surveyLock";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
 import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
 import { getErrorStatus } from "./genesys/retry";
@@ -25,10 +30,7 @@ export interface LoadSurveyResult {
 	rawRow: Record<string, any>;
 }
 
-export interface SurveyListItem {
-	id: string;
-	title: string;
-}
+export type { SurveyListItem };
 
 export async function fetchSurveyDetail(surveyId: string): Promise<LoadSurveyResult> {
 	const resolvedTableId = await surveyTableId();
@@ -53,8 +55,6 @@ export async function fetchSurveyDetail(surveyId: string): Promise<LoadSurveyRes
 		rawRow: row
 	};
 }
-
-const SURVEY_LIST_ROW_KEY = "survey_list";
 
 /**
  * Liest den Umfrage-Index (Zeile survey_list, Liste im Feld Draft).
@@ -88,14 +88,7 @@ async function writeSurveyList(
 	items: SurveyListItem[],
 	listRow: Record<string, any> | null
 ): Promise<void> {
-	const rowPayload: Record<string, any> = {
-		key: SURVEY_LIST_ROW_KEY,
-		Draft: JSON.stringify(items),
-		Prod: listRow?.Prod ?? "{}",
-		Stage: listRow?.Stage ?? "{}",
-		Backup: listRow?.Backup ?? "{}",
-		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
-	};
+	const rowPayload = buildSurveyListPayload(items, listRow);
 
 	if (listRow) {
 		await updateDataTableRow(datatableId, SURVEY_LIST_ROW_KEY, rowPayload);
@@ -114,23 +107,10 @@ async function syncSurveyInList(datatableId: string, survey: Survey): Promise<Su
 	const { items: currentList, row: listRow } = await readSurveyList(datatableId);
 
 	const displayName = survey.title?.trim() || survey.name?.trim() || i18n.global.t("surveys.list.unnamedSurvey");
-	const existingIndex = currentList.findIndex(item => item.id === survey.id);
+	const updatedList = withSurveyListItem(currentList, { id: survey.id, title: displayName }) ?? currentList;
 
-	if (existingIndex !== -1) {
-		currentList[existingIndex] = {
-			...currentList[existingIndex],
-			id: survey.id,
-			title: displayName
-		};
-	} else {
-		currentList.push({
-			id: survey.id,
-			title: displayName,
-		});
-	}
-
-	await writeSurveyList(datatableId, currentList, listRow);
-	return currentList;
+	await writeSurveyList(datatableId, updatedList, listRow);
+	return updatedList;
 }
 
 /**
@@ -268,7 +248,7 @@ export async function saveSurveyDetail(
 			if (expectedDraftVersion !== undefined && currentVersion !== expectedDraftVersion) {
 				throw new SurveyDraftConflictError(expectedDraftVersion, currentVersion);
 			}
-			const savedDraft = parseDraft(currentRow.Draft);
+			const savedDraft = parseSurveyDraft(currentRow.Draft);
 			// Bereits gespeicherte technische Namen sind Reporting-Schlüssel und werden unverändert
 			// übernommen; nur neu hinzugekommene Fragen erhalten einmalig einen Namen aus dem Titel.
 			ensureSurveyTechnicalNames(updatedSurvey, collectTechnicalNames(savedDraft));
@@ -282,16 +262,6 @@ export async function saveSurveyDetail(
 
 	await syncSurveyInList(resolvedTableId, updatedSurvey);
 	return updatedSurvey;
-}
-
-/** Draft-Zelle als Survey; null, wenn leer oder nicht lesbar. */
-function parseDraft(raw: unknown): Survey | null {
-	if (!raw || raw === "{}") return null;
-	try {
-		return typeof raw === "string" ? JSON.parse(raw) : (raw as Survey);
-	} catch {
-		return null;
-	}
 }
 
 export async function deleteSurvey(surveyId: string): Promise<void> {
@@ -324,7 +294,7 @@ export async function releaseSurveyLock(surveyId: string, username?: string): Pr
 			const isHeldByOther =
 				username &&
 				currentLock.locked_by &&
-				currentLock.locked_by.trim().toLowerCase() !== username.trim().toLowerCase() &&
+				!isSurveyLockOwnedBy(currentLock, username) &&
 				!isSurveyLockStale(currentLock);
 			return isHeldByOther ? null : { lock: EMPTY_SURVEY_LOCK };
 		});

@@ -1,6 +1,8 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
 import { baseUrlError, pickBaseUrl, usableBaseUrl } from "../../../src/domain/survey/invitationLinks";
+import { getRow, type SurveyTableAccess } from "./genesys_datatable";
 import { fetchWithTimeout } from "./http";
+import { loadDefaultBaseUrl } from "./installation_meta";
 import { isValidSurveyId } from "./survey_id";
 import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "./survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "./tenant_auth";
@@ -15,8 +17,8 @@ import { parseProdSurvey } from "./web_survey_format";
  * nachweislich nicht (mehr) existiert. Im Zweifel (Fehler, fehlender Zugriff,
  * unlesbare Antwort) wird NICHT gelöscht.
  *
- * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage (`listProdSurveys` alle), `loadProjectTag` den Projekt-Tag
- * der Installation aus der Zeile `__meta`.
+ * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage (`listProdSurveys` alle). Projekt-Tag, Flags und
+ * Standard-Basis-URL aus der Zeile `__meta` liest `installation_meta.ts`.
  *
  * Antworten aus dem Flow: `checkSurveyExists` prüft (mit Cache), dass die Zeile `survey_<id>` in der
  * Data Table des Mandanten existiert, damit keine Antworten zu fremden oder erfundenen Umfragen gespeichert werden.
@@ -60,20 +62,6 @@ async function requestClientCredentialsToken(region: string, clientId: string, c
   if (!data?.access_token) throw new Error("Genesys token response without access_token");
 
   return { value: data.access_token, ttlMs: Number(data.expires_in ?? 300) * 1000 - TOKEN_REFRESH_MARGIN_MS };
-}
-
-export async function getRow(
-  region: string,
-  token: string,
-  dataTableId: string,
-  rowKey: string
-): Promise<{ status: number; body?: any }> {
-  const url =
-    `https://api.${region}/api/v2/flows/datatables/${encodeURIComponent(dataTableId)}` +
-    `/rows/${encodeURIComponent(rowKey)}?showbrief=false`;
-  const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status === 200) return { status: 200, body: await res.json() };
-  return { status: res.status };
 }
 
 async function getTableStatus(region: string, token: string, dataTableId: string): Promise<number> {
@@ -231,13 +219,6 @@ export function clearSurveyExistenceCache(): void {
 // ---------------------------------------------------------------------------
 // Web-Kanal
 // ---------------------------------------------------------------------------
-
-/** Region, Client-Credentials-Token und Umfrage-Data-Table (`surveyDataTableId`) eines Mandanten. */
-export type SurveyTableAccess = {
-  region: string;
-  token: string;
-  dataTableId: string;
-};
 
 export type ProdSurveyResult =
   /** `baseUrl`: wirksame Basis-URL, nur mit `withBaseUrl` und wenn gesetzt: gültige `base_url` aus dem Draft (steht nicht im Flow-JSON), sonst Standard des Mandanten aus `__meta`. */
@@ -403,54 +384,4 @@ export async function listProdSurveys(
   } catch (err: any) {
     return { status: "error", reason: err?.message ?? "request failed", ...(err?.status === 429 ? { throttled: true } : {}) };
   }
-}
-
-/**
- * Inhalt der Zeile `__meta` (Feld `Draft`). `undefined`, wenn die Zeile fehlt oder unlesbar ist.
- * Wirft bei anderen HTTP-Fehlern.
- */
-async function readMetaDraft(access: SurveyTableAccess): Promise<any | undefined> {
-  const row = await getRow(access.region, access.token, access.dataTableId, "__meta");
-  if (row.status === 404) return undefined;
-  if (row.status !== 200) {
-    throw Object.assign(new Error(`__meta row HTTP ${row.status}`), { status: row.status });
-  }
-  try {
-    return typeof row.body?.Draft === "string" ? JSON.parse(row.body.Draft) : row.body?.Draft;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Projekt-Tag der Installation (`meta.setup.projectTag` in der Zeile `__meta`, Feld `Draft`).
- * `undefined`, wenn die Zeile oder der Tag fehlt (wie im Frontend: dann zählt nur die unpräfixierte Rolle).
- * Wirft bei anderen HTTP-Fehlern.
- */
-export async function loadProjectTag(access: SurveyTableAccess): Promise<string | undefined> {
-  const meta = await readMetaDraft(access);
-  const projectTag = meta?.setup?.projectTag;
-  return typeof projectTag === "string" && projectTag.trim() ? projectTag.trim() : undefined;
-}
-
-/** Standard-Basis-URL pro Mandant (`""` = keine); kurz gemerkt, damit nicht jeder Aufruf `__meta` liest. */
-const defaultBaseUrlCache = new TtlCache<string>({ ttlMs: 60 * 1000 });
-
-/**
- * Standard-Basis-URL des Mandanten (`meta.web.defaultBaseUrl` in `__meta`, in den Einstellungen gepflegt).
- * Ungültige Werte (`baseUrlError`) ergeben `undefined`, dann gilt die Polly-Umfrageseite.
- * Wirft bei Lesefehlern (Fehler mit `status`), damit keine Links auf die falsche Seite entstehen; Fehler werden nicht gemerkt.
- * `fresh`: am Cache vorbei lesen (das Ergebnis wird trotzdem gemerkt).
- */
-export async function loadDefaultBaseUrl(tenantId: string, access: SurveyTableAccess, fresh = false): Promise<string | undefined> {
-  const value = await defaultBaseUrlCache.getOrLoad(tenantId, async () => {
-    const raw = (await readMetaDraft(access))?.web?.defaultBaseUrl;
-    const baseUrl = typeof raw === "string" ? raw.trim() : "";
-    const usable = usableBaseUrl(baseUrl);
-    if (baseUrl && !usable) {
-      console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error: baseUrlError(baseUrl), length: baseUrl.length });
-    }
-    return { value: usable ?? "" };
-  }, fresh);
-  return value || undefined;
 }
