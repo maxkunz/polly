@@ -9,6 +9,12 @@ import {
 	createDefaultChoiceOptions
 } from "@/domain/survey/surveyTypes";
 import { CHOICE_MIN_OPTIONS, CHOICE_MAX_OPTIONS } from "@/constants/surveyConstants";
+import { i18n } from "@/i18n";
+
+/** Vorgabetext neuer Auswahlmöglichkeiten im Editor ("Option 1", "Option 2" …). */
+export function defaultChoiceLabel(number: number): string {
+	return i18n.global.t("choiceOptions.defaultLabel", { number });
+}
 
 export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 	const getQuestion = (): SurveyQuestion => unref(questionRef);
@@ -22,7 +28,7 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 			}
 		} else if (newType === "choice") {
 			if (!isChoiceOptions(q.options)) {
-				q.options = createDefaultChoiceOptions();
+				q.options = createDefaultChoiceOptions(defaultChoiceLabel);
 			}
 		} else if (newType === "nps") {
 			// NPS hat feste Werte, in options stehen höchstens die Min/Max-Labels
@@ -70,7 +76,7 @@ export function useQuestionTypeOptions(questionRef: MaybeRef<SurveyQuestion>) {
 			if (isChoiceOptions(q.options)) {
 				return q.options;
 			}
-			return createDefaultChoiceOptions();
+			return createDefaultChoiceOptions(defaultChoiceLabel);
 		},
 		set(val) {
 			const q = getQuestion();

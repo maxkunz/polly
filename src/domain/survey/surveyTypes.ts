@@ -1,4 +1,3 @@
-import { i18n } from "@/i18n";
 import { DEFAULT_SURVEY_LANGUAGE } from "./flowTypes";
 import type { ConditionOperator, QuestionType, ScaleLabels, SurveyLanguage } from "./flowTypes";
 
@@ -103,17 +102,22 @@ export function createDefaultRatingOptions(): RatingOptions {
 	return { min_value: 1, max_value: 5 };
 }
 
-export function createDefaultChoiceOptions(): ChoiceOptions {
-	const { t } = i18n.global;
+/**
+ * Vorgabetext der n-ten Auswahlmöglichkeit (ab 1). Kommt vom Aufrufer, damit dieses Modul ohne
+ * i18n auskommt (Frontend: defaultChoiceLabel in useQuestionTypeOptions).
+ */
+export type ChoiceLabelFor = (number: number) => string;
+
+export function createDefaultChoiceOptions(labelFor: ChoiceLabelFor): ChoiceOptions {
 	return {
 		labels: [
-			{ id: crypto.randomUUID(), label: t("choiceOptions.defaultLabel", { number: 1 }) },
-			{ id: crypto.randomUUID(), label: t("choiceOptions.defaultLabel", { number: 2 }) }
+			{ id: crypto.randomUUID(), label: labelFor(1) },
+			{ id: crypto.randomUUID(), label: labelFor(2) }
 		]
 	};
 }
 
-export function createEmptyQuestion(type: QuestionType = "rating"): SurveyQuestion {
+export function createEmptyQuestion(type: QuestionType = "rating", choiceLabelFor: ChoiceLabelFor = () => ""): SurveyQuestion {
 	const id = crypto.randomUUID();
 	const question: SurveyQuestion = {
 		id,
@@ -128,7 +132,7 @@ export function createEmptyQuestion(type: QuestionType = "rating"): SurveyQuesti
 	if (type === "rating") {
 		question.options = createDefaultRatingOptions();
 	} else if (type === "choice") {
-		question.options = createDefaultChoiceOptions();
+		question.options = createDefaultChoiceOptions(choiceLabelFor);
 	}
 
 	return question;

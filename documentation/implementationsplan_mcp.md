@@ -39,14 +39,14 @@ Vorgaben:
   - [x] `@modelcontextprotocol/sdk` in einer Lambda hinter HttpApi: Web-Standard-Transport, JSON-Modus, Bundle-Größe, Kaltstart lokal.
   - [x] Ergebnisse in `polly_mcp.md` (Abschnitt 13) und hier unter „Abweichungen“ eingetragen. Spike-Code nicht übernommen.
 
-- [ ] **M2 Domain-Module Lambda-fähig machen** (siehe „Domain-Refactoring“) · **Review danach**
-  - [ ] `surveyLock.ts`: Import relativ, optionales Feld `via`.
-  - [ ] `surveyTypes.ts`: ohne `@/i18n` (`createDefaultChoiceOptions(labelFor)`).
-  - [ ] Neu `surveyRules.ts` (Codes und Params, Option `webSurvey`); `surveyValidator.ts` wird zum Adapter, Meldungen bleiben byte-gleich.
-  - [ ] Neu `flowTranslator.ts`; `services/surveyFlowTranslator.ts` wird zum Adapter.
-  - [ ] Neu `flowPayload.ts`; `services/flowPayloadBudget.ts` re-exportiert.
-  - [ ] Tests: `surveyRules.test.ts` und `domainImports.test.ts` (keine `@/`-, `vue`- oder `vue-i18n`-Importe in der Kette), ins `test`-Script aufnehmen. Alle bestehenden Tests bleiben unverändert grün.
-  - [ ] `CLAUDE.md`: neue reine Module, Testliste.
+- [x] **M2 Domain-Module Lambda-fähig machen** (siehe „Domain-Refactoring“) · **Review danach** · erledigt 2026-10-30
+  - [x] `surveyLock.ts`: Import relativ, optionales Feld `via`.
+  - [x] `surveyTypes.ts`: ohne `@/i18n` (`createDefaultChoiceOptions(labelFor)`).
+  - [x] Neu `surveyRules.ts` (Codes und Params, Option `webSurvey`); `surveyValidator.ts` wird zum Adapter, Meldungen bleiben byte-gleich.
+  - [x] Neu `flowTranslator.ts`; `services/surveyFlowTranslator.ts` wird zum Adapter.
+  - [x] Neu `flowPayload.ts`; `services/flowPayloadBudget.ts` re-exportiert.
+  - [x] Tests: `surveyRules.test.ts` und `domainImports.test.ts` (keine `@/`-, `vue`- oder `vue-i18n`-Importe in der Kette), ins `test`-Script aufgenommen. Alle bestehenden Tests bleiben unverändert grün.
+  - [x] `CLAUDE.md`: neue reine Module, Testliste.
 
 - [ ] **M3 Frontend-Vorarbeiten: Lock-Kennzeichen und Feature Flag** (siehe „Lock“, „Abschaltung“) · Modell: Sonnet
   - [ ] `acquireSurveyLock` schreibt `via: "ui"`; `useSurveyLock.ts` zeigt bei `via === "mcp"` einen eigenen Text, „Trotzdem bearbeiten“ bleibt möglich.
@@ -144,6 +144,13 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - Der Kaltstart wurde nur lokal gemessen (ca. 50 ms für Import und ersten Request). Auf AWS wird in M5/M8 gemessen.
 
 ### M2
+
+- **Codes:** `SurveyRuleIssue.code` ist der Schlüssel ohne Präfix `validation.` (z. B. `surveyMaxQuestions`). Neben `field`, `params` und `questionId` trägt der Befund auch `fieldId` und `shownByField`, damit der Adapter nur die Meldung ergänzt. Feldbezeichnungen (TTS-Limit, Skalen-Labels) stehen als i18n-Schlüssel in `params.labelKey`; der Adapter macht daraus `field`. Nur beim TTS-Limit formatiert er die Zahlen mit Tausendertrennzeichen, wie bisher.
+- **Byte-Gleichheit** einmalig geprüft: Meldungen und Feldformen von `validateSurvey` sowie die Translator-Fehler (Klasse, Name, Meldung) vor und nach dem Umbau für ca. 30 Fixtures in `de`/`en`/`fr` verglichen, ohne Unterschied. Der Vergleich lief im Scratchpad und ist nicht Teil der Tests; dauerhaft sichern das die bestehenden Tests und `surveyRules.test.ts`.
+- **Translator:** Domain-Fehler `FlowTranslationError { key, params, question: { id, name } }`, die Meldung ist nur `key (Frage)` ohne Übersetzung. `createEmptyQuestion(type, choiceLabelFor)` hat als Default leere Labels; der Editor übergibt `defaultChoiceLabel` (neu in `useQuestionTypeOptions.ts`).
+- **`measureFlowPayload`** aus `services/flowPayloadBudget.ts` wirft jetzt `FlowTranslationError` statt `SurveyFlowTranslationError`. Beide Aufrufer im Frontend fangen den Fehler ohne Meldung ab, sichtbar ändert sich nichts.
+- **Lock `via`:** `parseSurveyLock` übernimmt nur `"ui"`/`"mcp"`, unbekannte Werte fallen weg. Geschrieben wird `via` erst ab M3.
+- `domainImports.test.ts` prüft neben den neuen Modulen auch die schon gebündelten (`flowNavigation`, `invitationLinks`, `webTheme`, `roleCheck`, `surveyRow`, `surveyConstants`) und als Gegenprobe, dass der Adapter `surveyValidator.ts` erkannt wird. Zusätzlich einmalig mit den Compiler-Optionen aus `amplify/tsconfig.json` typgeprüft.
 
 ### M3
 
