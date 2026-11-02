@@ -22,7 +22,24 @@ import {
 } from "../../../src/domain/survey/surveyLock";
 import type { SurveyListItem } from "../../../src/domain/survey/surveyRow";
 import type { Survey, SurveyQuestion } from "../../../src/domain/survey/surveyTypes";
-import type { WebTheme } from "../../../src/domain/webTheme/webTheme";
+import {
+  checkThemeContrast,
+  WEB_TEXT_LINE_HEIGHT_MAX,
+  WEB_TEXT_LINE_HEIGHT_MIN,
+  WEB_TEXT_ROLES,
+  WEB_TEXT_SIZE_LIMITS,
+  WEB_TEXT_WEIGHTS,
+  WEB_THEME_COLOR_KEYS,
+  WEB_THEME_FONTS,
+  WEB_THEME_MAX_PER_TENANT,
+  WEB_THEME_NAME_MAX_CHARS,
+  type WebTextRole,
+  type WebTextStyle,
+  type WebTheme,
+  type WebThemeColorKey,
+  type WebThemeFont,
+  type WebThemeTokens,
+} from "../../../src/domain/webTheme/webTheme";
 import type {
   DeployCheckResult,
   PrepareDraftResult,
@@ -58,6 +75,10 @@ export type McpToolErrorCode =
   | "range_too_large"
   | "cursor_invalid"
   | "rate_limited"
+  | "theme_not_found"
+  | "theme_conflict"
+  | "theme_busy"
+  | "theme_limit_reached"
   | "internal_error";
 
 /** Englisch und für das Modell gedacht; die Details stehen strukturiert in `details`. */
@@ -79,6 +100,10 @@ const ERROR_MESSAGES: Record<McpToolErrorCode, string> = {
   range_too_large: "The time range is too large. See details.maxMs.",
   cursor_invalid: "The cursor is invalid, expired or belongs to another survey. Start again without cursor.",
   rate_limited: "Too many calls. Wait details.retryAfterSeconds seconds.",
+  theme_not_found: "Web design not found. Use list_web_themes.",
+  theme_conflict: "The web design was changed in the meantime. Reload it with get_web_theme (updatedAt) and apply your changes again.",
+  theme_busy: "Another web design was saved at the same moment; this one is unchanged. Repeat the same call.",
+  theme_limit_reached: "This installation already has the maximum number of web designs (details.max). Change an existing design instead.",
   upstream_error: "Genesys Cloud did not answer or returned an error. Try again later.",
   internal_error: "Unexpected server error. Try again later.",
 };
@@ -328,6 +353,81 @@ const rollbackSurveyInput = z.object({
   confirm: confirmInput,
 });
 
+// --- Web-Designs: nur Tokens, Grenzen aus `webTheme.ts`; endgültig prüft `sanitizeWebThemeTokens` -----------------
+
+/** Teil eines Designs: Fehlendes bleibt beim Ändern wie gespeichert, beim Anlegen gilt das eingebaute Polly-Design. */
+export interface WebThemeTokensPatch {
+  fontFamily?: WebThemeFont;
+  text?: Partial<Record<WebTextRole, Partial<WebTextStyle>>>;
+  colors?: Partial<Record<WebThemeColorKey, string>>;
+  transparentBackground?: boolean;
+}
+
+function textStyleInput(role: WebTextRole) {
+  const { min, max } = WEB_TEXT_SIZE_LIMITS[role];
+  return z
+    .object({
+      size: z.number().int().min(min).max(max).optional().describe(`Font size in px, ${min} to ${max}`),
+      weight: z.literal([...WEB_TEXT_WEIGHTS]).optional(),
+      lineHeight: z
+        .number()
+        .min(WEB_TEXT_LINE_HEIGHT_MIN)
+        .max(WEB_TEXT_LINE_HEIGHT_MAX)
+        .optional()
+        .describe(`Line height factor, ${WEB_TEXT_LINE_HEIGHT_MIN} to ${WEB_TEXT_LINE_HEIGHT_MAX}, at most two decimals`),
+    })
+    .optional();
+}
+
+const webThemeTokensInput = z
+  .object({
+    fontFamily: z.enum(WEB_THEME_FONTS as [WebThemeFont, ...WebThemeFont[]]).optional().describe("System font stack, no web fonts"),
+    text: z
+      .object(Object.fromEntries(WEB_TEXT_ROLES.map((role) => [role, textStyleInput(role)])))
+      .optional()
+      .describe("Text styles per role of the web page"),
+    colors: z
+      .object(
+        Object.fromEntries(
+          WEB_THEME_COLOR_KEYS.map((key) => [key, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Format #rrggbb").optional()])
+        )
+      )
+      .optional()
+      .describe("Colors as #rrggbb"),
+    transparentBackground: z.boolean().optional().describe("Transparent page background, e.g. inside an iframe (cards keep surface)"),
+  })
+  .describe("Only the values you want to set; unknown fields are dropped");
+
+const themeIdInput = z.string().min(1).max(100).describe("Web design ID (UUID) from list_web_themes");
+// Länge erst nach `trim` prüfen, wie `checkWebThemeName` in der App
+const themeNameInput = z.string().trim().max(WEB_THEME_NAME_MAX_CHARS).describe(`1 to ${WEB_THEME_NAME_MAX_CHARS} characters, no line breaks`);
+
+const getWebThemeInput = z.object({ themeId: themeIdInput });
+
+const createWebThemeInput = z.object({
+  name: themeNameInput,
+  tokens: webThemeTokensInput.optional().describe("Missing values come from the built-in Polly design"),
+  isDefault: z
+    .boolean()
+    .optional()
+    .describe("Make it the installation default (used by every survey without web_theme_id); needs confirm: true"),
+  confirm: confirmInput.describe("Required with isDefault: true, and only after the user has explicitly agreed"),
+});
+
+const updateWebThemeInput = z.object({
+  themeId: themeIdInput,
+  expectedUpdatedAt: z
+    .string()
+    .min(1)
+    .max(40)
+    .nullable()
+    .describe("updatedAt from get_web_theme (null if it returned null); the design must not have changed since"),
+  name: themeNameInput.optional(),
+  tokens: webThemeTokensInput.optional().describe("Patch: only the values to change; everything else stays as stored"),
+  isDefault: z.boolean().optional().describe("true = make it the installation default, false = remove the mark; omit to keep"),
+  confirm: confirmInput,
+});
+
 // `YYYY-MM-DDTHH:mm:ss`, UTC, ohne `Z`: dasselbe Format wie die Kunden-API (die Rückumwandlung prüft `parseDate`)
 const fromInput = z.string().regex(DATE_PATTERN, "Format YYYY-MM-DDTHH:mm:ss (UTC, without Z)").describe("Start of the range, inclusive. UTC, format YYYY-MM-DDTHH:mm:ss");
 const toInput = z.string().regex(DATE_PATTERN, "Format YYYY-MM-DDTHH:mm:ss (UTC, without Z)").describe("End of the range, exclusive. UTC, format YYYY-MM-DDTHH:mm:ss");
@@ -433,6 +533,28 @@ const getSurveyOutput = z.object({
 
 const listWebThemesOutput = z.object({
   themes: z.array(z.object({ themeId: z.string(), name: z.string(), isDefault: z.boolean() })),
+});
+
+const textStyleOutput = z.object({ size: z.number(), weight: z.number(), lineHeight: z.number() });
+
+const webThemeOutput = z.object({
+  themeId: z.string(),
+  name: z.string(),
+  isDefault: z.boolean(),
+  updatedAt: z.string().nullable(),
+  tokens: z.object({
+    fontFamily: z.string(),
+    text: z.record(z.string(), textStyleOutput),
+    colors: z.record(z.string(), z.string()),
+    transparentBackground: z.boolean(),
+  }),
+  /** Farbpaare unter WCAG AA; nur ein Hinweis, gespeichert wird trotzdem (wie in der App). */
+  contrastWarnings: z.array(z.object({ foreground: z.string(), background: z.string(), ratio: z.number(), minimum: z.number() })),
+});
+
+const saveWebThemeOutput = webThemeOutput.extend({
+  /** Ein anderes Design hat dabei die Markierung als Standard verloren. */
+  clearedDefault: z.boolean(),
 });
 
 const validateSurveyOutput = validationOutput.extend({ payloadSize: payloadSizeOutput.nullable() });
@@ -819,6 +941,55 @@ export function toV1WebThemes(themes: readonly WebTheme[]): z.infer<typeof listW
   return { themes: themes.map((theme) => ({ themeId: theme.id, name: theme.name, isDefault: theme.isDefault === true })) };
 }
 
+/** Nur gesetzte Werte, damit ein `undefined` im Patch keinen gespeicherten Wert überschreibt. */
+function definedOnly<T extends object>(value: T | undefined): Partial<T> {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([, entry]) => entry !== undefined)) as Partial<T>;
+}
+
+/**
+ * Mischt einen Teil-Patch auf vollständige Tokens (Rollen feldweise, Farben einzeln). Das Ergebnis ist ungeprüft und
+ * muss durch `sanitizeWebThemeTokens` (Grenzen, z. B. zwei Nachkommastellen bei `lineHeight`).
+ */
+export function mergeThemeTokens(base: WebThemeTokens, patch: WebThemeTokensPatch = {}): Record<string, unknown> {
+  return {
+    schemaVersion: base.schemaVersion,
+    fontFamily: patch.fontFamily ?? base.fontFamily,
+    text: Object.fromEntries(WEB_TEXT_ROLES.map((role) => [role, { ...base.text[role], ...definedOnly(patch.text?.[role]) }])),
+    colors: { ...base.colors, ...definedOnly(patch.colors) },
+    transparentBackground: patch.transparentBackground ?? base.transparentBackground === true,
+  };
+}
+
+/** Ein Design mit festen Feldern und Kontrasthinweisen; `updatedBy` wird nicht ausgegeben (wie in der Kunden-API). */
+export function toV1WebTheme(theme: WebTheme): z.infer<typeof webThemeOutput> {
+  const { tokens } = theme;
+  return {
+    themeId: theme.id,
+    name: theme.name,
+    isDefault: theme.isDefault === true,
+    updatedAt: theme.updatedAt || null,
+    tokens: {
+      fontFamily: tokens.fontFamily,
+      text: Object.fromEntries(
+        WEB_TEXT_ROLES.map((role) => [role, { size: tokens.text[role].size, weight: tokens.text[role].weight, lineHeight: tokens.text[role].lineHeight }])
+      ),
+      colors: Object.fromEntries(WEB_THEME_COLOR_KEYS.map((key) => [key, tokens.colors[key]])),
+      transparentBackground: tokens.transparentBackground === true,
+    },
+    contrastWarnings: checkThemeContrast(tokens).map((warning) => ({
+      foreground: warning.foreground,
+      background: warning.background,
+      // Abgerundet: Ein Wert knapp unter dem Minimum darf nicht als erreicht erscheinen
+      ratio: Math.floor(warning.ratio * 100) / 100,
+      minimum: warning.minimum,
+    })),
+  };
+}
+
+export function toV1SavedWebTheme(theme: WebTheme, clearedDefault: boolean): z.infer<typeof saveWebThemeOutput> {
+  return { ...toV1WebTheme(theme), clearedDefault };
+}
+
 // ---------------------------------------------------------------------------
 // Authoring-Guide (Tool und Resource)
 // ---------------------------------------------------------------------------
@@ -924,7 +1095,14 @@ function guideText(webSurvey: boolean): string {
       `- \`language\`: ${SURVEY_LANGUAGES.join(", ")} (default de), fixed texts of the web page.`,
       `- \`base_url\`: optional https URL for invitation links, at most one \`{token}\`, at most ${BASE_URL_MAX_CHARS} characters. Empty = installation default.`,
       "- `web_theme_id`: optional, an ID from `list_web_themes`. Omit for the installation default.",
-      `- \`options.min_label\` / \`options.max_label\` (rating, nps): optional, at most ${SCALE_LABEL_MAX_CHARS} characters, shown on the web page only.`
+      `- \`options.min_label\` / \`options.max_label\` (rating, nps): optional, at most ${SCALE_LABEL_MAX_CHARS} characters, shown on the web page only.`,
+      "",
+      "## Web designs",
+      `- A web design is a set of tokens only (font family, text styles per role, colors, transparent background), no CSS. At most ${WEB_THEME_MAX_PER_TENANT} designs per installation; changing designs needs the role polly_deploy.`,
+      "- New design: `create_web_theme` with a name and the tokens you want to set; everything else comes from the built-in Polly design.",
+      "- Change a design: `get_web_theme` → `update_web_theme` with `expectedUpdatedAt` (its `updatedAt`) and only the tokens to change. On `theme_conflict` reload it and apply your changes again; on `theme_busy` repeat the same call.",
+      "- A design is used by every survey that names it in `web_theme_id`, the default design by every survey without one. Changes are live at once (there is no Stage for designs): `update_web_theme` and `isDefault: true` only with `confirm: true` after the user has explicitly agreed.",
+      "- `contrastWarnings` list color pairs below WCAG AA. They do not block saving, but tell the user and suggest better colors."
     );
   } else {
     lines.push("", "Web surveys are not enabled for this installation: web fields (`base_url`, `language`, `web_theme_id`) are reset when saving.");
@@ -1027,6 +1205,16 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
     annotations: READ_ONLY,
   },
   {
+    name: "get_web_theme",
+    title: "Get web design",
+    description: "One web design with all tokens, updatedAt (needed for update_web_theme) and color contrast warnings.",
+    role: "any",
+    webSurveyOnly: true,
+    input: () => getWebThemeInput,
+    output: webThemeOutput,
+    annotations: READ_ONLY,
+  },
+  {
     name: "validate_survey",
     title: "Validate survey",
     description:
@@ -1121,6 +1309,29 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
     input: () => getResponsesInput,
     output: getResponsesOutput,
     annotations: READ_ONLY,
+  },
+  {
+    name: "create_web_theme",
+    title: "Create web design",
+    description:
+      "Creates a new web design for the survey web page. The server assigns the ID; tokens you leave out come from the built-in Polly design. Making it the installation default (isDefault: true) changes every survey without web_theme_id at once and needs confirm: true after the user explicitly agreed.",
+    role: "deploy",
+    webSurveyOnly: true,
+    input: () => createWebThemeInput,
+    output: saveWebThemeOutput,
+    // Mit `isDefault: true` sofort live für alle Umfragen ohne `web_theme_id`
+    annotations: DESTRUCTIVE,
+  },
+  {
+    name: "update_web_theme",
+    title: "Change web design",
+    description:
+      "Changes name, tokens (as a patch) or default mark of a web design. The change is live at once for every survey using the design, including Prod and invitation links: only with confirm: true after the user explicitly agreed. expectedUpdatedAt must match the stored design (get_web_theme).",
+    role: "deploy",
+    webSurveyOnly: true,
+    input: () => updateWebThemeInput,
+    output: saveWebThemeOutput,
+    annotations: DESTRUCTIVE,
   },
 ];
 

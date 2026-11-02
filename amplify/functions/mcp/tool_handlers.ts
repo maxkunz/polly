@@ -5,7 +5,13 @@ import {
   POLLY_ROLE_WRITE,
 } from "../../../src/constants/permissionConstants";
 import { isFeatureEnabled, type FeatureFlags } from "../../../src/domain/features/featureFlags";
-import type { WebTheme } from "../../../src/domain/webTheme/webTheme";
+import {
+  defaultWebThemeTokens,
+  sanitizeWebThemeTokens,
+  WEB_THEME_MAX_PER_TENANT,
+  type WebTheme,
+  type WebThemeTokens,
+} from "../../../src/domain/webTheme/webTheme";
 import { isValidSurveyId } from "../shared/survey_id";
 import type { ExportSession } from "../shared/answer_records";
 import { openCursor, sealCursor, type PseudonymKeys } from "../shared/pseudonym";
@@ -28,6 +34,8 @@ import type {
   SurveyStoreContext,
 } from "../shared/survey_store";
 import type { TenantCredentials } from "../shared/tenant_auth";
+import { checkWebThemeName, isValidThemeId } from "../shared/web_themes";
+import type { SaveWebThemesResult, WebThemeInput } from "../shared/web_themes_table";
 import {
   buildResponsesPage,
   collectQuestionIndex,
@@ -45,6 +53,7 @@ import type { McpCallContext } from "./session";
 import {
   buildAuthoringGuide,
   findToolV1,
+  mergeThemeTokens,
   SURVEY_FIELDS,
   toInputIssues,
   toolError,
@@ -56,16 +65,19 @@ import {
   toV1EndEditResult,
   toV1ErrorDetails,
   toV1RollbackResult,
+  toV1SavedWebTheme,
   toV1SaveDraftResult,
   toV1SurveyDetail,
   toV1SurveyList,
   toV1ValidateResult,
+  toV1WebTheme,
   toV1WebThemes,
   type McpToolErrorCode,
   type SurveyField,
   type SurveyInput,
   type ToolCallResult,
   type ToolRole,
+  type WebThemeTokensPatch,
 } from "./tools_v1";
 
 /**
@@ -105,6 +117,11 @@ export interface McpToolDeps {
   findSurveysBeingDeleted(tenantId: string, surveyIds: readonly string[]): Promise<Set<string>>;
   /** Web-Designs des Mandanten (30 s gemerkt, `fresh` liest neu). Wirft bei Fehlern statt eine leere Liste zu liefern. */
   loadWebThemes(tenantId: string, fresh?: boolean): Promise<WebTheme[]>;
+  /**
+   * Legt ein Design an (`expectedUpdatedAt: null`) oder ändert es auf dem Stand `expectedUpdatedAt` (`saveWebThemes`,
+   * optimistisches Sperren, `""` = Design ohne `updatedAt`). Danach gilt der Cache der Designs des Mandanten als veraltet.
+   */
+  saveWebTheme(tenantId: string, theme: WebThemeInput, updatedBy: string, expectedUpdatedAt: string | null): Promise<SaveWebThemesResult>;
   /** Zählt die Sitzungen eines Zeitraums (ohne Antworten); `ok: false`, wenn `deadline` (ms) vorher erreicht ist. */
   summarizeSessions(
     tenantId: string,
@@ -232,6 +249,93 @@ async function getSurvey(args: { surveyId: string; fields?: SurveyField[] }, ctx
 
 async function listWebThemes(_args: unknown, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
   return { ok: true, value: toV1WebThemes(await deps.loadWebThemes(ctx.call.tenant.tenantId)) };
+}
+
+// --- Web-Designs (Schreiben mit `polly_deploy`, wie `PUT /web-themes/{id}` der App) -----------------------------
+
+const THEME_NOT_FOUND: ToolOutcome = { ok: false, code: "theme_not_found" };
+
+function invalidInput(path: string, message: string): ToolOutcome {
+  return { ok: false, code: "invalid_input", details: { issues: [{ path, message }] } };
+}
+
+/** Frisch gelesen: Das Ändern braucht den aktuellen `updatedAt`. IDs werden kleingeschrieben gespeichert. */
+async function findWebTheme(themeId: string, ctx: McpToolContext, deps: McpToolDeps): Promise<WebTheme | undefined> {
+  if (!isValidThemeId(themeId)) return undefined;
+  const wanted = themeId.toLowerCase();
+  return (await deps.loadWebThemes(ctx.call.tenant.tenantId, true)).find((theme) => theme.id === wanted);
+}
+
+/** Patch auf die Basis mischen und wie in der App prüfen; `null` bei Werten außerhalb der Grenzen. */
+function themeTokens(base: WebThemeTokens, patch: WebThemeTokensPatch | undefined): WebThemeTokens | null {
+  return sanitizeWebThemeTokens(mergeThemeTokens(base, patch));
+}
+
+const INVALID_TOKENS = invalidInput("tokens", "tokens are invalid (check the limits in the input schema; lineHeight has at most two decimals)");
+
+async function saveWebTheme(
+  theme: WebThemeInput,
+  expectedUpdatedAt: string | null,
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  const saved = await deps.saveWebTheme(ctx.call.tenant.tenantId, theme, ctx.call.userName, expectedUpdatedAt);
+  if (!saved.ok) {
+    if (saved.reason === "limit_reached") return { ok: false, code: "theme_limit_reached", details: { max: WEB_THEME_MAX_PER_TENANT } };
+    // `busy`: Jemand hat parallel ein anderes Design gespeichert, dieses ist unverändert
+    return { ok: false, code: saved.reason === "busy" ? "theme_busy" : "theme_conflict" };
+  }
+  const [stored] = saved.themes;
+  if (!stored) throw new Error("saved theme is invalid");
+  return {
+    ok: true,
+    value: toV1SavedWebTheme(stored, saved.clearedDefaults > 0),
+    audit: { isDefault: stored.isDefault, created: saved.created > 0 },
+  };
+}
+
+async function getWebTheme(args: { themeId: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
+  const theme = await findWebTheme(args.themeId, ctx, deps);
+  return theme ? { ok: true, value: toV1WebTheme(theme) } : THEME_NOT_FOUND;
+}
+
+/** Neues Standard-Design stellt sofort alle Umfragen ohne `web_theme_id` um: nur mit `confirm`. */
+async function createWebTheme(
+  args: { name: string; tokens?: WebThemeTokensPatch; isDefault?: boolean; confirm?: boolean },
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  if (args.isDefault === true && args.confirm !== true) return { ok: false, code: "confirm_required" };
+  const name = checkWebThemeName(args.name);
+  if (!name.ok) return invalidInput("name", name.message);
+  const tokens = themeTokens(defaultWebThemeTokens(), args.tokens);
+  if (!tokens) return INVALID_TOKENS;
+  // Die ID vergibt der Server; `null` = darf noch nicht existieren
+  return saveWebTheme({ themeId: randomUUID(), name: name.name, isDefault: args.isDefault === true, tokens }, null, ctx, deps);
+}
+
+/** Wirkt sofort auf alle Umfragen mit diesem Design (auch Prod): immer nur mit `confirm`, geprüft vor jedem Zugriff. */
+async function updateWebTheme(
+  args: { themeId: string; expectedUpdatedAt: string | null; name?: string; tokens?: WebThemeTokensPatch; isDefault?: boolean; confirm?: boolean },
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<ToolOutcome> {
+  if (args.confirm !== true) return { ok: false, code: "confirm_required" };
+  let name: string | undefined;
+  if (args.name !== undefined) {
+    const checked = checkWebThemeName(args.name);
+    if (!checked.ok) return invalidInput("name", checked.message);
+    name = checked.name;
+  }
+  const stored = await findWebTheme(args.themeId, ctx, deps);
+  if (!stored) return THEME_NOT_FOUND;
+  // Veralteter Stand: ohne Transaktion abweisen. `null` steht wie in `get_web_theme` für ein Design ohne `updatedAt`
+  const expectedUpdatedAt = args.expectedUpdatedAt ?? "";
+  if (stored.updatedAt !== expectedUpdatedAt) return { ok: false, code: "theme_conflict" };
+  const tokens = args.tokens ? themeTokens(stored.tokens, args.tokens) : stored.tokens;
+  if (!tokens) return INVALID_TOKENS;
+  // Ohne `isDefault` bleibt die Markierung, wie sie ist (siehe `saveWebThemes`)
+  return saveWebTheme({ themeId: stored.id, name: name ?? stored.name, isDefault: args.isDefault, tokens }, expectedUpdatedAt, ctx, deps);
 }
 
 async function validateSurvey(args: { survey: any; surveyId?: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
@@ -427,6 +531,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   list_surveys: listSurveys,
   get_survey: getSurvey,
   list_web_themes: listWebThemes,
+  get_web_theme: getWebTheme,
   validate_survey: validateSurvey,
   create_survey: createSurvey,
   begin_edit: beginEdit,
@@ -437,6 +542,8 @@ const HANDLERS: Record<string, ToolHandler> = {
   get_results_summary: getResultsSummary,
   get_aggregates: getAggregates,
   get_responses: getResponses,
+  create_web_theme: createWebTheme,
+  update_web_theme: updateWebTheme,
 };
 
 // ---------------------------------------------------------------------------
@@ -457,15 +564,24 @@ export async function checkToolRole(role: ToolRole, ctx: McpToolContext, deps: M
 }
 
 /**
- * Audit-Log ohne Inhalte: Mandant, Person, Tool, Umfrage, Ergebnis-Code, Dauer; bei der Auswertung zusätzlich Umfang
- * des Abrufs (`extra`: Zeitraum, Filter, Anzahl, Freigabe der Kommentare).
+ * Audit-Log ohne Inhalte: Mandant, Person, Tool, Umfrage bzw. Design, Ergebnis-Code, Dauer; bei der Auswertung zusätzlich
+ * Umfang des Abrufs (`extra`: Zeitraum, Filter, Anzahl, Freigabe der Kommentare).
  */
-function audit(ctx: McpToolContext, tool: string, surveyId: unknown, result: string, startedAt: number, extra?: Record<string, unknown>): void {
+function audit(
+  ctx: McpToolContext,
+  tool: string,
+  ids: { surveyId: unknown; themeId: unknown },
+  result: string,
+  startedAt: number,
+  extra?: Record<string, unknown>
+): void {
+  const { surveyId, themeId } = ids;
   console.log("[mcp] tool call", {
     tenantId: ctx.call.tenant.tenantId,
     userId: ctx.call.userId,
     tool,
     ...(typeof surveyId === "string" && isValidSurveyId(surveyId) ? { surveyId } : {}),
+    ...(isValidThemeId(themeId) ? { themeId: themeId.toLowerCase() } : {}),
     result,
     ...extra,
     ms: Date.now() - startedAt,
@@ -481,7 +597,7 @@ export async function callTool(name: string, rawArgs: unknown, ctx: McpToolConte
   const handler = tool ? HANDLERS[tool.name] : undefined;
   if (!tool || !handler) return { kind: "unknown_tool" };
   const startedAt = Date.now();
-  const surveyId = (rawArgs as { surveyId?: unknown } | undefined)?.surveyId;
+  const { surveyId, themeId } = (rawArgs as { surveyId?: unknown; themeId?: unknown } | undefined) ?? {};
 
   let outcome: ToolOutcome;
   try {
@@ -499,13 +615,17 @@ export async function callTool(name: string, rawArgs: unknown, ctx: McpToolConte
     outcome = { ok: false, code: "internal_error" };
   }
 
-  // Die ID aus dem Ergebnis gilt vor der Eingabe: Bei create_survey vergibt sie der Server, ein mitgeschicktes
-  // `surveyId` (von zod verworfen) darf das Audit-Log nicht auf eine fremde Umfrage lenken.
+  // Die ID aus dem Ergebnis gilt vor der Eingabe: Bei create_survey/create_web_theme vergibt sie der Server, eine
+  // mitgeschickte ID (von zod verworfen) darf das Audit-Log nicht auf eine fremde Umfrage bzw. ein fremdes Design lenken.
   const resultSurveyId = outcome.ok ? outcome.value.surveyId : undefined;
+  const resultThemeId = outcome.ok ? outcome.value.themeId : undefined;
   audit(
     ctx,
     tool.name,
-    resultSurveyId ?? (tool.name === "create_survey" ? undefined : surveyId),
+    {
+      surveyId: resultSurveyId ?? (tool.name === "create_survey" ? undefined : surveyId),
+      themeId: resultThemeId ?? (tool.name === "create_web_theme" ? undefined : themeId),
+    },
     outcome.ok ? "ok" : outcome.code,
     startedAt,
     outcome.ok ? outcome.audit : undefined

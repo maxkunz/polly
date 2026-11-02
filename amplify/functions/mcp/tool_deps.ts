@@ -23,7 +23,7 @@ import { createSummary, openSlices, summarizeSlices } from "../shared/session_su
 import { findSurveysBeingDeleted, isSurveyBeingDeleted, loadSurveyAggregates } from "../shared/survey_results";
 import { iterateSessions, SessionReadAbortedError } from "../shared/survey_sessions";
 import { TtlCache } from "../shared/ttl_cache";
-import { loadTenantThemesOrThrow } from "../shared/web_themes_table";
+import { loadTenantThemesOrThrow, saveWebThemes } from "../shared/web_themes_table";
 import type { McpToolDeps, PollyRolesResult } from "./tool_handlers";
 
 /**
@@ -67,6 +67,11 @@ export const defaultToolDeps: McpToolDeps = {
   findSurveysBeingDeleted,
   // Fehler werfen statt leerer Liste (sonst gälte jedes Design als unbekannt); der Aufruf ergibt dann internal_error
   loadWebThemes: (tenantId, fresh) => loadTenantThemesOrThrow(tenantId, fresh),
+  async saveWebTheme(tenantId, theme, updatedBy, expectedUpdatedAt) {
+    const tableName = process.env.WEB_THEMES_TABLE_NAME ?? "";
+    if (!tableName) throw new Error("WEB_THEMES_TABLE_NAME is not set");
+    return saveWebThemes(tableName, tenantId, [theme], updatedBy, { expectedUpdatedAt });
+  },
   async summarizeSessions(tenantId, surveyId, fromIso, toIso, deadline) {
     const summary = createSummary();
     const slices = await summarizeSlices(tenantId, surveyId, openSlices(fromIso, toIso), summary, () => Date.now() < deadline, {

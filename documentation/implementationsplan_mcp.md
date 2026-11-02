@@ -117,6 +117,14 @@ Vorgaben:
   - [x] Doku geprüft: `polly_mcp.md`, `permissions.md`, `feature_flags.md` (unverändert gültig), `CLAUDE.md` (Stand, Stolperfalle „MCP-Login ≠ Cognito“).
   - [x] Abschluss-Review des Branch-Diffs (`review-de`) und `secreview-de`. · erledigt 2026-10-30
 
+- [x] **M12 Web-Designs schreiben** (Nachtrag, ändert Entscheidung 2) · erledigt 2026-11-02 · **Review danach** (steht aus)
+  - [x] Tools `get_web_theme` (jede Rolle), `create_web_theme` und `update_web_theme` (`polly_deploy`), alle nur mit `web_survey`.
+  - [x] Schreiben über `saveWebThemes` (Obergrenze, Standard-Design, optimistisches Sperren über `expectedUpdatedAt`), Tokens über `sanitizeWebThemeTokens`, Kontrastwarnungen über `checkThemeContrast`.
+  - [x] `confirm: true` bei `update_web_theme` immer, bei `create_web_theme` nur mit `isDefault: true`.
+  - [x] `backend.ts`: `mcp` darf `WebSurveyThemesTable` schreiben.
+  - [x] Tests in `mcpToolsV1.test.ts`; Doku `polly_mcp.md`, `permissions.md`, `CLAUDE.md`.
+  - [ ] Prüfung auf einer Branch-Umgebung (mit der aus M11).
+
 ## Abweichungen vom Plan
 
 Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und warum. Außerdem was nach dem Meilenstein neu testbar ist, falls das vom Plan abweicht.
@@ -322,6 +330,18 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Security-Review (`secreview-de`):** keine ausnutzbare Lücke. Eine Härtung umgesetzt: Der Callback prüft vor dem Abschluss ohne Seite den Client erneut (`loadBoundClient`); ist er abgelaufen oder gelöscht, geht es zur Zustimmungsseite, die dann mit „abgelaufen“ endet.
 - **Nicht ausgeführt:** die Prüfung auf einer Branch-Umgebung (Deploy, Genesys-Login, Claude-Client) und die Abschluss-Reviews.
 
+### M12
+
+- **Anlass:** Designs sollen auch per KI-Client angelegt und angepasst werden. Entscheidung 2 („Nicht per MCP: … Web-Designs schreiben“) gilt deshalb nur noch für das Löschen von Designs.
+- **Eigenes Tool `get_web_theme`** statt `list_web_themes` zu erweitern: Die Liste bleibt klein und im Cache. `get_web_theme` liest frisch, weil das Ändern den aktuellen `updatedAt` braucht.
+- **`confirm`:** Designs haben keine Stage; eine Änderung gilt sofort für alle Prod-Umfragen und Einladungslinks mit dem Design. `update_web_theme` ist deshalb `destructiveHint` und verlangt immer `confirm: true`. `create_web_theme` verlangt es nur mit `isDefault: true`, weil das alle Umfragen ohne `web_theme_id` umstellt; es ist deshalb ebenfalls `destructiveHint` (Clients sollen nachfragen). Ein neues Design ohne Standard-Markierung wirkt erst, wenn eine Umfrage es wählt.
+- **Patch statt vollständiger Tokens:** `update_web_theme` mischt `tokens` auf den gespeicherten Stand (`mergeThemeTokens` in `tools_v1.ts`), `create_web_theme` auf das eingebaute Design. Die Grenzen stehen im JSON Schema (aus `webTheme.ts`); was zod nicht abbildet (zwei Nachkommastellen bei `lineHeight`), fängt `sanitizeWebThemeTokens` als `invalid_input` ab.
+- **Neue Fehlercodes** `theme_not_found`, `theme_conflict`, `theme_busy` (nur `revision` gescheitert: anderes Design parallel gespeichert, `saveWebThemes` meldet `busy`), `theme_limit_reached { max }`. `not_found` bleibt bei Umfragen.
+- **Cache:** Nach dem Schreiben verwirft `saveWebThemes` selbst den Cache der Designs des Mandanten, auch nach einem Konflikt (gilt so für jeden Schreibpfad). So sehen `list_web_themes` und die Prüfung von `web_theme_id` in derselben Instanz das neue Design sofort; andere Instanzen nach höchstens 30 s.
+- **Audit-Log** mit `themeId` (bei `create_web_theme` nur die vom Server vergebene), dazu `isDefault` und `created`, ohne Tokens oder Namen.
+- **Review (`review-de`) umgesetzt:** IAM ohne Löschen, Design-Namen in den Server-Instructions als Daten, `create_web_theme` als `destructiveHint`, `theme_busy` statt `theme_conflict` bei parallelem Speichern eines anderen Designs, veralteter `expectedUpdatedAt` ohne Transaktion abgewiesen, Design ohne `updatedAt` per `expectedUpdatedAt: null` änderbar (`saveWebThemes` mit `""`), Kontrastwert abgerundet, Name erst nach `trim` auf Länge geprüft, Cache-Invalidierung in `saveWebThemes`.
+- **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json` und Test, nicht deployt.** Beim ersten Lauf auf einer Branch-Umgebung achten auf: `TransactWriteItems` der Lambda `mcp` auf `WebSurveyThemesTable` (nur `PutItem`/`UpdateItem` gegrantet, kein Löschen), ein in Claude angelegtes Design erscheint in den App-Einstellungen, eine parallele Änderung in der App ergibt `theme_conflict`.
+
 ## Modelle und Reviews
 
 | Meilenstein | Modell | Begründung |
@@ -368,7 +388,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
    - `polly_deploy`: Deploy nach Stage/Prod und Rollback
    - `polly_reporting`: Auswertung
    
-   Nicht per MCP: Löschen, Queue-Mapping, Einladungslinks, Web-Designs schreiben.
+   Nicht per MCP: Löschen, Queue-Mapping, Einladungslinks. Web-Designs schreiben war zunächst ausgeschlossen; seit M12 dürfen sie mit `polly_deploy` angelegt und geändert werden (Löschen weiterhin nicht).
 3. **Ergebnisse:** Aggregate, Zusammenfassung und pseudonymisierte Einzelantworten. `responseId`, `conversationId` und `tokenId` werden per HMAC ersetzt, der Cursor wird versiegelt. Kommentare (Telefon und Web) gibt es nur mit dem Mandanten-Flag `mcpAllowComments`.
 4. **Abschaltung:** Opt-in, standardmäßig aus, drei Ebenen mit UND-Verknüpfung (siehe „Abschaltung“).
 5. **Lock = das bestehende Umfrage-Lock** (Feld `lock`, TTL 60 min), serverseitig vor jedem Schreiben geprüft. „Trotzdem bearbeiten“ in der App darf ein MCP-Lock übernehmen; die App zeigt dabei einen Hinweis.
@@ -541,6 +561,9 @@ Alle Tools haben zod-Schemas und strukturierte Ausgaben über `tools_v1.ts`. Feh
 | `get_results_summary` | reporting | reporting.read | Sitzungen, Status, Versionen, Kanäle; max. 31 Tage |
 | `get_aggregates` | reporting | reporting.read | pro Frage Anzahl, Mittelwert, Verteilung, NPS; Näherung über alle Versionen |
 | `get_responses` | reporting | reporting.read | pseudonymisiert, Filter `channel`/`status`/`version`, max. 24 h, versiegelter Cursor, max. 100 pro Seite |
+| `get_web_theme` | jede, nur bei `web_survey` | themes.read | ein Design mit Tokens, `updatedAt`, Kontrastwarnungen (M12) |
+| `create_web_theme` | deploy, nur bei `web_survey` | themes.write | neues Design; als Standard nur mit `confirm: true` (M12) |
+| `update_web_theme` | deploy, nur bei `web_survey` | themes.write | Tokens als Patch, `expectedUpdatedAt`, immer `confirm: true` (M12) |
 
 ## Lock
 

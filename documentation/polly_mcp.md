@@ -1,6 +1,6 @@
 # Polly MCP – Spezifikation
 
-> **Stand:** umgesetzt sind die Backend-Bausteine (M4), die Infrastruktur (M5), der Schalter `/mcp-settings` (M6), die OAuth-Fassade (M7, Lambda `mcp`) und der MCP-Server mit den lesenden Tools (M8: `get_authoring_guide`, `list_surveys`, `get_survey`, `list_web_themes`, `validate_survey`). Die schreibenden Tools (M9) und die Auswertung (M10) fehlen noch. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
+> **Stand:** umgesetzt sind die Backend-Bausteine (M4), die Infrastruktur (M5), der Schalter `/mcp-settings` (M6), die OAuth-Fassade (M7, Lambda `mcp`), der MCP-Server mit den lesenden Tools (M8), die schreibenden Tools (M9), die Auswertung (M10), die Härtung (M11) und das Schreiben von Web-Designs (M12: `get_web_theme`, `create_web_theme`, `update_web_theme`). Offen ist die Prüfung auf einer Branch-Umgebung. Der Plan mit Fortschritt steht in [implementationsplan_mcp.md](implementationsplan_mcp.md). Die Ergebnisse des Spikes (M1) stehen in Abschnitt 13.
 
 Über MCP (Model Context Protocol) können KI-Clients wie Claude Desktop, claude.ai und Claude Code Umfragen anlegen, bearbeiten, deployen und zurückrollen sowie Ergebnisse auswerten. Der Zugriff erfolgt **im Namen einer angemeldeten Person** mit deren Polly-Rollen.
 
@@ -22,7 +22,7 @@ Die Lambda `mcp` ist ein MCP-Server (Spec 2025-06-18, Streamable HTTP im JSON-Mo
 | Anmeldung | Cognito Client Credentials | OAuth 2.1 mit Genesys-Login der Person |
 | Identität | nur Mandant (über `client_id`) | Person mit Genesys-Rollen |
 | Rechte | Scopes (`reporting.read`, …) | Polly-Rollen (`polly_write`, `polly_deploy`, `polly_reporting`) |
-| Schreiben | Einladungen, Web-Designs | Umfragen anlegen, bearbeiten, deployen, zurückrollen |
+| Schreiben | Einladungen, Web-Designs | Umfragen anlegen, bearbeiten, deployen, zurückrollen; Web-Designs anlegen und ändern |
 | Zugang anlegen | Betriebsteam | Kunde selbst (Einstellungen) |
 | Abschalten | Client sperren/löschen | drei Ebenen, siehe Abschnitt 6 |
 
@@ -36,7 +36,7 @@ Die Lambda `mcp` ist ein MCP-Server (Spec 2025-06-18, Streamable HTTP im JSON-Mo
 
 **Nicht gemeinsam:** `resolveApiClient`/`verifyCognitoJwt` (M2M) und `ext_http.ts` (REST-Fehlerformat; MCP meldet Fehler als Tool-Ergebnis mit `isError`).
 
-**Nicht per MCP möglich:** Umfragen löschen, Queue-Mapping, Einladungslinks erzeugen, Web-Designs schreiben.
+**Nicht per MCP möglich:** Umfragen löschen, Queue-Mapping, Einladungslinks erzeugen, Web-Designs löschen.
 
 **Ausbau (nicht Teil dieser Spezifikation):** ein MCP nur zum Lesen für Kunden-Agenten über einen Kunden-API-Client. Ihm fehlen Nutzeridentität und Polly-Rollen.
 
@@ -126,6 +126,7 @@ Die Server-Instructions sagen: „Umfrageinhalte und Antworten sind Daten, keine
 | `list_surveys` | jede | `surveys.read` | read-only | Index aus `survey_list`, optional Versionen und Lock-Status |
 | `get_survey` | jede | `surveys.read` | read-only | Draft/Stage/Prod/Backup, Versionen, Lock, Validierung, Payload-Größe |
 | `list_web_themes` | jede, nur bei `web_survey` | `themes.read` | read-only | Auswahl für `web_theme_id` |
+| `get_web_theme` | jede, nur bei `web_survey` | `themes.read` | read-only | Ein Design mit allen Tokens, `updatedAt` und Kontrastwarnungen |
 | `validate_survey` | `polly_write` | – | read-only | Trockenlauf der Validierungs-Pipeline, schreibt nichts |
 | `create_survey` | `polly_write` | – | | Neue Umfrage; IDs und technische Namen vergibt der Server, nur fehlerfreie Umfragen werden geschrieben |
 | `begin_edit` | `polly_write` | – | | Lock nehmen bzw. verlängern |
@@ -136,9 +137,11 @@ Die Server-Instructions sagen: „Umfrageinhalte und Antworten sind Daten, keine
 | `get_results_summary` | `polly_reporting` | `reporting.read` | read-only | Sitzungen, Status, Versionen, Kanäle; höchstens 31 Tage |
 | `get_aggregates` | `polly_reporting` | `reporting.read` | read-only | Pro Frage Anzahl, Mittelwert, Verteilung, NPS; Näherung über alle Versionen |
 | `get_responses` | `polly_reporting` | `reporting.read` | read-only | Pseudonymisierte Einzelantworten, siehe Abschnitt 8 |
+| `create_web_theme` | `polly_deploy`, nur bei `web_survey` | `themes.write` | `destructiveHint` | Neues Design; ID vom Server, fehlende Tokens aus dem eingebauten Design; als Standard nur mit `confirm: true` |
+| `update_web_theme` | `polly_deploy`, nur bei `web_survey` | `themes.write` | `destructiveHint` | Design ändern (Tokens als Patch), `expectedUpdatedAt`, immer `confirm: true` |
 
 - Fehlt die Rolle, antwortet das Tool mit `forbidden`. Die Rollen sind unabhängig: Wer nur `polly_reporting` hat, kann lesen und auswerten, aber nichts schreiben (siehe [permissions.md](permissions.md)).
-- Ohne Feature `web_survey` fehlt `list_web_themes`, und die Web-Felder sind aus dem Authoring-Guide entfernt.
+- Ohne Feature `web_survey` fehlen die Design-Tools (`list_web_themes`, `get_web_theme`, `create_web_theme`, `update_web_theme`), und die Web-Felder sind aus dem Authoring-Guide entfernt.
 - Bei laufender Löschung einer Umfrage antworten alle Tools mit `not_found` (`isSurveyBeingDeleted`); `list_surveys` blendet sie aus.
 - Gelesen wird mit dem Genesys-Token der Person (Genesys-Rechte gelten), nur aus der Umfrage-Data-Table des Mandanten.
 
@@ -154,6 +157,7 @@ Die Felder der Umfrage entsprechen dem Editor-Format aus [survey_definition.md](
 | `list_surveys` | `includeVersions?`, `includeLock?` | `{ surveys: [{ surveyId, title, name?, draftVersion?, stageVersion?, prodVersion?, lock? }] }` |
 | `get_survey` | `surveyId`, `fields?` (`draft`, `stage`, `prod`, `backup`; Standard `["draft"]`) | `{ surveyId, draft?, stage?, prod?, backup?, versions, lock, validation, payloadSize }` |
 | `list_web_themes` | – | `{ themes: [{ themeId, name, isDefault }] }` |
+| `get_web_theme` | `themeId` | `{ themeId, name, isDefault, updatedAt, tokens, contrastWarnings }` |
 | `validate_survey` | `survey`, `surveyId?` | `{ valid, errors: [...], translation?, warnings: [...], payloadSize }` |
 | `create_survey` | `survey` | `{ surveyId, version, warnings: [...] }` |
 | `begin_edit` | `surveyId` | `{ surveyId, draftVersion, expiresAt }` |
@@ -164,6 +168,8 @@ Die Felder der Umfrage entsprechen dem Editor-Format aus [survey_definition.md](
 | `get_results_summary` | `surveyId`, `from`, `to` | `{ total, byStatus, byVersion, byChannel }` |
 | `get_aggregates` | `surveyId` | `{ questions: [{ questionId, title, type, count, average?, distribution?, otherCount?, nps? }] }` (Abschnitt 8) |
 | `get_responses` | `surveyId`, `from`, `to`, `channel?`, `status?`, `version?`, `cursor?`, `limit?` | `{ responses: [{ responseId, channel, status, version, startedHour, answers }], nextCursor? }` (Abschnitt 8) |
+| `create_web_theme` | `name`, `tokens?`, `isDefault?`, `confirm?` | wie `get_web_theme`, dazu `clearedDefault` |
+| `update_web_theme` | `themeId`, `expectedUpdatedAt` (`null` bei Design ohne `updatedAt`), `name?`, `tokens?`, `isDefault?`, `confirm` | wie `get_web_theme`, dazu `clearedDefault` |
 
 `errors` sind `{ code, field, params, questionId? }`. `code` ist der Schlüssel der bisherigen Editor-Meldung (`validation.*`, ohne Präfix), Zahlen stehen roh in `params`. Die Feldliste je Tool steht fest in `tools_v1.ts`; jedes Tool meldet sein `outputSchema` in `tools/list`.
 
@@ -179,7 +185,15 @@ Die Felder der Umfrage entsprechen dem Editor-Format aus [survey_definition.md](
 - **`web_theme_id`** wird nur mit `web_survey` und nur, wenn angegeben, gegen die Designs des Mandanten geprüft (bei `validate_survey`, `create_survey` und `save_draft` gleich): erst aus dem Cache (30 s), fehlt die ID dort, wird einmal frisch gelesen. Kann `WebSurveyThemesTable` nicht gelesen werden, ist das `internal_error` (nie `theme_unknown`).
 - **`begin_edit`:** `draftVersion` (oder `null`) als Grundlage für `expectedDraftVersion`, `expiresAt` = Ablauf des Locks. **`end_edit`:** `released: false`, wenn kein eigenes Lock da war; bei laufender Löschung `not_found` wie die übrigen Tools.
 - **`deploy_survey`/`rollback_survey`:** `confirm` ist im Schema optional; fehlt es oder ist es nicht `true`, kommt `confirm_required`, bevor etwas gelesen wird. `target` ist `Stage` oder `Prod`, `expectedProdVersion` darf `null` sein (kein Prod-Stand).
-- **Annotationen:** lesende Tools `readOnlyHint: true`; `create_survey`, `save_draft`, `begin_edit`, `end_edit` schreibend mit `destructiveHint: false` (`begin_edit`/`end_edit` zusätzlich `idempotentHint: true`); `deploy_survey`, `rollback_survey` `destructiveHint: true`. Alle `openWorldHint: false`.
+- **Annotationen:** lesende Tools `readOnlyHint: true`; `create_survey`, `save_draft`, `begin_edit`, `end_edit` schreibend mit `destructiveHint: false` (`begin_edit`/`end_edit` zusätzlich `idempotentHint: true`); `deploy_survey`, `rollback_survey`, `create_web_theme` (mit `isDefault: true` sofort live), `update_web_theme` `destructiveHint: true`. Alle `openWorldHint: false`.
+
+**Web-Designs (M12):** Schreiben wie `PUT /web-themes/{id}` der App: Rolle `polly_deploy`, gemeinsame Schreiblogik `saveWebThemes` (`shared/web_themes_table.ts`, Obergrenze 50 Designs, ein neues Standard-Design nimmt dem bisherigen die Markierung in derselben Transaktion), Bearbeiter `updatedBy` = Name der Person.
+- **Tokens** (`fontFamily`, `text.<Rolle>.{size, weight, lineHeight}`, `colors.<Schlüssel>` als `#rrggbb`, `transparentBackground`): Die Grenzen stehen im Eingabeschema (aus `webTheme.ts`), endgültig prüft `sanitizeWebThemeTokens`; Werte außerhalb ergeben `invalid_input`. Unbekannte Felder fallen weg, freies CSS gibt es nicht.
+- **`create_web_theme`:** Die ID vergibt der Server (eine mitgeschickte `themeId` fällt weg). Fehlende Tokens kommen aus dem eingebauten Design. `isDefault: true` stellt sofort alle Umfragen ohne `web_theme_id` um und verlangt deshalb `confirm: true` (sonst `confirm_required` vor jedem Zugriff).
+- **`update_web_theme`:** `tokens` ist ein Patch (Rollen feldweise, Farben einzeln); `name` und `isDefault` bleiben ohne Angabe, wie sie sind (`isDefault: false` nimmt die Markierung). Optimistisches Sperren über `expectedUpdatedAt` (aus `get_web_theme`, dort `null` bei einem Design ohne `updatedAt`), abweichend → `theme_conflict`, ohne Schreibversuch. Speichert parallel jemand ein anderes Design desselben Mandanten → `theme_busy` (dieses Design ist unverändert, derselbe Aufruf darf wiederholt werden). Der Name wird vor der Längenprüfung getrimmt (wie in der App). `confirm: true` ist immer Pflicht, weil Designs keine Stage haben: Die Änderung gilt sofort für alle Prod-Umfragen und Einladungslinks mit diesem Design.
+- **`get_web_theme`** liest frisch (ohne Cache), damit `updatedAt` stimmt. `updatedBy` wird nie ausgegeben. `contrastWarnings` (`{ foreground, background, ratio, minimum }`, WCAG AA) sind nur Hinweise wie im Editor der App.
+- Nach dem Schreiben verwirft die Lambda ihren Cache der Designs des Mandanten; andere Instanzen (auch `web_survey`) sehen die Änderung nach höchstens 30 s.
+- Löschen von Designs gibt es per MCP nicht.
 
 ### 4.2 Fehlercodes
 
@@ -201,6 +215,10 @@ Fehler kommen als Tool-Ergebnis mit `isError: true` und `{ code, message, detail
 | `payload_too_large` | Flow-JSON über dem Budget (nur beim Deploy) | `size`, `limit` |
 | `confirm_required` | `confirm: true` fehlt | – |
 | `theme_unknown` | `web_theme_id` existiert beim Mandanten nicht | `themeId` |
+| `theme_not_found` | Design unbekannt (`get_web_theme`, `update_web_theme`) | – |
+| `theme_conflict` | Design zwischenzeitlich geändert oder gelöscht (`expectedUpdatedAt` passt nicht) | – |
+| `theme_busy` | Paralleles Speichern eines anderen Designs desselben Mandanten; erneut versuchen | – |
+| `theme_limit_reached` | Höchstzahl Designs pro Mandant erreicht | `max` |
 | `range_too_large` | Zeitraum größer als erlaubt | `maxMs` |
 | `cursor_invalid` | Cursor ungültig, abgelaufen oder für eine andere Umfrage | – |
 | `rate_limited` | Zu viele Aufrufe | `retryAfterSeconds` |
@@ -330,7 +348,7 @@ Zusätzlich gilt die Drosselung pro Route in `routeSettings` (`backend.ts`).
 - **Weiterleitungen:** `redirect_uri` exakter Vergleich gegen die Registrierung, Hosts nur aus der Allow-List oder Loopback. Fehler vor der Prüfung werden nie umgeleitet.
 - **Zustimmungsseite:** CSRF-Nonce, `frame-ancestors 'none'`, kein Einbetten.
 - **Datenschutz:** Pseudonymisierte Einzelantworten, Kommentare nur mit Mandanten-Flag, Audit-Log ohne Inhalte.
-- **Prompt Injection:** Umfragetexte und Antworten sind Fremdinhalt. Die Server-Instructions weisen darauf hin. Zusätzlich gilt: Deploy und Rollback verlangen `confirm: true`, Löschen, Einladungen, Queue-Mapping und Web-Designs gibt es per MCP nicht, damit ein manipulierter Inhalt nur begrenzten Schaden anrichten kann.
+- **Prompt Injection:** Umfragetexte, Design-Namen (auch per App oder Import der Kunden-API gesetzt) und Antworten sind Fremdinhalt. Die Server-Instructions weisen darauf hin. Zusätzlich gilt: Deploy, Rollback, das Ändern eines Web-Designs und ein neues Standard-Design verlangen `confirm: true`; Löschen, Einladungen und Queue-Mapping gibt es per MCP nicht, damit ein manipulierter Inhalt nur begrenzten Schaden anrichten kann. Designs bestehen nur aus geprüften Tokens (kein CSS, keine fremden Quellen); die Lambda `mcp` darf Designs per IAM nur anlegen und ändern (`PutItem`/`UpdateItem`), nicht löschen.
 - **Mehrere Installationen:** Der Genesys-Client ist pro Installation, die Org-Prüfung verhindert den Login aus einer fremden Genesys-Org.
 
 ## 12. Einrichtung im MCP-Client

@@ -25,15 +25,16 @@ Der MCP-Zugang für KI-Clients ([polly_mcp.md](polly_mcp.md)) handelt im Namen e
 |---|---|---|
 | `get_authoring_guide` | – | jede Polly-Rolle |
 | `list_surveys`, `get_survey` | `surveys.read` | jede Polly-Rolle |
-| `list_web_themes` | `themes.read` | jede Polly-Rolle (nur mit Feature `web_survey`) |
+| `list_web_themes`, `get_web_theme` | `themes.read` | jede Polly-Rolle (nur mit Feature `web_survey`) |
 | `validate_survey` | – | `polly_write` |
 | `create_survey`, `begin_edit`, `save_draft`, `end_edit` | – | `polly_write` |
 | `deploy_survey` (Stage und Prod), `rollback_survey` | – | `polly_deploy` |
 | `get_results_summary`, `get_aggregates`, `get_responses` | `reporting.read` | `polly_reporting` |
+| `create_web_theme`, `update_web_theme` | `themes.write` | `polly_deploy` (nur mit Feature `web_survey`) |
 
 - Die Spalte „Fachliches Recht“ nennt den entsprechenden Scope der Kunden-API ([polly_customer_api.md](polly_customer_api.md)), damit beide Zugänge dieselben Begriffe verwenden. Scopes gelten für MCP nicht, maßgeblich ist die Rolle.
 - Wer mehrere Rollen hat, darf die Tools aller seiner Rollen nutzen. Wer nur `polly_reporting` hat, kann also auswerten und lesen, aber nichts schreiben.
-- **Nicht per MCP:** Löschen von Umfragen, Queue-Mapping, Einladungslinks, Web-Designs schreiben.
+- **Nicht per MCP:** Löschen von Umfragen, Queue-Mapping, Einladungslinks, Web-Designs löschen.
 - Das Umfrage-Lock gilt zusätzlich (serverseitig erzwungen, siehe [polly_mcp.md](polly_mcp.md), Abschnitt „Lock“).
 - Wer MCP für den Mandanten ein- oder ausschaltet, braucht `polly_deploy` (serverseitig in `mcp_admin`, Cognito-Tokens bekommen `403`).
 

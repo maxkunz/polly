@@ -109,16 +109,21 @@ export interface WebThemeInput {
 export interface SaveWebThemesOptions {
   /**
    * Optimistisches Sperren (nur bei genau einem Design): `updatedAt` des Stands, den der Editor geladen hat,
-   * `null` = neues Design. Ohne die Option überschreibt der Aufruf (Import über die Kunden-API).
+   * `null` = neues Design, `""` = vorhandenes Design ohne `updatedAt` (Altbestand). Ohne die Option überschreibt
+   * der Aufruf (Import über die Kunden-API).
    */
   expectedUpdatedAt?: string | null;
 }
 
 export type SaveWebThemesResult =
   | { ok: true; themes: WebTheme[]; created: number; updated: number; clearedDefaults: number }
-  | { ok: false; reason: "limit_reached" | "conflict" };
+  | { ok: false; reason: "limit_reached" | "conflict" | "busy" };
 
-/** Abbruchgründe einer Transaktion, die auf eine parallele Änderung hindeuten (sonst ein echter Fehler). */
+/**
+ * Abbruchgründe einer Transaktion, die auf eine parallele Änderung hindeuten (sonst ein echter Fehler). Scheitert
+ * die Bedingung eines gespeicherten Designs, ist es `conflict`; sonst (nur `revision`, ein gerade gelöschtes
+ * bisheriges Standard-Design oder `TransactionConflict`) hat jemand anderes gespeichert, und `busy` heißt: erneut versuchen.
+ */
 const CONFLICT_REASONS = new Set(["None", "ConditionalCheckFailed", "TransactionConflict"]);
 
 /**
@@ -127,7 +132,9 @@ const CONFLICT_REASONS = new Set(["None", "ConditionalCheckFailed", "Transaction
  * die Markierung in derselben Transaktion (höchstens 100 Einträge, hier höchstens 50 Designs, die bisherigen
  * Standard-Designs und der Verwaltungseintrag). Die Aufrufer prüfen vorab Format und doppelte IDs.
  * `updatedBy` ist der Bearbeiter (Name der App-Nutzerin bzw. `api:<clientId>`). Parallele Änderungen
- * desselben Mandanten ergeben `conflict` (über `revision`, siehe `REVISION_ITEM_ID`).
+ * desselben Mandanten ergeben `busy` (über `revision`, siehe `REVISION_ITEM_ID`), eine Änderung an einem
+ * der gespeicherten Designs selbst `conflict`. Danach liest der nächste Zugriff dieser Instanz die Designs neu,
+ * andere Instanzen sehen die Änderung nach höchstens 30 s (`themeCache`).
  */
 export async function saveWebThemes(
   tableName: string,
@@ -166,7 +173,12 @@ export async function saveWebThemes(
       ? {}
       : expectedUpdatedAt === null
         ? { ConditionExpression: "attribute_not_exists(themeId)" }
-        : { ConditionExpression: "updatedAt = :expected", ExpressionAttributeValues: { ":expected": expectedUpdatedAt } }),
+        : expectedUpdatedAt === ""
+          ? {
+              ConditionExpression: "attribute_exists(themeId) AND (attribute_not_exists(updatedAt) OR updatedAt = :expected)",
+              ExpressionAttributeValues: { ":expected": "" },
+            }
+          : { ConditionExpression: "updatedAt = :expected", ExpressionAttributeValues: { ":expected": expectedUpdatedAt } }),
   }));
 
   // Neues Standard-Design: Die bisherigen verlieren die Markierung in derselben Transaktion
@@ -210,12 +222,17 @@ export async function saveWebThemes(
     if (err?.name === "TransactionCanceledException") {
       const reasons: string[] = (err.CancellationReasons ?? []).map((reason: any) => String(reason?.Code ?? "None"));
       if (reasons.every((code) => CONFLICT_REASONS.has(code))) {
+        // Die Puts stehen vorn in `TransactItems`, in derselben Reihenfolge wie die Abbruchgründe
+        const reason = reasons.slice(0, puts.length).includes("ConditionalCheckFailed") ? "conflict" : "busy";
         console.warn("[web_themes_table] conflict", { tenantId, reasons });
-        return { ok: false, reason: "conflict" };
+        return { ok: false, reason };
       }
       console.error("[web_themes_table] transaction cancelled", { tenantId, reasons });
     }
     throw err;
+  } finally {
+    // Auch nach einem Abbruch: Dann hat jemand anderes geändert
+    themeCache.delete(tenantId);
   }
 
   return {

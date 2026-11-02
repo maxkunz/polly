@@ -765,14 +765,17 @@ mcpLambda.addEnvironment("MCP_ENABLED", mcpEnabled);
 mcpLambda.addEnvironment("MCP_PUBLIC_BASE_URL", mcpPublicBaseUrl);
 mcpLambda.addEnvironment("MCP_ALLOWED_REDIRECT_URIS", mcpAllowedRedirectUris);
 mcpLambda.addEnvironment("TENANTS_MCP_KEY_INDEX", "byMcpTenantKey");
-// Lesende Tools (Ergebnisse, Löschstatus, Designs); Schreiben in die Data Table läuft über Genesys, nicht DynamoDB
+// Lesende Tools (Ergebnisse, Löschstatus); Schreiben in die Data Table läuft über Genesys, nicht DynamoDB
 surveyResponsesTable.grantReadData(mcpLambda);
 mcpLambda.addEnvironment("SURVEY_RESPONSES_TABLE_NAME", surveyResponsesTable.tableName);
 surveyAggregatesTable.grantReadData(mcpLambda);
 mcpLambda.addEnvironment("SURVEY_AGGREGATES_TABLE_NAME", surveyAggregatesTable.tableName);
 surveyDeletionJobsTable.grantReadData(mcpLambda);
 mcpLambda.addEnvironment("SURVEY_DELETION_JOBS_TABLE_NAME", surveyDeletionJobsTable.tableName);
+// Designs lesen und schreiben (create_web_theme/update_web_theme, Transaktion über `saveWebThemes`). Löschen gibt
+// es per MCP nicht: nur Put/Update (reichen für TransactWriteItems), kein DeleteItem/BatchWriteItem
 webSurveyThemesTable.grantReadData(mcpLambda);
+webSurveyThemesTable.grant(mcpLambda, "dynamodb:PutItem", "dynamodb:UpdateItem");
 mcpLambda.addEnvironment("WEB_THEMES_TABLE_NAME", webSurveyThemesTable.tableName);
 attachTenantAuth(mcpLambda);
 

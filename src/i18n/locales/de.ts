@@ -681,7 +681,7 @@ export const de = {
 			step2: "Name „Polly“ und die MCP-URL eintragen. Client-ID und Secret unter „Erweitert“ leer lassen.",
 			step3: "„Verbinden“ wählen und sich bei Genesys anmelden.",
 			step4: "Auf der Polly-Seite „Zulassen“ wählen. Danach lässt sich der Connector im Chat ein- und ausschalten.",
-			claudeCode: "Claude Code: claude mcp add --transport http polly {url}, danach /mcp und „Authenticate“.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url} danach /mcp und „Authenticate“.",
 			roles: "Was die KI darf, bestimmen Ihre Rollen: polly_write (bearbeiten), polly_deploy (deployen, zurückrollen), polly_reporting (Ergebnisse)."
 		},
 		disable: {

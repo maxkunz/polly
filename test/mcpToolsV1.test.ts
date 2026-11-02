@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { translateSurveyForFlow } from "../src/domain/survey/flowTranslator";
 import type { Survey } from "../src/domain/survey/surveyTypes";
-import type { WebTheme } from "../src/domain/webTheme/webTheme";
+import { DEFAULT_WEB_THEME_TOKENS, defaultWebThemeTokens, type WebTheme } from "../src/domain/webTheme/webTheme";
 import { TTS_TEXT_MAX_CHARS } from "../src/constants/surveyConstants";
 import { prepareDraft } from "../amplify/functions/shared/survey_pipeline";
 import { addToSummary, createSummary } from "../amplify/functions/shared/session_summary";
 import { derivePseudonymKeys, openCursor, pseudonymize } from "../amplify/functions/shared/pseudonym";
 import { sessionVersion, type ExportSession } from "../amplify/functions/shared/answer_records";
 import type { SurveyAggregateItem } from "../amplify/functions/shared/survey_results";
+import type { WebThemeInput } from "../amplify/functions/shared/web_themes_table";
 import { buildResponsesPage } from "../amplify/functions/mcp/results_v1";
 import {
 	beginEdit,
@@ -128,7 +129,11 @@ function rowView(id: string, title: string, options: { prod?: boolean; lock?: Re
 
 interface FakeDeps extends McpToolDeps {
 	calls: string[];
+	/** Aufrufe von `saveWebTheme`. */
+	savedThemes: Array<{ theme: WebThemeInput; updatedBy: string; expectedUpdatedAt: string | null }>;
 }
+
+const THEME_SAVED_AT = "2026-10-30T12:00:00.000Z";
 
 function fakeDeps(overrides: {
 	roles?: string[] | PollyRolesResult;
@@ -138,12 +143,17 @@ function fakeDeps(overrides: {
 	themes?: WebTheme[];
 	sessions?: ExportSession[];
 	aggregates?: SurveyAggregateItem[];
+	themeLimitReached?: boolean;
+	/** Paralleles Speichern eines anderen Designs (`revision`). */
+	themeBusy?: boolean;
 } = {}): FakeDeps {
 	const rows = overrides.rows ?? [];
 	const calls: string[] = [];
+	const savedThemes: FakeDeps["savedThemes"] = [];
 	const roles = overrides.roles ?? ["polly_write", "polly_deploy", "polly_reporting"];
 	return {
 		calls,
+		savedThemes,
 		async pollyRoles() {
 			calls.push("roles");
 			return Array.isArray(roles) ? { ok: true, roles: new Set(roles) } : roles;
@@ -177,6 +187,20 @@ function fakeDeps(overrides: {
 		async loadWebThemes(_tenantId, fresh) {
 			calls.push(fresh ? "themes:fresh" : "themes");
 			return overrides.themes ?? [];
+		},
+		// Wie `saveWebThemes`: optimistisches Sperren über `updatedAt`, ohne `isDefault` bleibt die Markierung
+		async saveWebTheme(_tenantId, theme, updatedBy, expectedUpdatedAt) {
+			calls.push("save-theme");
+			savedThemes.push({ theme, updatedBy, expectedUpdatedAt });
+			if (overrides.themeLimitReached) return { ok: false, reason: "limit_reached" };
+			if (overrides.themeBusy) return { ok: false, reason: "busy" };
+			const themes = overrides.themes ?? [];
+			const existing = themes.find((candidate) => candidate.id === theme.themeId);
+			if (expectedUpdatedAt === null ? existing : existing?.updatedAt !== expectedUpdatedAt) return { ok: false, reason: "conflict" };
+			const isDefault = theme.isDefault ?? existing?.isDefault === true;
+			const clearedDefaults = theme.isDefault === true ? themes.filter((candidate) => candidate.isDefault && candidate.id !== theme.themeId).length : 0;
+			const saved: WebTheme = { id: theme.themeId, name: theme.name, isDefault, tokens: theme.tokens, updatedAt: THEME_SAVED_AT, updatedBy };
+			return { ok: true, themes: [saved], created: existing ? 0 : 1, updated: existing ? 1 : 0, clearedDefaults };
 		},
 		async summarizeSessions(_tenantId, _surveyId, fromIso, toIso) {
 			calls.push("summary");
@@ -306,8 +330,9 @@ function failure(result: ToolCallResult): { code: string; message: string; detai
 
 const WRITE_TOOLS = ["create_survey", "begin_edit", "save_draft", "end_edit", "deploy_survey", "rollback_survey"];
 const RESULT_TOOLS = ["get_results_summary", "get_aggregates", "get_responses"];
+const THEME_WRITE_TOOLS = ["create_web_theme", "update_web_theme"];
 
-await test("Katalog: list_web_themes nur mit web_survey, Annotationen lesend/schreibend/destruktiv", () => {
+await test("Katalog: Design-Tools nur mit web_survey, Annotationen lesend/schreibend/destruktiv", () => {
 	assert.deepEqual(listToolsV1(false).map((tool) => tool.name), ["get_authoring_guide", "list_surveys", "get_survey", "validate_survey", ...WRITE_TOOLS, ...RESULT_TOOLS]);
 	const tools = listToolsV1(true);
 	assert.deepEqual(tools.map((tool) => tool.name), [
@@ -315,19 +340,21 @@ await test("Katalog: list_web_themes nur mit web_survey, Annotationen lesend/sch
 		"list_surveys",
 		"get_survey",
 		"list_web_themes",
+		"get_web_theme",
 		"validate_survey",
 		...WRITE_TOOLS,
 		...RESULT_TOOLS,
+		...THEME_WRITE_TOOLS,
 	]);
 	for (const tool of tools) {
 		assert.equal(tool.inputSchema.type, "object");
 		assert.equal(tool.outputSchema.type, "object");
 		assert.equal("$schema" in tool.inputSchema, false);
-		assert.equal(tool.annotations.readOnlyHint, !WRITE_TOOLS.includes(tool.name), tool.name);
-		assert.equal(tool.annotations.destructiveHint === true, ["deploy_survey", "rollback_survey"].includes(tool.name), tool.name);
+		assert.equal(tool.annotations.readOnlyHint, ![...WRITE_TOOLS, ...THEME_WRITE_TOOLS].includes(tool.name), tool.name);
+		assert.equal(tool.annotations.destructiveHint === true, ["deploy_survey", "rollback_survey", "create_web_theme", "update_web_theme"].includes(tool.name), tool.name);
 		assert.equal(tool.annotations.openWorldHint, false);
 	}
-	assert.equal(findToolV1("list_web_themes", false), undefined);
+	for (const name of ["list_web_themes", "get_web_theme", ...THEME_WRITE_TOOLS]) assert.equal(findToolV1(name, false), undefined, name);
 	// Rollen der schreibenden Tools
 	assert.deepEqual(
 		WRITE_TOOLS.map((name) => findToolV1(name, true)!.role),
@@ -336,6 +363,10 @@ await test("Katalog: list_web_themes nur mit web_survey, Annotationen lesend/sch
 	assert.deepEqual(
 		RESULT_TOOLS.map((name) => findToolV1(name, true)!.role),
 		["reporting", "reporting", "reporting"]
+	);
+	assert.deepEqual(
+		["get_web_theme", ...THEME_WRITE_TOOLS].map((name) => findToolV1(name, true)!.role),
+		["any", "deploy", "deploy"]
 	);
 });
 
@@ -622,6 +653,130 @@ await test("validate_survey: gegen bestehende Umfrage behalten gespeicherte Name
 
 	const missing = failure(await call("validate_survey", { survey: duplicate, surveyId: SURVEY_C }, context(), deps));
 	assert.equal(missing.code, "not_found");
+});
+
+// ---------------------------------------------------------------------------
+// Web-Designs
+// ---------------------------------------------------------------------------
+
+const WEB = context({ web_survey: true });
+const OTHER_THEME_ID = "6a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+function storedTheme(overrides: Partial<WebTheme> = {}): WebTheme {
+	return { id: THEME_ID, name: "Hausdesign", isDefault: false, tokens: defaultWebThemeTokens(), updatedAt: "2026-10-01T00:00:00.000Z", updatedBy: "Erika", ...overrides };
+}
+
+await test("get_web_theme: alle Tokens frisch gelesen, ohne updatedBy; unbekannte ID ergibt theme_not_found", async () => {
+	const deps = fakeDeps({ roles: ["polly_reporting"], themes: [storedTheme()] });
+	const result = success("get_web_theme", await call("get_web_theme", { themeId: THEME_ID.toUpperCase() }, WEB, deps));
+	assert.equal(result.themeId, THEME_ID);
+	assert.equal(result.updatedAt, "2026-10-01T00:00:00.000Z");
+	assert.deepEqual(result.tokens.colors, DEFAULT_WEB_THEME_TOKENS.colors);
+	assert.deepEqual(result.tokens.text.heading, DEFAULT_WEB_THEME_TOKENS.text.heading);
+	assert.deepEqual(result.contrastWarnings, []);
+	assert.equal("updatedBy" in result, false);
+	assert.deepEqual(deps.calls, ["roles", "themes:fresh"]);
+
+	const missing = failure(await call("get_web_theme", { themeId: OTHER_THEME_ID }, WEB, deps));
+	assert.equal(missing.code, "theme_not_found");
+	assert.equal(failure(await call("get_web_theme", { themeId: "kein-uuid" }, WEB, deps)).code, "theme_not_found");
+});
+
+await test("create_web_theme: polly_deploy nötig, ID vom Server, fehlende Tokens aus den Defaults", async () => {
+	const writer = fakeDeps({ roles: ["polly_write"] });
+	const denied = failure(await call("create_web_theme", { name: "Neu" }, WEB, writer));
+	assert.deepEqual([denied.code, denied.details], ["forbidden", { requiredRole: "polly_deploy" }]);
+	assert.deepEqual(writer.savedThemes, []);
+
+	const deps = fakeDeps();
+	const result = success(
+		"create_web_theme",
+		await call("create_web_theme", { themeId: THEME_ID, name: "  Neu  ", tokens: { colors: { primary: "#AA0000" }, text: { heading: { size: 32 } } } }, WEB, deps)
+	);
+	assert.match(result.themeId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+	assert.notEqual(result.themeId, THEME_ID);
+	assert.equal(result.name, "Neu");
+	assert.equal(result.tokens.colors.primary, "#aa0000");
+	assert.equal(result.tokens.colors.surface, DEFAULT_WEB_THEME_TOKENS.colors.surface);
+	assert.deepEqual(result.tokens.text.heading, { ...DEFAULT_WEB_THEME_TOKENS.text.heading, size: 32 });
+	assert.deepEqual([result.isDefault, result.clearedDefault], [false, false]);
+	const [save] = deps.savedThemes;
+	assert.deepEqual([save.expectedUpdatedAt, save.updatedBy], [null, "Erika Muster"]);
+});
+
+await test("create_web_theme: als Standard nur mit confirm, nimmt dem bisherigen die Markierung", async () => {
+	const deps = fakeDeps({ themes: [storedTheme({ isDefault: true })] });
+	const error = failure(await call("create_web_theme", { name: "Neu", isDefault: true }, WEB, deps));
+	assert.equal(error.code, "confirm_required");
+	assert.deepEqual(deps.calls, ["roles"]);
+
+	const result = success("create_web_theme", await call("create_web_theme", { name: "Neu", isDefault: true, confirm: true }, WEB, deps));
+	assert.deepEqual([result.isDefault, result.clearedDefault], [true, true]);
+});
+
+await test("create_web_theme: ungültige Werte ergeben invalid_input, Obergrenze theme_limit_reached", async () => {
+	const deps = fakeDeps();
+	for (const tokens of [{ colors: { primary: "#fff" } }, { text: { heading: { size: 99 } } }, { fontFamily: "comic" }, { text: { body: { lineHeight: 1.234 } } }]) {
+		const error = failure(await call("create_web_theme", { name: "Neu", tokens }, WEB, deps));
+		assert.equal(error.code, "invalid_input", JSON.stringify(tokens));
+	}
+	assert.equal(failure(await call("create_web_theme", { name: "   " }, WEB, deps)).code, "invalid_input");
+	assert.equal(failure(await call("create_web_theme", { name: "x".repeat(61) }, WEB, deps)).code, "invalid_input");
+	assert.deepEqual(deps.savedThemes, []);
+
+	const full = failure(await call("create_web_theme", { name: "Neu" }, WEB, fakeDeps({ themeLimitReached: true })));
+	assert.deepEqual([full.code, full.details], ["theme_limit_reached", { max: 50 }]);
+});
+
+await test("update_web_theme: nur mit confirm, Patch ändert nur die genannten Werte", async () => {
+	const tokens = { ...defaultWebThemeTokens(), fontFamily: "serif" as const };
+	const deps = fakeDeps({ themes: [storedTheme({ tokens, isDefault: true })] });
+	const args = { themeId: THEME_ID, expectedUpdatedAt: "2026-10-01T00:00:00.000Z", tokens: { colors: { primary: "#0a0a0a" }, text: { button: { weight: 700 } } } };
+	assert.equal(failure(await call("update_web_theme", args, WEB, deps)).code, "confirm_required");
+	assert.deepEqual(deps.calls, ["roles"]);
+
+	const result = success("update_web_theme", await call("update_web_theme", { ...args, confirm: true }, WEB, deps));
+	assert.equal(result.tokens.fontFamily, "serif");
+	assert.equal(result.tokens.colors.primary, "#0a0a0a");
+	assert.equal(result.tokens.colors.background, DEFAULT_WEB_THEME_TOKENS.colors.background);
+	assert.deepEqual(result.tokens.text.button, { ...DEFAULT_WEB_THEME_TOKENS.text.button, weight: 700 });
+	assert.deepEqual([result.name, result.isDefault, result.updatedAt], ["Hausdesign", true, THEME_SAVED_AT]);
+	const [save] = deps.savedThemes;
+	assert.deepEqual([save.theme.themeId, save.theme.isDefault, save.expectedUpdatedAt], [THEME_ID, undefined, "2026-10-01T00:00:00.000Z"]);
+});
+
+await test("update_web_theme: Konflikt, unbekanntes Design, Kontrastwarnung", async () => {
+	const deps = fakeDeps({ themes: [storedTheme()] });
+	const stale = failure(await call("update_web_theme", { themeId: THEME_ID, expectedUpdatedAt: "2026-09-01T00:00:00.000Z", name: "X", confirm: true }, WEB, deps));
+	assert.equal(stale.code, "theme_conflict");
+	// Veralteter Stand: abgewiesen, ohne zu speichern
+	assert.deepEqual(deps.savedThemes, []);
+	const missing = failure(await call("update_web_theme", { themeId: OTHER_THEME_ID, expectedUpdatedAt: "x", confirm: true }, WEB, deps));
+	assert.equal(missing.code, "theme_not_found");
+
+	const result = success(
+		"update_web_theme",
+		await call("update_web_theme", { themeId: THEME_ID, expectedUpdatedAt: "2026-10-01T00:00:00.000Z", tokens: { colors: { text: "#eeeeee" } }, confirm: true }, WEB, deps)
+	);
+	assert.ok(result.contrastWarnings.some((warning: any) => warning.foreground === "text" && warning.background === "surface" && warning.ratio < warning.minimum));
+});
+
+await test("update_web_theme: paralleles Speichern eines anderen Designs ergibt theme_busy", async () => {
+	const deps = fakeDeps({ themes: [storedTheme()], themeBusy: true });
+	const busy = failure(await call("update_web_theme", { themeId: THEME_ID, expectedUpdatedAt: "2026-10-01T00:00:00.000Z", name: "X", confirm: true }, WEB, deps));
+	assert.equal(busy.code, "theme_busy");
+});
+
+await test("update_web_theme: Design ohne updatedAt mit expectedUpdatedAt null, Name nach trim geprüft", async () => {
+	const deps = fakeDeps({ themes: [storedTheme({ updatedAt: "" })] });
+	assert.equal(success("get_web_theme", await call("get_web_theme", { themeId: THEME_ID }, WEB, deps)).updatedAt, null);
+	const stale = failure(await call("update_web_theme", { themeId: THEME_ID, expectedUpdatedAt: "2026-10-01T00:00:00.000Z", name: "X", confirm: true }, WEB, deps));
+	assert.equal(stale.code, "theme_conflict");
+
+	const name = ` ${"n".repeat(60)} `;
+	const result = success("update_web_theme", await call("update_web_theme", { themeId: THEME_ID, expectedUpdatedAt: null, name, confirm: true }, WEB, deps));
+	assert.equal(result.name, "n".repeat(60));
+	assert.equal(deps.savedThemes[0].expectedUpdatedAt, "");
 });
 
 // ---------------------------------------------------------------------------
