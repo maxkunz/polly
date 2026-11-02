@@ -450,10 +450,7 @@ async function startApp() {
 
 <style scoped>
 .page-wrapper {
-  background-image:
-    radial-gradient(120% 70% at 20% 15%, rgba(20, 56, 127, 0.55) 0%, rgba(2, 27, 44, 0.9) 60%),
-    radial-gradient(90% 60% at 85% 35%, rgba(20, 56, 127, 0.45) 0%, rgba(2, 27, 44, 0.85) 55%),
-    linear-gradient(210deg, rgb(2, 27, 44) 12%, rgb(20, 56, 127) 58%, rgb(2, 27, 44) 92%);
+  background-image: var(--p-app-setup-background);
   background-attachment: fixed;
   background-size: cover;
   background-position: center;
