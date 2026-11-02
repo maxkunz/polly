@@ -25,9 +25,10 @@ import {
 	type SurveyRowView,
 } from "../amplify/functions/shared/survey_store";
 import type { SessionRecord } from "../amplify/functions/mcp/oauth_store";
+import type { GenesysRenewal } from "../amplify/functions/mcp/session";
 import type { McpTenant } from "../amplify/functions/mcp/tenant";
 import { handleMcpPost, MCP_MAX_BODY_BYTES } from "../amplify/functions/mcp/server";
-import { callTool, type McpToolContext, type McpToolDeps, type PollyRolesResult } from "../amplify/functions/mcp/tool_handlers";
+import { callTool, rolesFailureStatus, type McpToolContext, type McpToolDeps, type PollyRolesResult } from "../amplify/functions/mcp/tool_handlers";
 import {
 	buildAuthoringGuide,
 	findToolV1,
@@ -440,6 +441,114 @@ await test("Rollen: validate_survey verlangt polly_write, lesende Tools irgendei
 await test("Rollen: Fehler beim Laden ergibt upstream_error mit Status", async () => {
 	const error = failure(await call("get_authoring_guide", {}, context(), fakeDeps({ roles: { ok: false, status: 503 } })));
 	assert.deepEqual([error.code, error.details], ["upstream_error", { status: 503 }]);
+});
+
+/**
+ * Kontext mit Erneuerung wie aus `authenticateMcpCall`: `renewal` ist die Antwort, `renewed` setzt ein neues Token,
+ * `session_dead` setzt `sessionEnded`. Zählt die Erneuerungen in `renewals`.
+ */
+function renewableContext(renewal: GenesysRenewal): McpToolContext & { renewals: number } {
+	const ctx = { ...context(), renewals: 0 };
+	ctx.call = { ...ctx.call };
+	// Wie in `authenticateMcpCall` höchstens einmal pro Anfrage, weitere Aufrufe liefern dasselbe Ergebnis
+	let done = false;
+	ctx.call.renewGenesysAccess = async () => {
+		if (done) return renewal;
+		done = true;
+		ctx.renewals++;
+		if (renewal === "renewed") ctx.call.genesysAccessToken = "genesys-token-2";
+		if (renewal === "session_dead") ctx.call.sessionEnded = true;
+		return renewal;
+	};
+	return ctx;
+}
+
+/** Rollen: 401 mit dem alten Token, danach die Rollen aus `fakeDeps`. */
+function rolesRejectingOldToken(deps: FakeDeps): FakeDeps & { roleTokens: string[] } {
+	const tokens: string[] = [];
+	const pollyRoles = deps.pollyRoles;
+	deps.pollyRoles = async (ctx) => {
+		tokens.push(ctx.call.genesysAccessToken);
+		return ctx.call.genesysAccessToken === "genesys-token" ? { ok: false, status: 401 } : pollyRoles(ctx);
+	};
+	return Object.assign(deps, { roleTokens: tokens });
+}
+
+await test("Genesys-401 bei den Rollen: Token einmal erneuern und Prüfung mit dem neuen Token wiederholen", async () => {
+	const ctx = renewableContext("renewed");
+	const deps = rolesRejectingOldToken(fakeDeps());
+	const result = success("get_authoring_guide", await call("get_authoring_guide", {}, ctx, deps));
+	assert.ok(result.guide);
+	assert.equal(ctx.renewals, 1);
+	assert.deepEqual(deps.roleTokens, ["genesys-token", "genesys-token-2"]);
+	assert.equal(ctx.call.sessionEnded, undefined);
+});
+
+await test("Genesys-401 bei den Rollen: tote Genesys-Sitzung beendet die Session, kein zweiter Rollenabruf", async () => {
+	const ctx = renewableContext("session_dead");
+	const deps = rolesRejectingOldToken(fakeDeps());
+	const error = failure(await call("list_surveys", {}, ctx, deps));
+	assert.deepEqual([error.code, error.details], ["upstream_error", { status: 401 }]);
+	assert.equal(ctx.renewals, 1);
+	assert.equal(ctx.call.sessionEnded, true);
+	assert.deepEqual(deps.roleTokens, ["genesys-token"]);
+	assert.equal(deps.calls.includes("list"), false);
+});
+
+await test("Genesys-401 bei den Rollen: Refresh nicht möglich (Genesys nicht erreichbar) bleibt upstream_error", async () => {
+	const ctx = renewableContext("upstream");
+	const error = failure(await call("list_surveys", {}, ctx, rolesRejectingOldToken(fakeDeps())));
+	assert.deepEqual([error.code, error.details], ["upstream_error", { status: 401 }]);
+	assert.equal(ctx.renewals, 1);
+	assert.equal(ctx.call.sessionEnded, undefined);
+});
+
+await test("Genesys-401 im Tool (Rollen gemerkt): erneuern ohne zweiten Versuch des Tools", async () => {
+	for (const renewal of ["renewed", "session_dead"] as const) {
+		const ctx = renewableContext(renewal);
+		const deps = fakeDeps();
+		let reads = 0;
+		deps.readSurveyList = async () => {
+			reads++;
+			return { ok: false, error: { code: "upstream_error", details: { status: 401 } } };
+		};
+		const error = failure(await call("list_surveys", {}, ctx, deps));
+		assert.deepEqual([error.code, error.details], ["upstream_error", { status: 401 }]);
+		assert.equal(reads, 1);
+		assert.equal(ctx.renewals, 1);
+		assert.equal(ctx.call.sessionEnded, renewal === "session_dead" ? true : undefined);
+	}
+	// Andere Fehler von Genesys erneuern nicht
+	const ctx = renewableContext("renewed");
+	const deps = fakeDeps();
+	deps.readSurveyList = async () => ({ ok: false, error: { code: "upstream_error", details: { status: 503 } } });
+	failure(await call("list_surveys", {}, ctx, deps));
+	assert.equal(ctx.renewals, 0);
+});
+
+await test("Rollen: nur ein 401 der Person zählt als abgelehntes Token, 401 beim Projekt-Tag wird 502", () => {
+	assert.equal(rolesFailureStatus({ status: "unauthorized", httpStatus: 401 }, { ok: true }), 401);
+	assert.equal(rolesFailureStatus({ status: "unauthorized", httpStatus: 401 }, { ok: false, httpStatus: 401 }), 401);
+	assert.equal(rolesFailureStatus({ status: "error", httpStatus: 503 }, { ok: true }), 503);
+	assert.equal(rolesFailureStatus({ status: "ok" }, { ok: false, httpStatus: 401 }), 502);
+	assert.equal(rolesFailureStatus({ status: "ok" }, { ok: false, httpStatus: 429 }), 429);
+	assert.equal(rolesFailureStatus({ status: "ok" }, { ok: false }), undefined);
+	assert.equal(rolesFailureStatus({ status: "ok" }, { ok: true }), undefined);
+});
+
+await test("Genesys-401: Fehler beim Erneuern ergibt den Tool-Fehler, keine Ausnahme", async () => {
+	const ctx = renewableContext("renewed");
+	ctx.call.renewGenesysAccess = async () => {
+		throw new Error("KMS down");
+	};
+	const original = console.error;
+	console.error = () => {};
+	try {
+		const error = failure(await call("list_surveys", {}, ctx, rolesRejectingOldToken(fakeDeps())));
+		assert.deepEqual([error.code, error.details], ["upstream_error", { status: 401 }]);
+	} finally {
+		console.error = original;
+	}
 });
 
 await test("Unbekanntes Tool und list_web_themes ohne web_survey: kein Tool-Ergebnis", async () => {

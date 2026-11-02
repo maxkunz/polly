@@ -99,7 +99,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    2. Mandant per Key: `mcpEnabled`, `APPROVED`, Epoch der Session = `mcpEpoch`
    3. `__meta`-Flag `mcp` (Cache 60 s)
    4. Access-Token (`ConsistentRead`)
-   5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`.
+   5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`. Lehnt Genesys das Token während des Aufrufs vor dem gespeicherten Ablauf mit 401 ab (Abmeldung, Widerruf), wird es einmal sofort erneuert (höchstens einmal pro Anfrage). Bei der Rollenprüfung wird sie danach wiederholt, ein Tool dagegen nicht (es kann schon geschrieben haben, der Client bekommt `upstream_error` und der nächste Aufruf nutzt das neue Token). Lehnt Genesys auch den Refresh ab, wird die Session gelöscht und die Anfrage bekommt statt des Tool-Ergebnisses 401 `invalid_token`; ist Genesys beim Refresh nicht erreichbar, bleibt es bei `upstream_error`.
    6. Rate-Limit pro Session (feste Fenster pro Minute, 120; 429 mit `Retry-After`)
    7. Rolle des Tools (Abschnitt 4)
    8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**; bei der Auswertung zusätzlich Zeitraum, Filter, Anzahl der ausgegebenen Sitzungen, Folgeseite ja/nein und ob Kommentare freigegeben waren

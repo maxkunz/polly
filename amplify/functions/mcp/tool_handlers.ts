@@ -49,7 +49,7 @@ import {
   toV1ResultsSummary,
   type ResultsRange,
 } from "./results_v1";
-import type { McpCallContext } from "./session";
+import type { GenesysRenewal, McpCallContext } from "./session";
 import {
   buildAuthoringGuide,
   findToolV1,
@@ -98,6 +98,19 @@ export interface McpToolContext {
 
 /** Polly-Rollen der Person (Rollennamen ohne Projekt-Präfix) oder Fehler beim Laden. */
 export type PollyRolesResult = { ok: true; roles: ReadonlySet<string> } | { ok: false; status?: number };
+
+/**
+ * Status für `PollyRolesResult` bei Fehlern. 401 heißt nur dann „Token der Person abgelehnt“ (löst die Erneuerung aus),
+ * wenn er von den Rollen der Person kommt; ein 401 beim Projekt-Tag (Client Credentials des Mandanten) wird 502.
+ */
+export function rolesFailureStatus(
+  caller: { status: "ok" | "unauthorized" | "error"; httpStatus?: number },
+  projectTag: { ok: boolean; httpStatus?: number }
+): number | undefined {
+  if (caller.status !== "ok") return caller.httpStatus;
+  if (projectTag.ok) return undefined;
+  return projectTag.httpStatus === 401 ? 502 : projectTag.httpStatus;
+}
 
 export interface McpToolDeps {
   /** Gehaltene Polly-Rollen, höchstens 60 s gemerkt. */
@@ -552,9 +565,32 @@ const HANDLERS: Record<string, ToolHandler> = {
 
 export type CallToolOutcome = { kind: "result"; result: ToolCallResult } | { kind: "unknown_tool" };
 
-/** Rolle prüfen: `any` verlangt irgendeine Polly-Rolle. Liefert den Fehler oder `undefined`. */
+/** Genesys hat das Token der Person abgelehnt (401). */
+function isGenesysRejection(outcome: ToolOutcome): boolean {
+  return !outcome.ok && outcome.code === "upstream_error" && outcome.details?.status === 401;
+}
+
+/**
+ * Nach einem 401 von Genesys das Token einmal erneuern (`McpCallContext.renewGenesysAccess`); ohne Erneuerung
+ * (Test) oder bei Fehlern (KMS, DynamoDB) `upstream`.
+ */
+async function renewGenesysAccess(ctx: McpToolContext): Promise<GenesysRenewal> {
+  if (!ctx.call.renewGenesysAccess) return "upstream";
+  try {
+    return await ctx.call.renewGenesysAccess();
+  } catch (err: any) {
+    console.error("[mcp] Genesys renewal failed", { tenantId: ctx.call.tenant.tenantId, name: err?.name, message: err?.message });
+    return "upstream";
+  }
+}
+
+/**
+ * Rolle prüfen: `any` verlangt irgendeine Polly-Rolle. Liefert den Fehler oder `undefined`. Lehnt Genesys das Token
+ * ab, wird es einmal erneuert und die Prüfung wiederholt (nur lesend, deshalb unbedenklich).
+ */
 export async function checkToolRole(role: ToolRole, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome | undefined> {
-  const roles = await deps.pollyRoles(ctx);
+  let roles = await deps.pollyRoles(ctx);
+  if (!roles.ok && roles.status === 401 && (await renewGenesysAccess(ctx)) === "renewed") roles = await deps.pollyRoles(ctx);
   if (!roles.ok) return { ok: false, code: "upstream_error", details: roles.status !== undefined ? { status: roles.status } : {} };
   if (role === "any") {
     return roles.roles.size > 0 ? undefined : { ok: false, code: "forbidden", details: { requiredRole: "any" } };
@@ -614,6 +650,9 @@ export async function callTool(name: string, rawArgs: unknown, ctx: McpToolConte
     console.error("[mcp] tool failed", { tenantId: ctx.call.tenant.tenantId, tool: tool.name, name: err?.name, message: err?.message });
     outcome = { ok: false, code: "internal_error" };
   }
+  // 401 im Tool (Rollen noch gemerkt): kein zweiter Versuch, das Tool kann schon geschrieben haben. Erneuern, damit
+  // der nächste Aufruf wieder geht; ist die Genesys-Sitzung tot, antwortet der Endpunkt mit 401 invalid_token.
+  if (isGenesysRejection(outcome)) await renewGenesysAccess(ctx);
 
   // Die ID aus dem Ergebnis gilt vor der Eingabe: Bei create_survey/create_web_theme vergibt sie der Server, eine
   // mitgeschickte ID (von zod verworfen) darf das Audit-Log nicht auf eine fremde Umfrage bzw. ein fremdes Design lenken.

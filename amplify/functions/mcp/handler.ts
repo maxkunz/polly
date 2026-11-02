@@ -506,22 +506,26 @@ async function mcpEndpoint(ctx: RouteContext): Promise<AnyResult> {
   if (ctx.event?.requestContext?.http?.method !== "POST") return jsonResponse(405, { error: "method_not_allowed" }, { Allow: "POST" });
   const auth = await authenticateMcpCall(genesysDeps, ctx.tenant, ctx.tokenTenant, getAuthorizationToken(ctx.event), ctx.now);
   if (!auth.ok) {
-    if (auth.kind === "unauthorized") {
-      const error = auth.error ? `, error="${auth.error}"` : "";
-      return jsonResponse(401, { error: auth.error ?? "unauthorized" }, {
-        "WWW-Authenticate": `Bearer resource_metadata="${ctx.urls.resourceMetadataUrl}"${error}`,
-      });
-    }
+    if (auth.kind === "unauthorized") return mcpUnauthorized(ctx, auth.error);
     if (auth.kind === "rate_limited") {
       return jsonResponse(429, { error: "rate_limited" }, { "Retry-After": String(auth.retryAfterSeconds) });
     }
     return jsonResponse(503, { error: "temporarily_unavailable" }, { "Retry-After": "5" });
   }
-  return handleMcpPost(
+  const result = await handleMcpPost(
     ctx.event,
     { call: auth.context, credentials: ctx.credentials, features: ctx.features, now: ctx.now },
     defaultToolDeps
   );
+  // Genesys-Sitzung während des Aufrufs gestorben (Session gelöscht): 401 statt Tool-Fehler, damit der Client neu anmeldet
+  return auth.context.sessionEnded ? mcpUnauthorized(ctx, "invalid_token") : result;
+}
+
+function mcpUnauthorized(ctx: RouteContext, error: "invalid_token" | undefined): AnyResult {
+  const errorParam = error ? `, error="${error}"` : "";
+  return jsonResponse(401, { error: error ?? "unauthorized" }, {
+    "WWW-Authenticate": `Bearer resource_metadata="${ctx.urls.resourceMetadataUrl}"${errorParam}`,
+  });
 }
 
 const ROUTES: Record<string, Route> = {

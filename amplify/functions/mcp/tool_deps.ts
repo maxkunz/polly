@@ -24,7 +24,7 @@ import { findSurveysBeingDeleted, isSurveyBeingDeleted, loadSurveyAggregates } f
 import { iterateSessions, SessionReadAbortedError } from "../shared/survey_sessions";
 import { TtlCache } from "../shared/ttl_cache";
 import { loadTenantThemesOrThrow, saveWebThemes } from "../shared/web_themes_table";
-import type { McpToolDeps, PollyRolesResult } from "./tool_handlers";
+import { rolesFailureStatus, type McpToolDeps, type PollyRolesResult } from "./tool_handlers";
 
 /**
  * Standard-Abhängigkeiten der MCP-Tools (Genesys, DynamoDB). Getrennt von `tool_handlers.ts`, damit der Test
@@ -46,7 +46,7 @@ export const defaultToolDeps: McpToolDeps = {
         loadInstallationProjectTag(tenant.tenantId, ctx.credentials),
       ]);
       if (caller.status !== "ok" || !projectTag.ok) {
-        const status = caller.status !== "ok" ? caller.httpStatus : projectTag.ok ? undefined : projectTag.httpStatus;
+        const status = rolesFailureStatus(caller, projectTag);
         console.warn("[mcp] cannot load roles", { tenantId: tenant.tenantId, callerStatus: caller.status, status });
         return { value: { ok: false, ...(status !== undefined ? { status } : {}) }, ttlMs: 0 };
       }

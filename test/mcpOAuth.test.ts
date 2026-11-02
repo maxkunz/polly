@@ -43,7 +43,7 @@ import {
 	verifyAccessToken,
 	type TokenTenant,
 } from "../amplify/functions/mcp/tokens";
-import { checkSessionRate, ensureGenesysAccess, type GenesysSessionDeps } from "../amplify/functions/mcp/session";
+import { authenticateMcpCall, checkSessionRate, ensureGenesysAccess, type GenesysSessionDeps } from "../amplify/functions/mcp/session";
 import { evaluateMcpTenant, type McpTenant } from "../amplify/functions/mcp/tenant";
 
 let passed = 0;
@@ -540,6 +540,65 @@ await test("Genesys: nicht erreichbar – noch gültiges Token weiter nutzen, ab
 	// Ohne Secret kein Refresh möglich
 	const noSecret = { ...deps, clientSecret: async () => undefined };
 	assert.deepEqual(await ensureGenesysAccess(noSecret, MCP_TENANT, gone, NOW), { ok: false, reason: "session_dead" });
+});
+
+await test("Genesys: force erneuert trotz gültigem Ablauf, nutzt das abgelehnte Token nie weiter", async () => {
+	const store = new MemoryStore();
+	const valid = session();
+	await store.putSession(valid);
+	const deps = fakeDeps(store, async (_r, _c, _rt, now) => ({ ok: true, tokens: { accessToken: "access-v1", refreshToken: "refresh-v1", expiresAt: now + 3600_000 } }));
+	const renewed = await ensureGenesysAccess(deps, MCP_TENANT, valid, NOW, { force: true });
+	assert.equal(renewed.ok && renewed.accessToken, "access-v1");
+	assert.equal(deps.refreshCalls, 1);
+
+	// Genesys nicht erreichbar: das abgelehnte Token gilt nicht als „noch gültig“
+	const down = fakeDeps(store, async () => ({ ok: false, kind: "upstream" }));
+	const other = session();
+	await store.putSession(other);
+	assert.deepEqual(await ensureGenesysAccess(down, MCP_TENANT, other, NOW, { force: true }), { ok: false, reason: "upstream" });
+	const noSecret = { ...down, clientSecret: async () => undefined };
+	assert.deepEqual(await ensureGenesysAccess(noSecret, MCP_TENANT, other, NOW, { force: true }), { ok: false, reason: "session_dead" });
+});
+
+/** Geprüfter Aufruf mit gültigem Genesys-Ablauf, `refresh` bestimmt die Antwort von Genesys beim Erneuern. */
+async function authenticatedCall(refresh: GenesysSessionDeps["refresh"]) {
+	const store = new MemoryStore();
+	const { code, session: s } = await seedCode(store);
+	const redeemed = await redeem(store, code);
+	assert.ok(redeemed.ok);
+	const deps = fakeDeps(store, refresh);
+	const auth = await authenticateMcpCall(deps, MCP_TENANT, TENANT, redeemed.response.access_token, NOW + 1000);
+	assert.ok(auth.ok);
+	return { store, deps, sessionId: s.sessionId, context: auth.context };
+}
+
+await test("Genesys-401 im Aufruf: einmal erneuern, neues Token im Kontext, höchstens ein Refresh pro Anfrage", async () => {
+	const { store, deps, sessionId, context } = await authenticatedCall(async (_r, _c, _rt, now) => ({
+		ok: true,
+		tokens: { accessToken: "access-v1", refreshToken: "refresh-v1", expiresAt: now + 3600_000 },
+	}));
+	assert.equal(context.genesysAccessToken, "access-v0");
+	assert.equal(await context.renewGenesysAccess!(), "renewed");
+	assert.equal(await context.renewGenesysAccess!(), "renewed");
+	assert.equal(deps.refreshCalls, 1);
+	assert.equal(context.genesysAccessToken, "access-v1");
+	assert.equal(context.session.genesysVersion, 1);
+	assert.equal(context.sessionEnded, undefined);
+	assert.equal(store.sessions.get(sessionId)?.genesysTokensEnc, "enc:v1");
+});
+
+await test("Genesys-401 im Aufruf: Refresh mit invalid_grant löscht die Session und setzt sessionEnded", async () => {
+	const { store, sessionId, context } = await authenticatedCall(async () => ({ ok: false, kind: "invalid_grant", status: 400 }));
+	assert.equal(await context.renewGenesysAccess!(), "session_dead");
+	assert.equal(context.sessionEnded, true);
+	assert.equal(store.sessions.has(sessionId), false);
+});
+
+await test("Genesys-401 im Aufruf: Genesys beim Refresh nicht erreichbar, Session bleibt", async () => {
+	const { store, sessionId, context } = await authenticatedCall(async () => ({ ok: false, kind: "upstream" }));
+	assert.equal(await context.renewGenesysAccess!(), "upstream");
+	assert.equal(context.sessionEnded, undefined);
+	assert.equal(store.sessions.has(sessionId), true);
 });
 
 await test("Rate-Limit pro Session und Minute", async () => {
