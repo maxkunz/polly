@@ -36,11 +36,20 @@ export async function getOAuthClientWithID(clientId: string) {  //getBackendClie
 
 export async function getAllClients() {
     const { oAuthApi } = useAppStore().genesys;
-    const res = await oAuthApi.getOauthClients({
-        pageSize: 100
+    const all: any[] = [];
+    let pageNumber = 1;
+    let pageCount = 1;
+    do {
+      const res: any = await oAuthApi.getOauthClients({
+        pageSize: 100,
+        pageNumber
       })
+      all.push(...(res.entities || []));
+      pageCount = res.pageCount || 1;
+      pageNumber++;
+    } while (pageNumber <= pageCount);
 
-    return res.entities || []
+    return all
   }
 
  // inactivate OAuth:
