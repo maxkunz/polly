@@ -181,18 +181,25 @@ export const useAppStore = defineStore("app", {
 			if (this.initialized) return;
 			this.initGenesysClients();
 
-			const incomingUrl = new URL(currentUrl ?? window.location.href);
 			const rememberedUrl = sessionStorage.getItem(GENESYS_ORIGINAL_URL_KEY);
-			const urlObj = currentUrl === undefined && rememberedUrl
-				? new URL(rememberedUrl)
-				: incomingUrl;
+			let urlObj: URL;
+			try {
+				urlObj = new URL(currentUrl ?? rememberedUrl ?? window.location.href);
+				if (!urlObj.searchParams.get("gcHostOrigin")?.trim() || !urlObj.searchParams.get("client_id")?.trim()) {
+					throw new Error("Missing required Genesys launch parameters.");
+				}
+				this.genesys.region = getGenesysRegion(urlObj.toString());
+			} catch {
+				const error = new Error("Missing or invalid Genesys launch parameters (gcHostOrigin, client_id).");
+				error.name = "InvalidLaunchParametersError";
+				throw error;
+			}
 			urlObj.hash = "";
 			// OAuth-Antwortparameter gehören nicht zur registrierten Redirect-URI.
 			for (const key of ["code", "state", "error", "error_description"]) {
 				if (urlObj.searchParams.has(key)) urlObj.searchParams.delete(key);
 			}
 			const params = urlObj.searchParams;
-			this.genesys.region = getGenesysRegion(urlObj.toString());
 			this.clientId = params.get("client_id");
 			// Ein expliziter Einstieg ohne Tabelle muss auch nach einer Installation ins Setup führen.
 			this.datatableId = params.get("datatable_id");

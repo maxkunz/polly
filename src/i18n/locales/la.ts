@@ -531,6 +531,16 @@ export const la: MessageSchema = {
 	},
 
 	app: {
+		initialization: {
+			loading: "Polly incipit …",
+			parametersTitle: "Polly aperiri non potest",
+			parametersMessage: "Parametri initiales desunt vel invalidi sunt. Polly iterum per Genesys Cloud aperi.",
+			sessionTitle: "Accessus iam non valet",
+			sessionMessage: "Sessio tua exspiravit aut accessus confirmari non potuit. Polly iterum incipe ut denuo accedas.",
+			failedTitle: "Polly incipere non potuit",
+			failedMessage: "Error in initio accidit. Iterum tempta. Si error manet, administratorem roga ut conformationem et facultates inspiciat.",
+			restart: "Polly iterum incipe"
+		},
 		initErrorSummary: "Error",
 		initErrorFallback: "Initium defecit.",
 		sidebarCollapse: "Latus complica",
