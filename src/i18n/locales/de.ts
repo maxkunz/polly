@@ -532,6 +532,16 @@ export const de = {
 	},
 
 	app: {
+		initialization: {
+			loading: "Polly wird gestartet …",
+			parametersTitle: "Polly kann nicht geöffnet werden",
+			parametersMessage: "Der Aufruf ist unvollständig oder enthält ungültige Startparameter. Bitte öffne Polly erneut über Genesys Cloud.",
+			sessionTitle: "Anmeldung nicht mehr gültig",
+			sessionMessage: "Deine Sitzung ist abgelaufen oder die Anmeldung konnte nicht bestätigt werden. Starte Polly erneut, um dich wieder anzumelden.",
+			failedTitle: "Polly konnte nicht gestartet werden",
+			failedMessage: "Beim Start ist ein Fehler aufgetreten. Bitte versuche es erneut. Falls der Fehler bestehen bleibt, wende dich an deine Administration, um die Konfiguration und Berechtigungen prüfen zu lassen.",
+			restart: "Polly erneut starten"
+		},
 		initErrorSummary: "Fehler",
 		initErrorFallback: "Initialisierung fehlgeschlagen.",
 		sidebarCollapse: "Seitenleiste einklappen",

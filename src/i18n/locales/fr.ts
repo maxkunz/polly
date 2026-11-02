@@ -534,6 +534,16 @@ export const fr: MessageSchema = {
 	},
 
 	app: {
+		initialization: {
+			loading: "Démarrage de Polly …",
+			parametersTitle: "Impossible d’ouvrir Polly",
+			parametersMessage: "L’URL de lancement est incomplète ou contient des paramètres invalides. Veuillez rouvrir Polly depuis Genesys Cloud.",
+			sessionTitle: "La connexion n’est plus valide",
+			sessionMessage: "Votre session a expiré ou votre connexion n’a pas pu être vérifiée. Redémarrez Polly pour vous reconnecter.",
+			failedTitle: "Impossible de démarrer Polly",
+			failedMessage: "Une erreur s’est produite au démarrage. Veuillez réessayer. Si le problème persiste, contactez votre administrateur pour vérifier la configuration et les autorisations.",
+			restart: "Redémarrer Polly"
+		},
 		initErrorSummary: "Erreur",
 		initErrorFallback: "Échec de l'initialisation.",
 		sidebarCollapse: "Réduire la barre latérale",

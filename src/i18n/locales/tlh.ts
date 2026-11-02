@@ -535,6 +535,16 @@ export const tlh: MessageSchema = {
 	},
 
 	app: {
+		initialization: {
+			loading: "Polly taghmoHlu’ …",
+			parametersTitle: "Polly poSmoHlaHbe’lu’",
+			parametersMessage: "tagh De’ Hutlh pagh muj. Genesys Cloud Dalo’taHvIS Polly yIpoSmoHqa’.",
+			sessionTitle: "’elmeH mIw Qapbe’",
+			sessionMessage: "rIn Qu’lIj pagh ’elmeH mIw ’olbe’lu’. bI’elqa’meH Polly yItaghqa’.",
+			failedTitle: "Polly taghmoHlaHbe’lu’",
+			failedMessage: "taghmoHlu’DI’ Qagh tu’lu’. yInIDqa’. Qagh taHchugh, SeHwI’lIj yIrI’. De’ chaw’mey je yInuDmoH.",
+			restart: "Polly yItaghqa’"
+		},
 		initErrorSummary: "Qagh",
 		initErrorFallback: "taghmoHlu'DI' luj.",
 		sidebarCollapse: "retlh nav yISo'",
