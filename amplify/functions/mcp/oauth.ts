@@ -6,7 +6,7 @@ import { buildGenesysRedirectUri, buildMcpUrl } from "../shared/mcp_config";
  * Hashes, PKCE, Metadaten, Prüfung von DCR und Autorisierungsanfrage. Ablauf: `documentation/polly_mcp.md`, Abschnitt 3.
  */
 
-export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
+export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 8;
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 /** Höchstdauer einer Session ab Anmeldung; Refresh-Tokens reichen nie darüber hinaus. */
 export const SESSION_MAX_SECONDS = 30 * 24 * 60 * 60;
