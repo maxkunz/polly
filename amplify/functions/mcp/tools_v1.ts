@@ -20,6 +20,7 @@ import {
   surveyLockExpiresAtMs,
   type SurveyLockData,
 } from "../../../src/domain/survey/surveyLock";
+import type { SurveyRuleCode, SurveyRuleLabel } from "../../../src/domain/survey/surveyRules";
 import type { SurveyListItem } from "../../../src/domain/survey/surveyRow";
 import type { Survey, SurveyQuestion } from "../../../src/domain/survey/surveyTypes";
 import {
@@ -86,9 +87,10 @@ const ERROR_MESSAGES: Record<McpToolErrorCode, string> = {
   forbidden: "Your Polly role does not allow this tool. Do not retry; ask an administrator for the role in details.requiredRole.",
   not_found: "Survey not found (unknown ID or being deleted).",
   invalid_input: "The arguments do not match the tool's input schema. See details.issues.",
-  invalid_id: "An ID is not a UUID or is used twice. Omit IDs of new elements; the server assigns them.",
-  validation_failed: "The survey violates the authoring rules. Nothing was written. See details.errors and get_authoring_guide.",
-  theme_unknown: "web_theme_id is not a web design of this installation. Use list_web_themes.",
+  invalid_id: "An ID is not a UUID or is used twice. Omit IDs of new elements; the server assigns them. Keep the IDs of existing questions and options.",
+  validation_failed:
+    "The survey violates the authoring rules. Nothing was written. Read details.errors[].message and, for flow errors, details.translation.message; see get_authoring_guide.",
+  theme_unknown: "web_theme_id is not a web design of this installation. Use a themeId from list_web_themes or omit the field.",
   survey_locked: "Someone else is editing this survey. Try again after details.expiresAt.",
   lock_lost: "You no longer hold the edit lock (it was taken over in the app). Reload the survey before saving again.",
   draft_conflict: "The draft version changed in the meantime. Reload the survey (details.current) and apply your changes again.",
@@ -469,6 +471,8 @@ const lockOutput = z.object({
 
 const issueOutput = z.object({
   code: z.string(),
+  /** Satz für das Modell (Englisch), ergänzt `code` und `params`. */
+  message: z.string(),
   field: z.string(),
   params: z.record(z.string(), z.unknown()),
   questionId: z.string().optional(),
@@ -478,6 +482,7 @@ const warningOutput = z.object({ code: z.string(), details: z.record(z.string(),
 
 const translationOutput = z.object({
   key: z.string(),
+  message: z.string(),
   params: z.record(z.string(), z.unknown()),
   questionId: z.string().optional(),
 });
@@ -659,11 +664,105 @@ function toV1Warning(warning: SurveyWarning): z.infer<typeof warningOutput> {
   return { code: warning.code, ...(warning.details ? { details: { ...warning.details } } : {}) };
 }
 
+type MessageParams = Record<string, unknown>;
+
+/** Höchstlänge eines Parameters im Satz; Werte aus der Eingabe stehen ungekürzt nur in `params`. */
+const MESSAGE_PARAM_MAX_CHARS = 80;
+
+/** Parameter für den Satz, gekürzt; fehlt einer, steht `?` da statt `undefined`. */
+const param = (params: MessageParams, key: string): string => {
+  const value = String(params[key] ?? "?");
+  return value.length > MESSAGE_PARAM_MAX_CHARS ? `${value.slice(0, MESSAGE_PARAM_MAX_CHARS)}…` : value;
+};
+
+/** Bezeichnung des Feldes aus `params.label` (TTS-Limit, Skalen-Labels). */
+const LABEL_TEXTS: Record<SurveyRuleLabel, string> = {
+  greeting: "greeting message",
+  closing: "closing message",
+  title: "question title",
+  reprompt: "reprompt message",
+  minLabel: "min_label",
+  maxLabel: "max_label",
+};
+
+const labelText = (params: MessageParams): string => LABEL_TEXTS[param(params, "label") as SurveyRuleLabel] ?? param(params, "label");
+
+/**
+ * Sätze für die Regelcodes aus `surveyRules.ts`: `code` und `params` bleiben maßgeblich, der Satz erklärt sie dem
+ * Modell, damit es die Eingabe gezielt korrigiert. Über den Typ `SurveyRuleCode` fällt ein neuer Regelcode ohne
+ * Satz schon im Typecheck auf.
+ */
+const ISSUE_MESSAGES: Record<SurveyRuleCode, (params: MessageParams) => string> = {
+  surveyTitleRequired: () => "The survey title must not be empty.",
+  surveyNameRequired: () => "The survey name must not be empty.",
+  ttsTextTooLong: (p) =>
+    `The ${labelText(p)} is too long (${param(p, "length")} of at most ${param(p, "max")} characters). It is read aloud by text-to-speech: shorten it.`,
+  baseUrlTokenCount: (p) => `base_url may contain the placeholder ${param(p, "placeholder")} at most once.`,
+  baseUrlInvalid: (p) => `base_url must be an absolute https URL, for example https://www.example.com/survey/${param(p, "placeholder")}.`,
+  baseUrlTooLong: (p) => `base_url must not be longer than ${param(p, "max")} characters.`,
+  languageInvalid: () => `language must be one of: ${SURVEY_LANGUAGES.join(", ")}.`,
+  webThemeInvalid: () => "web_theme_id is not a valid web design.",
+  surveyMinQuestions: () => "A survey needs at least 1 question.",
+  surveyMaxQuestions: (p) =>
+    `A survey may have at most ${param(p, "max")} questions including follow-up questions; this one has ${param(p, "count")}. Remove questions.`,
+  questionTitleRequired: () => "The question title must not be empty.",
+  questionNameRequired: () => "The question name must not be empty.",
+  scaleLabelTooLong: (p) => `The ${labelText(p)} is too long (at most ${param(p, "max")} characters).`,
+  ratingOptionsInvalid: () => "A rating question needs options with min_value and max_value (numbers).",
+  ratingMinRange: (p) => `options.min_value must be between ${param(p, "min")} and ${param(p, "max")}.`,
+  ratingMaxRange: (p) => `options.max_value must be between ${param(p, "min")} and ${param(p, "max")}.`,
+  ratingMinLessThanMax: () => "options.min_value must be smaller than options.max_value.",
+  choiceOptionsInvalid: () => "A choice question needs options.labels, a list of objects with a label.",
+  choiceMinOptions: (p) => `A choice question needs at least ${param(p, "min")} options (options.labels).`,
+  choiceMaxOptions: (p) => `A choice question may have at most ${param(p, "max")} options (options.labels). Remove options or split the question.`,
+  choiceOptionEmpty: (p) => `Option ${param(p, "number")} of the choice question has an empty label.`,
+  choiceOptionDuplicate: (p) =>
+    `Option ${param(p, "number")} overlaps with option ${param(p, "otherNumber")} (same label or synonym). Make them distinct.`,
+  followUpsNotAllowed: () => "Questions of type comment cannot have follow-up questions. Remove follow_ups or use another type.",
+  followUpMissing: () => "A follow-up entry has no question. Add the question or remove the entry.",
+  followUpOperatorDuplicate: (p) =>
+    `The operator "${param(p, "operator")}" is already used by follow-up ${param(p, "number")}. Each operator may be used once per question.`,
+  followUpValueRequired: () => "A follow-up condition needs a valid value.",
+  followUpValueDuplicate: (p) => `This condition value is already used by follow-up ${param(p, "number")}. Each answer value may have one follow-up.`,
+  followUpsTooDeep: () => "Follow-up questions cannot have follow-up questions of their own.",
+};
+
+/** Sätze für `translation.key` (Fehler des Translator-Trockenlaufs). */
+const TRANSLATION_MESSAGES: Record<string, (params: MessageParams) => string> = {
+  yesNoInvalidValue: (p) => `Invalid follow-up condition value for a yes_no question: ${param(p, "value")}. Use true or false.`,
+  equalsOnly: (p) => `Questions of type ${param(p, "type")} only allow the operator "equals" in follow-up conditions.`,
+  duplicateYesNo: (p) => `Several follow-ups for the condition "${param(p, "value")}". Keep one follow-up per condition and remove the others.`,
+  choiceOptionsMissing: () => "A choice question needs options.labels.",
+  unknownLabelId: (p) => `A follow-up condition refers to the unknown option "${param(p, "labelId")}". Use the id of an option of the same question.`,
+  duplicateChoice: (p) => `Several follow-ups for the same option "${param(p, "labelId")}". Keep one follow-up per option and remove the others.`,
+  ratingOptionsMissing: () => "A rating question needs options.min_value and options.max_value.",
+  duplicateOperator: (p) =>
+    `The operator "${param(p, "operator")}" is used by several follow-ups of the same question. Keep one follow-up per operator and remove the others.`,
+  valueNotNumeric: (p) => `The condition value "${param(p, "value")}" is not a number.`,
+  commentNoFollowUps: () => "Questions of type comment cannot have follow-up questions.",
+  unknownType: (p) => `Unknown question type "${param(p, "type")}".`,
+  noQuestions: () => "The survey has no questions.",
+  emptyDraft: () => "The draft is empty.",
+  invalidJson: (p) => `The draft could not be read as JSON: ${param(p, "error")}`,
+};
+
+/** Satz zu einem Regelcode; unbekannte Codes bleiben als Code stehen. */
+export function issueMessage(code: string, params: MessageParams = {}): string {
+  return ISSUE_MESSAGES[code as SurveyRuleCode]?.(params) ?? code;
+}
+
+/** Satz zu einem Translator-Schlüssel; unbekannte Schlüssel bleiben als Schlüssel stehen. */
+export function translationMessage(key: string, params: MessageParams = {}): string {
+  return TRANSLATION_MESSAGES[key]?.(params) ?? key;
+}
+
 function toV1Issue(issue: Record<string, any>): z.infer<typeof issueOutput> {
+  const params = { ...(issue.params ?? {}) };
   return {
     code: String(issue.code),
+    message: issueMessage(String(issue.code), params),
     field: String(issue.field ?? ""),
-    params: { ...(issue.params ?? {}) },
+    params,
     ...(typeof issue.questionId === "string" ? { questionId: issue.questionId } : {}),
   };
 }
@@ -684,6 +783,7 @@ function toV1Validation(result: PrepareDraftResult | DeployCheckResult): z.infer
         ? {
             translation: {
               key: String(translation.key),
+              message: translationMessage(String(translation.key), translation.params ?? {}),
               params: { ...(translation.params ?? {}) },
               ...(typeof translation.questionId === "string" ? { questionId: translation.questionId } : {}),
             },
@@ -693,12 +793,13 @@ function toV1Validation(result: PrepareDraftResult | DeployCheckResult): z.infer
     };
   }
   if (code === "invalid_id") {
-    return { valid: false, errors: [{ code, field: String(details.path ?? ""), params: { reason: details.reason } }], warnings: [] };
+    const message = `The ID is ${details.reason === "duplicate" ? "used more than once" : "not a UUID"}. ${ERROR_MESSAGES.invalid_id}`;
+    return { valid: false, errors: [{ code, message, field: String(details.path ?? ""), params: { reason: details.reason } }], warnings: [] };
   }
   if (code === "theme_unknown") {
-    return { valid: false, errors: [{ code, field: "web_theme_id", params: { themeId: details.themeId } }], warnings: [] };
+    return { valid: false, errors: [{ code, message: ERROR_MESSAGES.theme_unknown, field: "web_theme_id", params: { themeId: details.themeId } }], warnings: [] };
   }
-  return { valid: false, errors: [{ code, field: "", params: { ...details } }], warnings: [] };
+  return { valid: false, errors: [{ code, message: ERROR_MESSAGES[code], field: "", params: { ...details } }], warnings: [] };
 }
 
 /** Ausgabe von `validate_survey`. */
@@ -1107,7 +1208,7 @@ function guideText(webSurvey: boolean): string {
   } else {
     lines.push("", "Web surveys are not enabled for this installation: web fields (`base_url`, `language`, `web_theme_id`) are reset when saving.");
   }
-  lines.push("", "## Errors", "Tool errors are JSON `{ code, message, details }`. `validation_failed` lists rule codes with raw parameters in `details.errors`.");
+  lines.push("", "## Errors", "Tool errors are JSON `{ code, message, details }`. `validation_failed` lists rule codes with raw parameters and an explanatory `message` in `details.errors`; flow translation errors are in `details.translation` (`key`, `message`, `params`). `validate_survey` returns `errors` and `translation` directly.");
   return lines.join("\n");
 }
 
@@ -1165,6 +1266,14 @@ const WRITE_IDEMPOTENT = { ...WRITE, idempotentHint: true } as const;
 /** Ändert, was Anrufende hören bzw. Eingeladene sehen; verlangt `confirm: true`. */
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 
+/**
+ * Kernregeln für die Beschreibung von `create_survey` (Zahlen aus den Konstanten, damit sie nicht abweichen);
+ * `validate_survey` und `save_draft` verweisen darauf, damit `tools/list` den Absatz nur einmal enthält.
+ */
+const SURVEY_LIMITS_HINT = `Limits: ${CHOICE_MIN_OPTIONS} to ${CHOICE_MAX_OPTIONS} options per choice question, at most ${SURVEY_MAX_QUESTIONS} questions including follow-ups, rating scale ${RATING_SCALE_MIN} to ${RATING_SCALE_MAX}, spoken texts (greeting, closing, question titles, reprompts) at most ${TTS_TEXT_MAX_CHARS} characters. Call get_authoring_guide first. On an error read message, details.errors[].message and details.translation.message, change the survey accordingly and never repeat the same call unchanged.`;
+const SURVEY_LIMITS_REF =
+  "The limits and error handling of create_survey apply: read errors[].message and translation.message, change the survey accordingly and never repeat the same call unchanged.";
+
 export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   {
     name: "get_authoring_guide",
@@ -1217,8 +1326,7 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   {
     name: "validate_survey",
     title: "Validate survey",
-    description:
-      "Dry run of the server-side validation for a survey draft (rules, flow translation, size). Writes nothing. Pass surveyId to validate changes to an existing survey.",
+    description: `Dry run of the server-side validation for a survey draft (rules, flow translation, size). Writes nothing. Pass surveyId to validate changes to an existing survey. ${SURVEY_LIMITS_REF}`,
     role: "write",
     input: validateSurveyInput,
     output: validateSurveyOutput,
@@ -1227,8 +1335,7 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   {
     name: "create_survey",
     title: "Create survey",
-    description:
-      "Creates a new survey from a complete draft. The server assigns survey ID, question/option IDs and technical names. Nothing is written if the validation fails.",
+    description: `Creates a new survey from a complete draft. The server assigns survey ID, question/option IDs and technical names. Nothing is written if the validation fails. ${SURVEY_LIMITS_HINT}`,
     role: "write",
     input: createSurveyInput,
     output: createSurveyOutput,
@@ -1246,8 +1353,7 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   {
     name: "save_draft",
     title: "Save draft",
-    description:
-      "Saves the complete draft of a survey you hold the edit lock for (begin_edit). expectedDraftVersion must match the stored draft. Validates like validate_survey; nothing is written on errors. Extends the lock, or releases it with release: true.",
+    description: `Saves the complete draft of a survey you hold the edit lock for (begin_edit). expectedDraftVersion must match the stored draft. Validates like validate_survey; nothing is written on errors. Extends the lock, or releases it with release: true. ${SURVEY_LIMITS_REF}`,
     role: "write",
     input: saveDraftInput,
     output: saveDraftOutput,

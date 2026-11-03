@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { translateSurveyForFlow } from "../src/domain/survey/flowTranslator";
 import type { Survey } from "../src/domain/survey/surveyTypes";
 import { DEFAULT_WEB_THEME_TOKENS, defaultWebThemeTokens, type WebTheme } from "../src/domain/webTheme/webTheme";
@@ -32,6 +33,8 @@ import { callTool, rolesFailureStatus, type McpToolContext, type McpToolDeps, ty
 import {
 	buildAuthoringGuide,
 	findToolV1,
+	issueMessage,
+	translationMessage,
 	listToolsV1,
 	surveyInputSchema,
 	toSurveyInput,
@@ -742,7 +745,8 @@ await test("validate_survey: Web-Felder ohne web_survey zurückgesetzt, mit web_
 	assert.deepEqual([off.valid, off.warnings.map((warning: any) => warning.code)], [true, ["web_settings_reset"]]);
 
 	const unknown = success("validate_survey", await call("validate_survey", { survey }, context({ web_survey: true }), fakeDeps({ themes: [] })));
-	assert.deepEqual(unknown.errors, [{ code: "theme_unknown", field: "web_theme_id", params: { themeId: THEME_ID } }]);
+	assert.deepEqual(unknown.errors.map((error: any) => [error.code, error.field, error.params]), [["theme_unknown", "web_theme_id", { themeId: THEME_ID }]]);
+	assert.match(unknown.errors[0].message, /list_web_themes/);
 });
 
 await test("validate_survey: gegen bestehende Umfrage behalten gespeicherte Namen, doppelte IDs ergeben invalid_id", async () => {
@@ -758,7 +762,9 @@ await test("validate_survey: gegen bestehende Umfrage behalten gespeicherte Name
 
 	const duplicate = { title: "Doppelt", questions: [{ id: SURVEY_B, type: "comment", title: "A" }, { id: SURVEY_B, type: "comment", title: "B" }] };
 	const invalid = success("validate_survey", await call("validate_survey", { survey: duplicate }, context(), deps));
-	assert.deepEqual(invalid.errors, [{ code: "invalid_id", field: "questions[1].id", params: { reason: "duplicate" } }]);
+	assert.deepEqual(invalid.errors.map((error: any) => [error.code, error.field, error.params]), [["invalid_id", "questions[1].id", { reason: "duplicate" }]]);
+	assert.match(invalid.errors[0].message, /more than once/);
+	assert.match(invalid.errors[0].message, /Keep the IDs of existing questions/);
 
 	const missing = failure(await call("validate_survey", { survey: duplicate, surveyId: SURVEY_C }, context(), deps));
 	assert.equal(missing.code, "not_found");
@@ -1606,6 +1612,42 @@ await test("HTTP: zu großer Body 413, ohne passenden Accept-Header 406", async 
 		fakeDeps()
 	);
 	assert.equal(notAcceptable.statusCode, 406);
+});
+
+await test("Fehlertexte: jeder Translator-Schlüssel hat einen Satz, Grenzen stehen im Satz und in den Tool-Beschreibungen", async () => {
+	// Regelcodes prüft der Typecheck (ISSUE_MESSAGES ist ein Record<SurveyRuleCode, …>), Translator-Schlüssel sind nur Strings
+	const translator = readFileSync(new URL("../src/domain/survey/flowTranslator.ts", import.meta.url), "utf8");
+	const keys = [...translator.matchAll(/new FlowTranslationError\(\s*"(\w+)"/g)].map((match) => match[1]);
+	assert.ok(keys.length >= 10, `Translator-Schlüssel gefunden: ${keys.length}`);
+	for (const key of new Set(keys)) {
+		const message = translationMessage(key, {});
+		assert.notEqual(message, key, `Satz fehlt für ${key}`);
+		assert.ok(!message.includes("undefined"), key);
+	}
+	assert.equal(issueMessage("gibt_es_nicht"), "gibt_es_nicht");
+	assert.ok(!issueMessage("ttsTextTooLong", { label: "greeting", max: 3000 }).includes("undefined"));
+
+	// Werte aus der Eingabe stehen im Satz gekürzt, in params vollständig
+	const long = translationMessage("valueNotNumeric", { value: "x".repeat(5000) });
+	assert.ok(long.length < 200, `Satzlänge ${long.length}`);
+
+	// 6 Optionen: Satz nennt die Grenze, Code und Parameter bleiben
+	const survey = {
+		title: "Mittag",
+		questions: [{ type: "choice", title: "Getränk?", options: { labels: ["Wasser", "Tee", "Kaffee", "Soda", "Wein", "Bier"].map((label) => ({ label })) } }],
+	};
+	const result = success("validate_survey", await call("validate_survey", { survey }));
+	assert.deepEqual(result.errors.map((error: any) => [error.code, error.params]), [["choiceMaxOptions", { max: 5 }]]);
+	assert.match(result.errors[0].message, /at most 5 options/);
+
+	const createDescription = findToolV1("create_survey")!.description;
+	assert.match(createDescription, /2 to 5 options per choice question/);
+	assert.match(createDescription, /at most 20 questions/);
+	for (const name of ["validate_survey", "save_draft"]) {
+		const description = findToolV1(name)!.description;
+		assert.match(description, /limits and error handling of create_survey/, name);
+		assert.doesNotMatch(description, /options per choice question/, name);
+	}
 });
 
 console.log(`${passed} Tests bestanden`);
