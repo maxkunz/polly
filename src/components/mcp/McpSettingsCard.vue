@@ -97,11 +97,39 @@ async function toggleComments(value: boolean): Promise<void> {
 
 async function copyUrl(): Promise<void> {
 	if (!settings.value?.mcpUrl) return;
+	const url = settings.value.mcpUrl;
+	let copied = false;
 	try {
-		await navigator.clipboard.writeText(settings.value.mcpUrl);
-		toast.add({ severity: "success", summary: t("mcp.url.copied"), life: 2000 });
+		await navigator.clipboard.writeText(url);
+		copied = true;
 	} catch {
-		// Zwischenablage nicht erlaubt: Die URL steht im Feld und lässt sich markieren
+		// Clipboard-API gesperrt (Genesys bettet die App per iframe ohne clipboard-write ein)
+		copied = copyWithSelection(url);
+	}
+	if (copied) {
+		toast.add({ severity: "success", summary: t("mcp.url.copied"), life: 2000 });
+		return;
+	}
+	// Auch das ist gesperrt: URL im Feld markieren, dann genügt Strg/Cmd+C
+	const input = document.getElementById(urlInputId) as HTMLInputElement | null;
+	input?.focus();
+	input?.select();
+}
+
+function copyWithSelection(text: string): boolean {
+	const area = document.createElement("textarea");
+	area.value = text;
+	area.setAttribute("readonly", "");
+	area.style.position = "fixed";
+	area.style.opacity = "0";
+	document.body.appendChild(area);
+	area.select();
+	try {
+		return document.execCommand("copy");
+	} catch {
+		return false;
+	} finally {
+		document.body.removeChild(area);
 	}
 }
 </script>
