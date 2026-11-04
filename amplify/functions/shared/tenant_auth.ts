@@ -287,7 +287,13 @@ export async function resolveTenantFromGenesysToken(
     console.warn("[tenant_auth] Unsupported Genesys region", { header: event?.headers?.["x-genesys-region"] });
     return { error: "Unsupported Genesys region" };
   }
-  console.log("[tenant_auth] Validating Genesys token", { region });
+  // Diagnose: kommt der Region-Header an und in welcher Schreibweise (ohne Header-Werte außer der Region)
+  const headers = event?.headers ?? {};
+  console.log("[tenant_auth] Validating Genesys token", {
+    region,
+    regionHeader: headers["x-genesys-region"] ?? null,
+    regionHeaderKeys: Object.keys(headers).filter((key) => key.toLowerCase().includes("region")),
+  });
   const validation = await validateGenesysToken(region, token);
   if (validation.error) {
     console.warn("[tenant_auth] Genesys validation error", { error: validation.error });
