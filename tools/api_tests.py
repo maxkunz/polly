@@ -136,7 +136,7 @@ class PollyApi(HttpClient):
         """Header für Aufrufe mit Genesys-Bearer (Default: GENESYS_TOKEN)."""
         return {
             "Authorization": f"Bearer {token if token is not None else self.token}",
-            "x-genesys-region": self.region,
+            "X-gEnesYs-reGioN": self.region, # Mixed case Schreibweise ist Absicht um Fehlertoleranz zu testen
             "Content-Type": "application/json",
         }
 
