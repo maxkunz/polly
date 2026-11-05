@@ -60,12 +60,22 @@ const ENV_GENESYS_REGION = normalizeGenesysRegion(process.env.GENESYS_REGION);
 export const DEFAULT_GENESYS_REGION = isGenesysRegion(ENV_GENESYS_REGION) ? ENV_GENESYS_REGION : "mypurecloud.de";
 
 /**
+ * Header ohne Rücksicht auf die Schreibweise. HttpApi (v2) liefert Header kleingeschrieben,
+ * REST-API (v1) und manche Proxys in der Schreibweise des Clients (z. B. X-Genesys-Region).
+ */
+function getHeader(event: AnyApiGwEvent, name: string): unknown {
+  const headers = event?.headers ?? {};
+  if (name in headers) return headers[name];
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === name);
+  return key === undefined ? undefined : headers[key];
+}
+
+/**
  * Region aus dem Header x-genesys-region (Fallback DEFAULT_GENESYS_REGION, wenn leer).
  * undefined, wenn der Header keine bekannte Genesys-Region enthält.
  */
 export function getGenesysRegion(event: AnyApiGwEvent): string | undefined {
-  const headers = event?.headers ?? {};
-  const region = normalizeGenesysRegion(headers["x-genesys-region"]);
+  const region = normalizeGenesysRegion(getHeader(event, "x-genesys-region"));
   if (!region) return DEFAULT_GENESYS_REGION;
   return isGenesysRegion(region) ? region : undefined;
 }
@@ -284,10 +294,16 @@ export async function resolveTenantFromGenesysToken(
 
   const region = getGenesysRegion(event);
   if (!region) {
-    console.warn("[tenant_auth] Unsupported Genesys region", { header: event?.headers?.["x-genesys-region"] });
+    console.warn("[tenant_auth] Unsupported Genesys region", { header: getHeader(event, "x-genesys-region") });
     return { error: "Unsupported Genesys region" };
   }
-  console.log("[tenant_auth] Validating Genesys token", { region });
+  // Diagnose: kommt der Region-Header an und in welcher Schreibweise (ohne Header-Werte außer der Region)
+  const headers = event?.headers ?? {};
+  console.log("[tenant_auth] Validating Genesys token", {
+    region,
+    regionHeader: getHeader(event, "x-genesys-region") ?? null,
+    regionHeaderKeys: Object.keys(headers).filter((key) => key.toLowerCase().includes("region")),
+  });
   const validation = await validateGenesysToken(region, token);
   if (validation.error) {
     console.warn("[tenant_auth] Genesys validation error", { error: validation.error });

@@ -40,6 +40,9 @@ await test("getGenesysRegion: Header, Default, ungültiger Header", () => {
 	assert.equal(getGenesysRegion({ headers: {} }), DEFAULT_GENESYS_REGION);
 	assert.equal(getGenesysRegion({ headers: { "x-genesys-region": "  " } }), DEFAULT_GENESYS_REGION);
 	assert.equal(getGenesysRegion({ headers: { "x-genesys-region": "angreifer.example" } }), undefined);
+	// REST-API (v1) und Proxys liefern Header in der Schreibweise des Clients
+	assert.equal(getGenesysRegion({ headers: { "X-Genesys-Region": "edee1.eusc-pure.cloud" } }), "edee1.eusc-pure.cloud");
+	assert.equal(getGenesysRegion({ headers: { "X-genesys-region": "angreifer.example" } }), undefined);
 });
 
 await test("Unbekannte Region wird abgelehnt, ohne fremden Host aufzurufen", async () => {
