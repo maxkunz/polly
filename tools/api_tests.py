@@ -14,8 +14,9 @@ Verwendung:
   python3 tools/api_tests.py [Optionen]
 
 Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
-  GENESYS_TOKEN           Bearer-Token (Genesys-Portal, Dev-Tools). Ohne Token laufen nur die
-                          öffentlichen /web-survey-Fälle, Exit-Code ist dann 1.
+  GENESYS_TOKEN           Bearer-Token der Polly-App (Dev-Tools, Polly-iframe; nicht das des Portals).
+                          Mit --datatable-id prüft [G3], ob es vom Frontend-Client der App stammt.
+                          Ohne Token laufen nur die öffentlichen /web-survey-Fälle, Exit-Code ist dann 1.
   GENESYS_TOKEN_NO_DEPLOY optional: Token eines Users OHNE Rolle polly_deploy (403-Fall)
   API_URL                 Pflicht: Basis-URL inkl. Präfix, z. B. https://<app>.amplifyapp.com/api
                           (ohne API_URL bricht das Skript ab)
@@ -277,7 +278,58 @@ def check_genesys_token(suite: Suite, cfg: argparse.Namespace, ssl_context: Opti
     body = res.json() if res is not None and res.status == 200 else None
     if isinstance(body, dict) and body.get("name"):
         print(f"Angemeldet als {body['name']}")
-    return res is not None and res.status == 200 and isinstance(body, dict) and bool(body.get("id"))
+    if not (res is not None and res.status == 200 and isinstance(body, dict) and body.get("id")):
+        return False
+    return check_token_client(suite, cfg, genesys)
+
+
+def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClient) -> bool:
+    """Prüft, ob GENESYS_TOKEN vom Frontend-OAuth-Client der Polly-App stammt (nicht vom Genesys-Portal).
+
+    Das Backend nimmt die Client-ID des Tokens als tenantId; ein Token aus dem Portal liefert sonst bei
+    fast allen Fällen 401 "Unknown tenantId". Vergleich gegen setup.oauthFrontend.id in __meta (braucht
+    --datatable-id), ohne sie wird nur der Client ausgegeben."""
+    auth = {"Authorization": f"Bearer {cfg.token}"}
+    res = suite.case("[G2] GET /api/v2/tokens/me (OAuth-Client des Tokens)",
+                     lambda: genesys.request("GET", "/api/v2/tokens/me", headers=auth), 200)
+    body = res.json() if res is not None and res.status == 200 else None
+    client = body.get("OAuthClient") if isinstance(body, dict) else None
+    client_id = client.get("id", "") if isinstance(client, dict) else ""
+    if not client_id:
+        return False
+    print(f"Token von OAuth-Client {client.get('name', '?')!r} ({client_id})")
+
+    if not cfg.datatable_id:
+        suite.skip("[G3]", "DATATABLE_ID nicht gesetzt, Client des Tokens nicht geprüft")
+        return True
+
+    expected = {"id": ""}
+
+    def matches_setup(meta_res: Response) -> Optional[str]:
+        row = meta_res.json()
+        try:
+            meta = json.loads(row.get("Draft") or "") if isinstance(row, dict) else None
+        except ValueError:
+            meta = None
+        setup = meta.get("setup") if isinstance(meta, dict) else None
+        if not isinstance(setup, dict):
+            return "__meta enthält kein setup"
+        frontend = setup.get("oauthFrontend")
+        expected["id"] = (frontend.get("id") if isinstance(frontend, dict) else "") or setup.get("oauthFrontendId") or ""
+        if not expected["id"]:
+            return "__meta enthält keine setup.oauthFrontend.id"
+        return None if expected["id"] == client_id else (
+            f"Token stammt von Client {client_id}, die App nutzt {expected['id']} (setup.oauthFrontend.id)")
+
+    meta_res = suite.case("[G3] Token stammt vom Frontend-Client der Polly-App",
+                          lambda: genesys.request("GET", f"/api/v2/flows/datatables/{cfg.datatable_id}/rows/__meta",
+                                                  params={"showbrief": "false"}, headers=auth),
+                          200, matches_setup)
+    if meta_res is not None and meta_res.status == 200 and expected["id"] and expected["id"] != client_id:
+        print("\nHinweis: Das Token ist vermutlich aus dem Genesys-Portal statt aus der Polly-App kopiert.\n"
+              "In den Dev-Tools den Polly-iframe wählen und den Bearer eines Requests an api.<region> nehmen.")
+        return False
+    return True
 
 
 def tests_web_public(suite: Suite, api: PollyApi) -> None:
@@ -1064,7 +1116,8 @@ def main() -> int:
     print(f"API: {api.base_url}\nRegion: {cfg.region}\nConversationId: {conversation_id}")
 
     if cfg.token and not check_genesys_token(suite, cfg, ssl_context):
-        print("\nAbbruch: Das Genesys-Token ist ungültig oder abgelaufen (GENESYS_TOKEN neu holen).")
+        print("\nAbbruch: Das Genesys-Token ist ungültig, abgelaufen oder nicht von der Polly-App "
+              "(GENESYS_TOKEN neu holen).")
         suite.summary()
         return 1
 
