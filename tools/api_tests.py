@@ -21,6 +21,12 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
   API_URL                 Pflicht: Basis-URL inkl. Präfix, z. B. https://<app>.amplifyapp.com/api
                           (ohne API_URL bricht das Skript ab)
   GENESYS_REGION          Default mypurecloud.de
+  POLLY_FEATURES          optional: Feature Flags der Installation, getrennt durch Leerzeichen oder Komma,
+                          z. B. "web mcp" (Kurzform für web_survey und mcp; auch die vollen Namen gelten).
+                          Gruppen eines nicht gewählten Features werden als übersprungen gewertet.
+                          Nicht gesetzt oder leer = alle Gruppen laufen, "none" = keine Feature-Gruppen.
+                          web: [W1]–[W9], [I1]/[I2], [T1]–[T7], [P1]–[P6]; mcp: [M1]–[M17]
+                          dazu in der Kunden-API [C8]–[C12], [C18] und [C28]–[C34]
   API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen fünf Scopes
                           (ohne themes.read/themes.write entfallen [C28]–[C34])
   API_CLIENT_SECRET       dazu das Client-Secret
@@ -738,6 +744,7 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
         suite.skip("[C1]–[C34]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
         return
 
+    web = cfg.features is None or "web_survey" in cfg.features
     basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
     token_endpoint = HttpClient(cfg.api_token_url, api.ssl_context)
 
@@ -813,41 +820,44 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
                ext("GET", "/reporting/data", full, params={**window, "page": 9999}), 200, lambda res: None
                if isinstance(res.json(), dict) and res.json().get("data") == [] else "data ist nicht leer")
 
-    expiration = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-    invites = suite.case("[C8] POST /invitations erzeugt amount Links (200, inviteUrls)",
-                         ext("POST", "/invitations", full, body={
-                             "survey_uuid": cfg.survey_id, "amount": 2, "is_multi": True,
-                             "expiration_date": expiration}),
-                         200, is_list("inviteUrls", 2),
-                         lambda res: None if len(items(res, "inviteUrls")) == 2 else "nicht genau 2 Einträge")
-    invite_token = ""
-    if invites is not None and invites.status == 200:
-        first = (items(invites, "inviteUrls") or [{}])[0]
-        invite_token = first.get("inviteToken", "") if isinstance(first, dict) else ""
-        first = first if isinstance(first, dict) else {}
-        if first.get("expiration_date") != expiration or first.get("is_multi") is not True:
-            print(f"      Hinweis: erster Eintrag hat expiration_date/is_multi {first.get('expiration_date')!r}/"
-                  f"{first.get('is_multi')!r}, erwartet {expiration!r}/True")
-        if invite_token and invite_token not in first.get("fullLink", ""):
-            print("      Hinweis: fullLink enthält den inviteToken nicht")
-    if invite_token:
-        suite.case("[C9] GET /web-survey akzeptiert einen erzeugten Token (status ok)",
-                   lambda: api.public("GET", "/web-survey", params={"token": invite_token}),
-                   200, json_field("status", "ok"))
-    else:
-        suite.skip("[C9]", "kein Einladungstoken erhalten")
+    if web:
+        expiration = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+        invites = suite.case("[C8] POST /invitations erzeugt amount Links (200, inviteUrls)",
+                             ext("POST", "/invitations", full, body={
+                                 "survey_uuid": cfg.survey_id, "amount": 2, "is_multi": True,
+                                 "expiration_date": expiration}),
+                             200, is_list("inviteUrls", 2),
+                             lambda res: None if len(items(res, "inviteUrls")) == 2 else "nicht genau 2 Einträge")
+        invite_token = ""
+        if invites is not None and invites.status == 200:
+            first = (items(invites, "inviteUrls") or [{}])[0]
+            invite_token = first.get("inviteToken", "") if isinstance(first, dict) else ""
+            first = first if isinstance(first, dict) else {}
+            if first.get("expiration_date") != expiration or first.get("is_multi") is not True:
+                print(f"      Hinweis: erster Eintrag hat expiration_date/is_multi {first.get('expiration_date')!r}/"
+                      f"{first.get('is_multi')!r}, erwartet {expiration!r}/True")
+            if invite_token and invite_token not in first.get("fullLink", ""):
+                print("      Hinweis: fullLink enthält den inviteToken nicht")
+        if invite_token:
+            suite.case("[C9] GET /web-survey akzeptiert einen erzeugten Token (status ok)",
+                       lambda: api.public("GET", "/web-survey", params={"token": invite_token}),
+                       200, json_field("status", "ok"))
+        else:
+            suite.skip("[C9]", "kein Einladungstoken erhalten")
 
-    suite.case("[C10] POST /invitations mit amount 0 (400 invalid_request)",
-               ext("POST", "/invitations", full, body={"survey_uuid": cfg.survey_id, "amount": 0, "is_multi": True}),
-               400, error_code("invalid_request"))
-    suite.case("[C11] POST /invitations mit vergangenem Ablaufdatum (400 invalid_request)",
-               ext("POST", "/invitations", full, body={
-                   "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True, "expiration_date": "2020-01-01"}),
-               400, error_code("invalid_request"))
-    suite.case("[C12] POST /invitations für unbekannte Umfrage (409 no_prod)",
-               ext("POST", "/invitations", full, body={
-                   "survey_uuid": str(uuid.uuid4()), "amount": 1, "is_multi": True}),
-               409, error_code("no_prod"))
+        suite.case("[C10] POST /invitations mit amount 0 (400 invalid_request)",
+                   ext("POST", "/invitations", full, body={"survey_uuid": cfg.survey_id, "amount": 0, "is_multi": True}),
+                   400, error_code("invalid_request"))
+        suite.case("[C11] POST /invitations mit vergangenem Ablaufdatum (400 invalid_request)",
+                   ext("POST", "/invitations", full, body={
+                       "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True, "expiration_date": "2020-01-01"}),
+                   400, error_code("invalid_request"))
+        suite.case("[C12] POST /invitations für unbekannte Umfrage (409 no_prod)",
+                   ext("POST", "/invitations", full, body={
+                       "survey_uuid": str(uuid.uuid4()), "amount": 1, "is_multi": True}),
+                   409, error_code("no_prod"))
+    else:
+        suite.skip("[C8]–[C12]", WEB_SKIP_REASON)
 
     suite.case("[C13] GET /surveys enthält die Testumfrage", ext("GET", "/surveys", full), 200,
                          is_list("surveys", 1),
@@ -881,10 +891,13 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
 
     suite.case("[C17] GET /reporting/data ohne Token (401 invalid_token)",
                lambda: api.public("GET", "/ext/v1/reporting/data", params=window), 401, error_code("invalid_token"))
-    suite.case("[C18] POST /invitations mit reporting.read-Token (403 insufficient_scope)",
-               ext("POST", "/invitations", reporting_only, body={
-                   "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True}),
-               403, error_code("insufficient_scope"))
+    if web:
+        suite.case("[C18] POST /invitations mit reporting.read-Token (403 insufficient_scope)",
+                   ext("POST", "/invitations", reporting_only, body={
+                       "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True}),
+                   403, error_code("insufficient_scope"))
+    else:
+        suite.skip("[C18]", WEB_SKIP_REASON)
     suite.case("[C19] GET /surveys mit reporting.read-Token (403 insufficient_scope)",
                ext("GET", "/surveys", reporting_only), 403, error_code("insufficient_scope"))
     suite.case("[C20] GET /reporting/data mit reporting.read-Token (200)",
@@ -958,6 +971,10 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
             return str(claims.get("scope", "")).split()
         except (IndexError, ValueError):
             return []
+
+    if not web:
+        suite.skip("[C28]–[C34]", WEB_SKIP_REASON)
+        return
 
     granted = token_scopes(full)
     missing = [scope for scope in ("polly-api/themes.read", "polly-api/themes.write") if scope not in granted]
@@ -1074,6 +1091,29 @@ def tests_preview(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
 # main
 # -------------------------------------------------------------------
 
+WEB_SKIP_REASON = "Feature web_survey nicht in POLLY_FEATURES"
+
+# Kurzformen für POLLY_FEATURES → Schlüssel der Feature Flags (domain/features/featureFlags.ts)
+FEATURE_ALIASES = {"web": "web_survey"}
+
+
+def parse_features(raw: Optional[str]) -> Optional[set]:
+    """None = alle Features (POLLY_FEATURES nicht gesetzt oder leer), sonst die gewählten Flag-Schlüssel."""
+    names = (raw or "").replace(",", " ").split()
+    if not names:
+        return None
+    return {FEATURE_ALIASES.get(name.lower(), name.lower()) for name in names if name.lower() != "none"}
+
+
+def run_for_feature(suite: Suite, cfg: argparse.Namespace, feature: str, label: str,
+                    group: Callable[..., None], *args: Any) -> None:
+    """Führt eine Testgruppe nur aus, wenn ihr Feature gewählt ist; sonst zählt sie als übersprungen."""
+    if cfg.features is None or feature in cfg.features:
+        group(*args)
+    else:
+        suite.skip(label, f"Feature {feature} nicht in POLLY_FEATURES")
+
+
 def env_default(name: str, default: Any = None) -> Any:
     return os.environ.get(name, default)
 
@@ -1096,6 +1136,7 @@ def parse_args() -> argparse.Namespace:
     cfg.region = env_default("GENESYS_REGION", DEFAULT_REGION)
     cfg.token = env_default("GENESYS_TOKEN", "")
     cfg.token_no_deploy = env_default("GENESYS_TOKEN_NO_DEPLOY", "")
+    cfg.features = parse_features(env_default("POLLY_FEATURES"))
     cfg.api_client_id = env_default("API_CLIENT_ID", "")
     cfg.api_client_secret = env_default("API_CLIENT_SECRET", "")
     cfg.api_token_url = env_default("API_TOKEN_URL", "")
@@ -1114,6 +1155,7 @@ def main() -> int:
     conversation_id = f"test-conv-{int(time.time())}"
 
     print(f"API: {api.base_url}\nRegion: {cfg.region}\nConversationId: {conversation_id}")
+    print("Features: " + ("alle" if cfg.features is None else ", ".join(sorted(cfg.features)) or "keine"))
 
     if cfg.token and not check_genesys_token(suite, cfg, ssl_context):
         print("\nAbbruch: Das Genesys-Token ist ungültig, abgelaufen oder nicht von der Polly-App "
@@ -1121,7 +1163,7 @@ def main() -> int:
         suite.summary()
         return 1
 
-    tests_web_public(suite, api)
+    run_for_feature(suite, cfg, "web_survey", "[W1]–[W5]", tests_web_public, suite, api)
 
     if not cfg.token:
         print("\nFehler: Kein Genesys-Token angegeben. Bitte GENESYS_TOKEN setzen,\n"
@@ -1130,16 +1172,17 @@ def main() -> int:
         return 1
 
     load_prod_questions(suite, api, cfg)
-    prepare_invitations(suite, api, cfg)
-    tests_web_invitation(suite, api, cfg.web_token)
+    cfg.expiring_token, cfg.expiring_exp = "", 0
+    run_for_feature(suite, cfg, "web_survey", "[I1]/[I2]", prepare_invitations, suite, api, cfg)
+    run_for_feature(suite, cfg, "web_survey", "[W6]/[W7]", tests_web_invitation, suite, api, cfg.web_token)
     tests_survey_responses(suite, api, cfg, conversation_id)
     tests_survey_responses_errors(suite, api, cfg, conversation_id)
     tests_customer_api(suite, api, cfg, conversation_id)
     tests_delete(suite, api, cfg, conversation_id)
-    tests_web_themes(suite, api, cfg)
-    tests_mcp_settings(suite, api, cfg)
-    tests_preview(suite, api, cfg)
-    tests_web_expired(suite, api, cfg.expiring_token, cfg.expiring_exp)
+    run_for_feature(suite, cfg, "web_survey", "[T1]–[T7]", tests_web_themes, suite, api, cfg)
+    run_for_feature(suite, cfg, "mcp", "[M1]–[M17]", tests_mcp_settings, suite, api, cfg)
+    run_for_feature(suite, cfg, "web_survey", "[P1]–[P6]", tests_preview, suite, api, cfg)
+    run_for_feature(suite, cfg, "web_survey", "[W8]/[W9]", tests_web_expired, suite, api, cfg.expiring_token, cfg.expiring_exp)
     return suite.summary()
 
 
