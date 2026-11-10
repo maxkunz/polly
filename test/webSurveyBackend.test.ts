@@ -13,6 +13,7 @@ import {
 	readRequestBody,
 	WEB_SURVEY_MAX_BODY_BYTES
 } from "../amplify/functions/web_survey/request";
+import { PROD_CACHE_TTL_MS, PROD_RELOAD_MIN_AGE_MS, shouldReloadProd } from "../amplify/functions/web_survey/prod_cache";
 import { isValidThemeId, parseWebThemeRequest, pickTheme, toWebTheme } from "../amplify/functions/shared/web_themes";
 import { hasPollyRole } from "../src/domain/permissions/roleCheck";
 import { DEFAULT_WEB_THEME_TOKENS, defaultWebThemeTokens } from "../src/domain/webTheme/webTheme";
@@ -393,6 +394,26 @@ test("toWebTheme: DynamoDB-Eintrag prüfen und auffüllen", () => {
 	assert.equal(toWebTheme(undefined), null);
 	assert.ok(isValidThemeId(THEME_A));
 	assert.equal(isValidThemeId("../a"), false);
+});
+
+test("shouldReloadProd: Cache-Treffer mit passender Version wird angenommen", () => {
+	assert.equal(shouldReloadProd({ cacheAgeMs: 0, cachedVersion: 5, requestedVersion: 5 }), false);
+	assert.equal(shouldReloadProd({ cacheAgeMs: PROD_CACHE_TTL_MS - 1, cachedVersion: 5, requestedVersion: 5 }), false);
+});
+
+test("shouldReloadProd: abweichende Version lädt nur bei älterem Cache-Eintrag nach", () => {
+	// Seite neuer als der Cache (anderer Container) und Seite älter als der Cache (Deploy, Rollback)
+	assert.equal(shouldReloadProd({ cacheAgeMs: PROD_RELOAD_MIN_AGE_MS, cachedVersion: 5, requestedVersion: 6 }), true);
+	assert.equal(shouldReloadProd({ cacheAgeMs: PROD_CACHE_TTL_MS - 1, cachedVersion: 6, requestedVersion: 5 }), true);
+	// Eintrag gerade erst gelesen: viele offene Seiten mit alter Version lösen kein erneutes Lesen aus
+	assert.equal(shouldReloadProd({ cacheAgeMs: 0, cachedVersion: 6, requestedVersion: 5 }), false);
+	assert.equal(shouldReloadProd({ cacheAgeMs: PROD_RELOAD_MIN_AGE_MS - 1, cachedVersion: 6, requestedVersion: -1 }), false);
+});
+
+test("shouldReloadProd: frisch gelesener Stand wird nie doppelt gelesen", () => {
+	assert.equal(shouldReloadProd({ cacheAgeMs: undefined, cachedVersion: 6, requestedVersion: 5 }), false);
+	assert.equal(shouldReloadProd({ cacheAgeMs: undefined, cachedVersion: 6, requestedVersion: 6 }), false);
+	assert.ok(PROD_RELOAD_MIN_AGE_MS < PROD_CACHE_TTL_MS);
 });
 
 console.log(`\n${passed} Tests bestanden`);
