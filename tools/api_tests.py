@@ -15,7 +15,7 @@ Verwendung:
 
 Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
   GENESYS_TOKEN           Bearer-Token der Polly-App (Dev-Tools, Polly-iframe; nicht das des Portals).
-                          Mit --datatable-id prüft [G3], ob es vom Frontend-Client der App stammt.
+                          [G3] prüft anhand von --datatable-id, ob es vom Frontend-Client der App stammt.
                           Ohne Token laufen nur die öffentlichen /web-survey-Fälle, Exit-Code ist dann 1.
   GENESYS_TOKEN_NO_DEPLOY optional: Token eines Users OHNE Rolle polly_deploy (403-Fall)
   API_URL                 Pflicht: Basis-URL inkl. Präfix, z. B. https://<app>.amplifyapp.com/api
@@ -35,11 +35,13 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
 Optionen (jeweils auch per gleichnamiger Umgebungsvariable in Großbuchstaben):
   --survey-id             Umfrage für die Antworttests, muss in der Data Table DIESER Installation
                           existieren, sonst liefern [1]–[5] 404
-  --survey-name           Name der Umfrage (Default mini_1718e427; mit --datatable-id aus Prod gelesen)
-  --survey-version        Version der Umfrage (Default 5; mit --datatable-id aus Prod gelesen)
-  --datatable-id          Data Table der Umfragen: Name, Version und Fragen der Antworttests kommen aus der
-                          Spalte Prod von survey_<id> (Fehler [S2], wenn nicht deployt); ohne sie gelten die
-                          festen Fragen von mini_1718e427, und die Lösch-Tests [D1]–[D4] entfallen
+  --survey-name           Name der Umfrage (Default mini_1718e427; aus Prod gelesen)
+  --survey-version        Version der Umfrage (Default 5; aus Prod gelesen)
+  --datatable-id          Pflicht: Data Table der Umfragen (Name <projectTag>_polly_surveys, ID aus der
+                          Start-URL der App als datatable_id). [G3] prüft damit das Token gegen
+                          setup.oauthFrontend.id; Name, Version und Fragen der Antworttests kommen aus der
+                          Spalte Prod von survey_<id> (Fehler [S2], wenn nicht deployt); dazu die
+                          Lösch-Tests [D1]–[D4]
   --existing-survey-id    Umfrage, die in dieser Data Table existiert ([D1], erwartet 409)
   --preview-survey-id     Umfrage mit Stage-Stand für die Webvorschau (Default: --survey-id)
   --web-token             vorhandene Einladung (JWT) für [W6]/[W7]; ohne sie wird über POST /invitations
@@ -285,8 +287,7 @@ def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClien
     """Prüft, ob GENESYS_TOKEN vom Frontend-OAuth-Client der Polly-App stammt (nicht vom Genesys-Portal).
 
     Das Backend nimmt die Client-ID des Tokens als tenantId; ein Token aus dem Portal liefert sonst bei
-    fast allen Fällen 401 "Unknown tenantId". Vergleich gegen setup.oauthFrontend.id in __meta (braucht
-    --datatable-id), ohne sie wird nur der Client ausgegeben."""
+    fast allen Fällen 401 "Unknown tenantId". Vergleich gegen setup.oauthFrontend.id in __meta."""
     auth = {"Authorization": f"Bearer {cfg.token}"}
     res = suite.case("[G2] GET /api/v2/tokens/me (OAuth-Client des Tokens)",
                      lambda: genesys.request("GET", "/api/v2/tokens/me", headers=auth), 200)
@@ -296,10 +297,6 @@ def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClien
     if not client_id:
         return False
     print(f"Token von OAuth-Client {client.get('name', '?')!r} ({client_id})")
-
-    if not cfg.datatable_id:
-        suite.skip("[G3]", "DATATABLE_ID nicht gesetzt, Client des Tokens nicht geprüft")
-        return True
 
     expected = {"id": ""}
 
@@ -325,7 +322,10 @@ def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClien
                           200, matches_setup)
     if meta_res is not None and meta_res.status == 200 and expected["id"] and expected["id"] != client_id:
         print("\nHinweis: Das Token ist vermutlich aus dem Genesys-Portal statt aus der Polly-App kopiert.\n"
-              "In den Dev-Tools den Polly-iframe wählen und den Bearer eines Requests an api.<region> nehmen.")
+              "In den Dev-Tools (Network) in Polly auf `Umfragen` klicken und den Bearer des Requests an\n"
+              "`flows/datatables/<id>/rows` nehmen, zum Beispiel den `survey_list`-Request\n"
+              "(das Portal selbst ruft diese Route nicht auf).\n"
+              "Alternativ der Bearer eines Requests an das Polly-Backend (`<API_URL>/…`, Filter `/api/`).")
         return False
     return True
 
@@ -444,13 +444,10 @@ def sample_answer(question: dict) -> Any:
 def load_prod_questions(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
     """Liest Name, Version und Fragen aus der Spalte Prod der Umfragezeile (Genesys) in cfg.
 
-    Ohne --datatable-id bleiben die festen Vorgaben (mini_1718e427); mit ihr ist ein fehlender
-    Prod-Stand ein Fehler, und die Antworttests verwenden die echten Fragen der Umfrage."""
+    Ein fehlender Prod-Stand ist ein Fehler ([S2]); die Antworttests verwenden dann die festen Fragen
+    von mini_1718e427, sonst die echten Fragen der Umfrage."""
     cfg.questions = DEFAULT_QUESTIONS
     suite.section("Umfrage: Prod-Stand aus der Data Table")
-    if not cfg.datatable_id:
-        suite.skip("[S1]", "DATATABLE_ID nicht gesetzt, feste Fragen von --survey-name")
-        return
     genesys = HttpClient(f"https://api.{cfg.region}", api.ssl_context)
     res = suite.case("[S1] Zeile survey_<id> aus der Data Table lesen",
                      lambda: genesys.request("GET", f"/api/v2/flows/datatables/{cfg.datatable_id}/rows/"
@@ -571,10 +568,6 @@ def tests_survey_responses_errors(suite: Suite, api: PollyApi, cfg: argparse.Nam
 def tests_delete(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     """DELETE /survey-responses; braucht die Data Table der Umfragen."""
     suite.section("Ergebnisse löschen: DELETE /survey-responses")
-    if not cfg.datatable_id:
-        suite.skip("[D1]–[D4]", "DATATABLE_ID nicht gesetzt")
-        return
-
     if cfg.existing_survey_id:
         suite.case("[D1] existierende Umfrage (409, nichts wird gelöscht)",
                    lambda: api.genesys("DELETE", "/survey-responses", params={
@@ -1041,6 +1034,11 @@ def main() -> int:
     if not cfg.api_url:
         print("Fehler: API_URL ist nicht gesetzt.\n"
               "Bitte die Basis-URL inkl. Präfix setzen, z. B. export API_URL=https://<app>.amplifyapp.com/api")
+        return 1
+    if not cfg.datatable_id:
+        print("Fehler: DATATABLE_ID ist nicht gesetzt.\n"
+              "Bitte die Data Table der Umfragen angeben (datatable_id aus der Start-URL der App), "
+              "z. B. export DATATABLE_ID=<id> oder --datatable-id <id>")
         return 1
     ssl_context = ssl._create_unverified_context() if cfg.insecure else None  # noqa: SLF001
     api = PollyApi(cfg.api_url, cfg.region, cfg.token, ssl_context)
