@@ -25,7 +25,7 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
                           z. B. "web" (Kurzform für web_survey; auch der volle Name gilt).
                           Gruppen eines nicht gewählten Features werden als übersprungen gewertet.
                           Nicht gesetzt oder leer = alle Gruppen laufen, "none" = keine Feature-Gruppen.
-                          web: [W1]–[W9], [I1]/[I2], [T1]–[T7], [P1]–[P6]
+                          web: [W1]–[W12], [I1]/[I2], [T1]–[T7], [P1]–[P6]
                           dazu in der Kunden-API [C8]–[C12], [C18] und [C28]–[C34]
   API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen fünf Scopes
                           (ohne themes.read/themes.write entfallen [C28]–[C34])
@@ -44,7 +44,8 @@ Optionen (jeweils auch per gleichnamiger Umgebungsvariable in Großbuchstaben):
                           Lösch-Tests [D1]–[D4]
   --existing-survey-id    Umfrage, die in dieser Data Table existiert ([D1], erwartet 409)
   --preview-survey-id     Umfrage mit Stage-Stand für die Webvorschau (Default: --survey-id)
-  --web-token             vorhandene Einladung (JWT) für [W6]/[W7]; ohne sie wird über POST /invitations
+  --web-token             vorhandene Einladung (JWT) für [W6]/[W7] und [W10]–[W12] (speichert
+                          eine echte Web-Antwort, verbraucht ein Einmal-Token); ohne sie wird über POST /invitations
                           eine erzeugt (1 h gültig, braucht polly_deploy und Prod-Stand von --survey-id).
                           Für [W8]/[W9] wird immer eine Einladung mit 5 s Laufzeit erzeugt.
   --web-theme-write       legt ein Test-Design an und löscht es wieder ([T6]/[T7]; WEB_THEME_WRITE=1)
@@ -383,18 +384,96 @@ def prepare_invitations(suite: Suite, api: PollyApi, cfg: argparse.Namespace) ->
         cfg.survey_id, cfg.expiring_exp)
 
 
+def web_sample_answer(question: dict) -> Any:
+    """Gültiger Wert zu einer Frage aus dem bereinigten Flow-JSON von GET /web-survey."""
+    qtype = question.get("type")
+    if qtype == "rating":
+        return (question.get("options") or {}).get("max_value", 1)
+    if qtype == "choice":
+        labels = question.get("labels") or []
+        return labels[0] if labels else ""
+    return sample_answer(question)
+
+
+def web_next_question_id(question: dict, value: Any) -> Optional[str]:
+    """Folgefrage wie getNextQuestionId in flowNavigation.ts (für gültige Werte)."""
+    fallback = question.get("default_next_question_id")
+    qtype = question.get("type")
+    target = None
+    if qtype == "yes_no":
+        target = (question.get("options") or {}).get("yes_next_question_id" if value else "no_next_question_id")
+    elif qtype == "choice":
+        ids = question.get("next_question_ids") or []
+        index = (question.get("labels") or []).index(value)
+        target = ids[index] if index < len(ids) else None
+    elif qtype in ("rating", "nps"):
+        matches = {"equals": lambda c: value == c, "less_than": lambda c: value < c, "greater_than": lambda c: value > c}
+        conditions = question.get("conditional_next_question") or []
+        for operator in ("equals", "less_than", "greater_than"):
+            hit = next((c for c in conditions if c.get("operator") == operator and matches[operator](c.get("value"))), None)
+            if hit:
+                target = hit.get("next_question_id")
+                break
+    return fallback if target is None else target
+
+
+def web_answers(survey: dict) -> dict:
+    """Antworten auf alle erreichbaren Fragen (Frage-ID → Wert), dem Ablauf ab start_question_id folgend."""
+    by_id = {q.get("id"): q for q in survey.get("questions") or [] if isinstance(q, dict)}
+    answers: dict = {}
+    current = survey.get("start_question_id")
+    while current in by_id and current not in answers:
+        question = by_id[current]
+        answers[current] = web_sample_answer(question)
+        current = web_next_question_id(question, answers[current])
+    return answers
+
+
 def tests_web_invitation(suite: Suite, api: PollyApi, web_token: str) -> None:
     suite.section("Web-Kanal: gültige Einladung")
     if not web_token:
-        suite.skip("[W6]/[W7]", "keine Einladung vorhanden")
+        suite.skip("[W6]/[W7], [W10]–[W12]", "keine Einladung vorhanden")
         return
-    suite.case("[W6] GET /web-survey mit gültiger Einladung (status ok, bereinigtes Flow-JSON)",
-               lambda: api.public("GET", "/web-survey", params={"token": web_token}),
-               200, json_field("status", "ok"), json_has("survey"))
+    loaded = suite.case("[W6] GET /web-survey mit gültiger Einladung (status ok, bereinigtes Flow-JSON)",
+                        lambda: api.public("GET", "/web-survey", params={"token": web_token}),
+                        200, json_field("status", "ok"), json_has("survey"))
     suite.case("[W7] POST /web-survey/submit mit falscher surveyVersion (409 survey_changed)",
                lambda: api.public("POST", "/web-survey/submit",
                                   body={"token": web_token, "surveyVersion": -1, "answers": {}}),
                409, text_contains("survey_changed"))
+
+    body = loaded.json() if loaded is not None and loaded.status == 200 else None
+    survey = body.get("survey") if isinstance(body, dict) else None
+    if not isinstance(survey, dict):
+        suite.skip("[W10]–[W12]", "keine Umfrage aus [W6]")
+        return
+
+    # Echte Antwort speichern (Prod-Stand, gültige Antworten); die Wiederholung mit derselben
+    # submissionId darf nichts doppelt speichern ([W11]), gelesen wird über responseId = submissionId
+    answers = web_answers(survey)
+    submit = {"token": web_token, "surveyVersion": survey.get("version", 0), "answers": answers,
+              "submissionId": str(uuid.uuid4())}
+    suite.case(f"[W10] POST /web-survey/submit mit {len(answers)} gültigen Antworten (200 ok, gespeichert)",
+               lambda: api.public("POST", "/web-survey/submit", body=submit), 200, json_field("status", "ok"))
+    suite.case("[W11] POST /web-survey/submit wiederholt mit derselben submissionId (200 ok, idempotent)",
+               lambda: api.public("POST", "/web-survey/submit", body=submit), 200, json_field("status", "ok"))
+
+    def stored_web_response(res: Response) -> Optional[str]:
+        body = res.json()
+        item = body.get("item") if isinstance(body, dict) else None
+        if not isinstance(item, dict):
+            return "item fehlt"
+        expected = {"channel": "web", "status": "completed", "surveyVersion": submit["surveyVersion"]}
+        wrong = {k: item.get(k) for k, v in expected.items() if item.get(k) != v}
+        if wrong:
+            return f"erwartet {expected}, abweichend {wrong}"
+        stored = item.get("answers")
+        count = len(stored) if isinstance(stored, dict) else 0
+        return None if count == len(answers) else f"{count} gespeicherte Antworten, erwartet {len(answers)}"
+
+    suite.case("[W12] GET /survey-responses/session?conversationId=<submissionId> (Web-Antwort gespeichert)",
+               lambda: api.genesys("GET", "/survey-responses/session", params={"conversationId": submit["submissionId"]}),
+               200, stored_web_response)
 
 
 def tests_web_expired(suite: Suite, api: PollyApi, token: str, exp: int) -> None:
@@ -1065,7 +1144,7 @@ def main() -> int:
     load_prod_questions(suite, api, cfg)
     cfg.expiring_token, cfg.expiring_exp = "", 0
     run_for_feature(suite, cfg, "web_survey", "[I1]/[I2]", prepare_invitations, suite, api, cfg)
-    run_for_feature(suite, cfg, "web_survey", "[W6]/[W7]", tests_web_invitation, suite, api, cfg.web_token)
+    run_for_feature(suite, cfg, "web_survey", "[W6]/[W7], [W10]–[W12]", tests_web_invitation, suite, api, cfg.web_token)
     tests_survey_responses(suite, api, cfg, conversation_id)
     tests_survey_responses_errors(suite, api, cfg, conversation_id)
     tests_customer_api(suite, api, cfg, conversation_id)
