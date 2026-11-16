@@ -9,8 +9,8 @@ inboundCall:
       defaultLanguageSkill:
         noValue: true
       textToSpeech:
-        Genesys TTS:
-          voice: Arabella
+        Genesys Enhanced TTS:
+          voice: polly-Vicki-NTTS
   settingsActionDefaults:
     playAudioOnSilence:
       allowedRepeatCount:
