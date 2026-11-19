@@ -85,6 +85,16 @@ function requestHeaders(event: AnyApiGwEvent): Headers {
   return headers;
 }
 
+/** Body ist ein JSON-Array; Ungültiges JSON beantwortet der Transport selbst. */
+function isJsonArray(text: string): boolean {
+  if (!text.trimStart().startsWith("[")) return false;
+  try {
+    return Array.isArray(JSON.parse(text));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * POST auf den MCP-Endpunkt nach bestandener Prüfkette. GET (SSE-Stream) und DELETE beantwortet der Aufrufer
  * vorher mit 405: Ein GET am Transport öffnete einen Stream, der nie endet.
@@ -96,6 +106,15 @@ export async function handleMcpPost(event: AnyApiGwEvent, ctx: McpToolContext, d
       statusCode: 413,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
       body: JSON.stringify({ error: "payload_too_large" }),
+    };
+  }
+  // Keine JSON-RPC-Batches (seit MCP 2025-06-18 nicht mehr Teil der Spezifikation): Das Rate-Limit zählt Anfragen,
+  // ein Batch mit vielen Tool-Aufrufen zählte sonst nur einmal
+  if (isJsonArray(body.text)) {
+    return {
+      statusCode: 400,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Batch requests are not supported" } }),
     };
   }
   const host = typeof event?.requestContext?.domainName === "string" ? event.requestContext.domainName : "localhost";

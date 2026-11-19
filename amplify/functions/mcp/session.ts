@@ -18,6 +18,11 @@ import { verifyAccessToken, type TokenTenant } from "./tokens";
 
 /** Genesys-Token wird so lange vor Ablauf erneuert. */
 const GENESYS_REFRESH_MARGIN_MS = 2 * 60 * 1000;
+/**
+ * Wartezeiten, bevor der Verlierer eines parallelen Refreshs die Session erneut liest: Der Gewinner braucht nach der
+ * Antwort von Genesys noch KMS und das Speichern. Erst wenn danach kein neuer Stand da ist, gilt die Session als tot.
+ */
+const WINNER_WAIT_MS = [250, 750];
 
 /** Abhängigkeiten nach außen (KMS, Genesys); Tests ersetzen sie. */
 export interface GenesysSessionDeps {
@@ -27,6 +32,8 @@ export interface GenesysSessionDeps {
   /** Secret des Genesys-Clients (entschlüsselt); `undefined`, wenn keins hinterlegt ist */
   clientSecret(tenant: McpTenant): Promise<string | undefined>;
   refresh(region: string, client: { clientId: string; clientSecret?: string }, refreshToken: string, now: number): Promise<GenesysTokenResult>;
+  /** Warten zwischen den Leseversuchen in `useWinner` (Tests: ohne Verzögerung). */
+  wait(ms: number): Promise<void>;
 }
 
 export const kmsGenesysDeps = (store: OAuthStore): GenesysSessionDeps => ({
@@ -35,6 +42,7 @@ export const kmsGenesysDeps = (store: OAuthStore): GenesysSessionDeps => ({
   encryptTokens: encryptGenesysTokens,
   clientSecret: async (tenant) => (tenant.clientSecretEnc ? decryptClientSecret(tenant.tenantId, tenant.clientSecretEnc) : undefined),
   refresh: refreshGenesysToken,
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 
 export type GenesysAccess =
@@ -85,14 +93,23 @@ export async function ensureGenesysAccess(
   return stillValid ? { ok: true, accessToken: tokens.accessToken, session } : { ok: false, reason: "upstream" };
 }
 
-/** Ein paralleler Aufruf hat schon erneuert: dessen Tokens verwenden, sonst ist die Session tot. */
+/**
+ * Ein paralleler Aufruf hat schon erneuert: dessen Tokens verwenden. Hat der Gewinner noch nicht gespeichert, kurz
+ * warten und erneut lesen (`WINNER_WAIT_MS`); sonst löschte der Verlierer die Session, die der Gewinner gleich nutzt.
+ * Erst ohne neuen Stand nach allen Versuchen ist die Session tot.
+ */
 async function useWinner(deps: GenesysSessionDeps, session: SessionRecord, now: number): Promise<GenesysAccess> {
-  const current = await deps.store.getSession(session.sessionId);
-  if (!current || current.genesysVersion === session.genesysVersion || current.genesysExpiresAt <= now) {
-    return { ok: false, reason: "session_dead" };
+  for (let attempt = 0; ; attempt++) {
+    const current = await deps.store.getSession(session.sessionId);
+    if (!current) return { ok: false, reason: "session_dead" };
+    if (current.genesysVersion !== session.genesysVersion) {
+      if (current.genesysExpiresAt <= now) return { ok: false, reason: "session_dead" };
+      const tokens = await deps.decryptTokens(current);
+      return { ok: true, accessToken: tokens.accessToken, session: current };
+    }
+    if (attempt >= WINNER_WAIT_MS.length) return { ok: false, reason: "session_dead" };
+    await deps.wait(WINNER_WAIT_MS[attempt]);
   }
-  const tokens = await deps.decryptTokens(current);
-  return { ok: true, accessToken: tokens.accessToken, session: current };
 }
 
 /** Widerruft das Genesys-Token einer gelöschten Session (nach Möglichkeit, Fehler werden nur geloggt). */

@@ -151,7 +151,8 @@ export const tlh: MessageSchema = {
 			successSummary: "Qapla'! pollu'pu'",
 			successDetail: "yu'ghItlh „{title}“ chu'moHlu'pu'.",
 			errorSummary: "pol Qagh",
-			errorFallback: "Data Table Daq yu'ghItlh pollu'DI' Qagh."
+			errorFallback: "Data Table Daq yu'ghItlh pollu'DI' Qagh.",
+			nameCollision: "pong \"{name}\" lo'lu'pu'. yu' chu' per yIchoH."
 		},
 		flowSize: {
 			warnTitle: "yu'ghItlh ghItlh veH Sum",
@@ -339,6 +340,7 @@ export const tlh: MessageSchema = {
 		ratingMinRange: "mI' mach {min} {max} je joj tu'lu'nIS.",
 		ratingMaxRange: "mI' tIn {min} {max} je joj tu'lu'nIS.",
 		ratingMinLessThanMax: "mI' mach mach law' mI' tIn mach puS 'e' poQlu'.",
+		ratingValueNotInteger: "mI' naQ neH chaw'lu'.",
 		choiceOptionsInvalid: "wIvmey lughbe'.",
 		choiceMinOptions: "wIv yu' {min} wIvmey rav ghajnIS.",
 		choiceMaxOptions: "wIv yu' {max} wIvmey law'qu' ghajlaH.",

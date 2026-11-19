@@ -14,7 +14,7 @@ import type { OAuthStore, SessionRecord, TokenKind, TokenRecord } from "./oauth_
 /**
  * Tokens der OAuth-Fassade (`documentation/polly_mcp.md`, Abschnitt 3, Schritt 7): opake 256-bit-Werte, gespeichert
  * nur als SHA-256. Refresh-Tokens rotieren; wird ein eingelöstes Refresh-Token oder ein eingelöster Code erneut
- * vorgelegt, wird die ganze Familie widerrufen. Familie = Session: Jedes Token verweist auf seine Session, und ohne
+ * vorgelegt, wird die ganze Familie widerrufen (beim Refresh-Token erst nach einem kurzen Kulanzfenster). Familie = Session: Jedes Token verweist auf seine Session, und ohne
  * Session ist kein Token mehr gültig. Rein bis auf den Store (getestet in `test/mcpOAuth.test.ts`).
  */
 
@@ -131,7 +131,16 @@ export async function redeemAuthorizationCode(
 }
 
 /**
- * `grant_type=refresh_token` mit Rotation. Ein schon eingelöstes Refresh-Token widerruft die ganze Familie.
+ * Kulanzfenster nach dem Einlösen eines Refresh-Tokens: Eine Wiederholung darin (Antwort verloren, Retry, zwei
+ * parallele Refreshes desselben Clients) ergibt nur `invalid_grant`, ohne die Familie zu widerrufen. Erst danach gilt
+ * erneutes Vorlegen als Wiederverwendung (Anzeichen für Missbrauch).
+ */
+export const REFRESH_REUSE_GRACE_MS = 30 * 1000;
+
+/**
+ * `grant_type=refresh_token` mit Rotation. Verbraucht wird das Token erst nach allen Prüfungen, direkt vor der
+ * Ausgabe, damit ein Fehler in der Prüfung (z. B. Genesys nicht erreichbar) es nicht entwertet. Ein schon
+ * eingelöstes Refresh-Token widerruft die ganze Familie, außer innerhalb von `REFRESH_REUSE_GRACE_MS`.
  * `checkSession` prüft vor der Ausgabe zusätzlich die Session (z. B. Genesys-Refresh); `false` widerruft sie.
  */
 export async function rotateRefreshToken(
@@ -149,7 +158,8 @@ export async function rotateRefreshToken(
   const token = await store.getToken("RT", tokenHash);
   if (!token || token.tenantId !== tenant.tenantId) return tokenError("invalid_grant", "Invalid refresh token");
   if (!safeEqual(token.clientId, params.clientId)) return tokenError("invalid_grant", "Token was issued to another client");
-  if (token.usedAt !== undefined || !(await store.consumeToken("RT", tokenHash, now))) {
+  if (token.usedAt !== undefined) {
+    if (now - token.usedAt < REFRESH_REUSE_GRACE_MS) return tokenError("invalid_grant", "Refresh token already used");
     const revoked = await revokeFamily(store, token.sessionId);
     return tokenError("invalid_grant", "Refresh token already used", revoked);
   }
@@ -160,6 +170,8 @@ export async function rotateRefreshToken(
     const revoked = await revokeFamily(store, session.sessionId, { keepConsent: true });
     return tokenError("invalid_grant", "Session no longer valid", revoked);
   }
+  // Parallel eingelöst: gerade eben, also im Kulanzfenster – nur ablehnen
+  if (!(await store.consumeToken("RT", tokenHash, now))) return tokenError("invalid_grant", "Refresh token already used");
   return { ok: true, response: await issueTokenPair(store, session, token.clientId, token.resource, now), session };
 }
 

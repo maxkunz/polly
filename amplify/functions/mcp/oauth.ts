@@ -6,7 +6,8 @@ import { buildGenesysRedirectUri, buildMcpUrl } from "../shared/mcp_config";
  * Hashes, PKCE, Metadaten, Prüfung von DCR und Autorisierungsanfrage. Ablauf: `documentation/polly_mcp.md`, Abschnitt 3.
  */
 
-export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 * 8;
+/** 4 h statt der ursprünglich geplanten 60 min (Usability: weniger Refresh-Runden in KI-Clients). */
+export const ACCESS_TOKEN_TTL_SECONDS = 4 * 60 * 60;
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 /** Höchstdauer einer Session ab Anmeldung; Refresh-Tokens reichen nie darüber hinaus. */
 export const SESSION_MAX_SECONDS = 30 * 24 * 60 * 60;
@@ -14,8 +15,8 @@ export const AUTH_REQUEST_TTL_SECONDS = 10 * 60;
 export const AUTH_CODE_TTL_SECONDS = 2 * 60;
 /** DCR-Clients verfallen 90 Tage nach der letzten Nutzung. */
 export const CLIENT_IDLE_TTL_SECONDS = 90 * 24 * 60 * 60;
-/** Ein Client, der noch nie ein Token bekommen hat, verfällt nach einem Tag (sonst belegen leere Registrierungen die Plätze). */
-export const CLIENT_UNUSED_TTL_SECONDS = 24 * 60 * 60;
+/** Ein Client, der noch nie ein Token bekommen hat, verfällt nach einer Stunde (länger als eine Anmeldeanfrage). */
+export const CLIENT_UNUSED_TTL_SECONDS = 60 * 60;
 /** `lastUsedAt` eines Clients wird höchstens einmal am Tag geschrieben. */
 export const CLIENT_TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** Gemerkte Zustimmung pro Person und Client; danach entfällt die Zustimmungsseite (Genesys-Login bleibt Pflicht). */
@@ -23,6 +24,11 @@ export const CONSENT_TTL_SECONDS = 30 * 24 * 60 * 60;
 /** Grenzwerte (M11): höchstens 200 nicht abgelaufene DCR-Clients je Mandant, 120 Tool-Aufrufe je Minute und Session. */
 export const MAX_DCR_CLIENTS_PER_TENANT = 200;
 export const SESSION_RATE_LIMIT_PER_MINUTE = 120;
+/**
+ * Höchstens so viele noch unbenutzte Clients je Mandant; darüber verdrängt eine neue Registrierung die ältesten. Die
+ * anonyme DCR kann damit nur unbenutzte Plätze belegen, nie die Grenze für genutzte Clients erreichen.
+ */
+export const MAX_UNUSED_DCR_CLIENTS_PER_TENANT = 20;
 
 export const MAX_REDIRECT_URIS = 10;
 const MAX_REDIRECT_URI_CHARS = 2000;
@@ -62,8 +68,11 @@ export function isConsentValid(
   current: { tenantId: string; clientId: string; redirectUri: string; epoch: number },
   now: number
 ): boolean {
+  // Nur Loopback-Redirects: Dort landet der Code auf dem Rechner der Person. Bei `https` könnte ein untergeschobener
+  // `/authorize`-Link mit fremdem `state` sonst ohne Klick einen Code an den Client ausstellen.
   return (
     !!consent &&
+    isLoopbackRedirect(current.redirectUri) &&
     consent.expiresAt > now &&
     consent.tenantId === current.tenantId &&
     consent.clientId === current.clientId &&
@@ -363,6 +372,22 @@ export function pickClientId(params: Record<string, string>, authorizationHeader
  */
 export function needsClientTouch(client: { expiresAt: number }, now: number): boolean {
   return client.expiresAt - now < CLIENT_IDLE_TTL_SECONDS * 1000 - CLIENT_TOUCH_INTERVAL_MS;
+}
+
+export type ClientSlot = { clientId: string; createdAt: number; lastUsedAt: number; expiresAt: number };
+
+/**
+ * Plätze für eine neue DCR-Registrierung: abgelehnt, wenn die genutzten Clients die Grenze erreichen; sonst die
+ * ältesten unbenutzten Clients, die weichen müssen, damit höchstens `MAX_UNUSED_DCR_CLIENTS_PER_TENANT` bleiben.
+ * Unbenutzt = nie ein Token bekommen (`touchClient` setzt `lastUsedAt` erst dann neu).
+ */
+export function planClientRegistration(clients: ClientSlot[], now: number): { ok: false } | { ok: true; evict: string[] } {
+  const active = clients.filter((c) => c.expiresAt > now);
+  const unused = active.filter((c) => c.lastUsedAt <= c.createdAt).sort((a, b) => a.createdAt - b.createdAt);
+  const used = active.length - unused.length;
+  if (used >= MAX_DCR_CLIENTS_PER_TENANT) return { ok: false };
+  const keep = Math.min(MAX_UNUSED_DCR_CLIENTS_PER_TENANT, MAX_DCR_CLIENTS_PER_TENANT - used) - 1;
+  return { ok: true, evict: unused.slice(0, Math.max(0, unused.length - keep)).map((c) => c.clientId) };
 }
 
 /** Cookie, das die Anmeldung an den Browser bindet, der `/authorize` aufgerufen hat. */

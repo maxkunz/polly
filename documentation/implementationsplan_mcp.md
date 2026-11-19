@@ -174,7 +174,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **`genesys_datatable.ts` statt `genesys_datatable_write.ts`:** `getRow` ist aus `genesys_survey_check.ts` mit umgezogen (dort re-exportiert), sonst entstünde ein Import-Zyklus mit `installation_meta.ts`. Die Allow-List prüft neben `surveyDataTableId` auch den Zeilenschlüssel: nur `survey_<uuid>` und `survey_list`, nie `__meta`/`__lock`. 429 wird höchstens zweimal wiederholt, Wartezeit aus `Retry-After`, gedeckelt auf 3 s.
 - **`installation_meta.ts`** liest Projekt-Tag, `features` und `web.defaultBaseUrl` in einem Zugriff, gemerkt 60 s pro Data Table. `loadDefaultBaseUrl` ist mit umgezogen (Parameter `tenantId` nur noch fürs Log, siehe „Nach dem Review“). **Verhaltensänderung:** Der Projekt-Tag für die Rollenprüfung in `invitations`/`web_themes` war bisher ungecacht, jetzt bis zu 60 s alt; er ändert sich nach dem Setup nicht.
 - **Pipeline als eigenes, reines Modul `survey_pipeline.ts`** (Schritte 2–8 aus „Validierungs-Pipeline“, `prepareDraft` und `checkDeployable`), damit sie ohne Data Table testbar ist und `validate_survey` (M8) sie direkt nutzt. Schritt 1 (Größe, zod, Whitelist-Kopie) bleibt in `tools_v1.ts` (M8). Web-Reset und `theme_unknown` sind schon hier; die Designs (`knownThemeIds`) und das Flag `webSurvey` übergibt der Aufrufer (M9).
-- **IDs:** Auch die IDs der Auswahloptionen werden vergeben und geprüft. IDs, die schon in der gespeicherten Fassung stehen, müssen keine UUIDs sein (ältere Umfragen). `invalid_id` hat `details: { path, reason: "not_uuid" | "duplicate" }`.
+- **IDs:** Auch die IDs der Auswahloptionen werden vergeben und geprüft. IDs, die schon in der gespeicherten Fassung stehen, müssen keine UUIDs sein (ältere Umfragen). `invalid_id` hat `details: { path, reason: "not_uuid" | "duplicate" | "name_collision" }`, bei `name_collision` zusätzlich `name` (Code-Review: gleicher Titel und gleicher ID-Anfang ergaben denselben Reporting-Schlüssel; Prüfung gemeinsam mit der App über `findTechnicalNameCollisions`, auch gegen Stage/Prod/Backup).
 - **Technische Namen:** Neue Elemente bekommen ihren Namen immer aus Titel + ID, auch wenn die Eingabe einen Namen nennt; jede Abweichung der Eingabe ergibt `name_immutable_ignored` mit `path`, `id` und dem gültigen `name`.
 - **Translator-Fehler** kommen als `validation_failed` mit `details: { errors: [], translation: { key, params, questionId? } }`.
 - **Lock bei `save_draft`:** Ein abgelaufenes **eigenes** Lock reicht (hätte jemand anderes übernommen, stünde dessen Name im Lock); verlangt wird nur, dass der Name passt. `lock_lost` ohne Lock hat leere `details`.
@@ -254,7 +254,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - `mcpInfrastructure.test.ts`: Der Gerüst-Fall (501) entfällt. Geprüft wird jetzt 404 bei Kill-Switch, unbekannter Route und ungültigem Schlüssel.
 - **Security-Review (`secreview-de`):** keine ausnutzbare Lücke, drei Härtungen umgesetzt:
   - Redirect-Allow-List mit Ursprung **und Pfad** statt nur Host. Die Variable heißt jetzt `MCP_ALLOWED_REDIRECT_URIS` (`parseAllowedRedirectUris` in `shared/mcp_config.ts`), eine gesetzte `MCP_ALLOWED_REDIRECT_HOSTS` wird nicht mehr gelesen. Sonst könnte ein Open Redirect auf `claude.ai` den Code an einen Angreifer leiten, der den Fluss mit eigener PKCE-Challenge begonnen hat.
-  - DCR-Clients ohne Token verfallen nach einem Tag (`CLIENT_UNUSED_TTL_SECONDS`), volle Frist ab dem ersten Token (`needsClientTouch`). `countClients` zählt nur nicht abgelaufene; weil der Index `byTenant` nur Schlüssel projiziert, liest es `expiresAt` per BatchGet nach (die Projektion lässt sich nicht ohne Löschen des Index ändern).
+  - DCR-Clients ohne Token verfallen nach einer Stunde (`CLIENT_UNUSED_TTL_SECONDS`, nach Security-Review von einem Tag verkürzt), volle Frist ab dem ersten Token (`needsClientTouch`). `listClients` liefert nur nicht abgelaufene; weil der Index `byTenant` nur Schlüssel projiziert, liest es die Zeitpunkte per BatchGet nach. `planClientRegistration` lehnt erst ab, wenn die genutzten Clients die Grenze erreichen, und verdrängt sonst die ältesten unbenutzten über 20 (`MAX_UNUSED_DCR_CLIENTS_PER_TENANT`), damit anonyme Registrierungen die Plätze nicht blockieren (die Projektion lässt sich nicht ohne Löschen des Index ändern).
   - `/authorize` setzt immer ein neues Browser-Cookie und übernimmt kein mitgeschicktes.
 
 ### M8
@@ -323,7 +323,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 
 ### M11
 
-- **Gemerkte Zustimmung:** `CONSENT#<Hash aus Mandant, Person, Client>` (`consentKey`) mit Liste der bestätigten Redirect-URIs (`mergeConsentRedirects`, höchstens 10; sonst fragte ein Client mit claude.ai- und claude.com-Callback bei jedem Wechsel neu). Gespeichert wird beim „Zulassen“ erst nach Session und Code, nicht fatal. Gültig 30 Tage (nicht 90 wie im ersten Entwurf: entspricht der Session-Höchstdauer) und nur bei bestätigter Redirect-URI und gleichem `mcpEpoch` (`isConsentValid`). Der Callback prüft sie vor dem Übergang nach `authenticated` und schließt direkt `pending → consumed` ab, über dieselbe Funktion `approveRequest` wie die Zustimmungsseite; scheitert das, widerruft er das Genesys-Token. Zurückgenommen wird sie durch „Ablehnen“ und in `revokeFamily` (Widerruf per `/revoke`, Wiederverwendung von Code oder Refresh-Token), nicht bei toter Genesys-Sitzung (`keepConsent`). Das Aufräumen beim Abschalten erfasst die Einträge über das GSI `byTenant` (`tenantId` steht im Eintrag).
+- **Gemerkte Zustimmung:** `CONSENT#<Hash aus Mandant, Person, Client>` (`consentKey`) mit Liste der bestätigten Redirect-URIs (`mergeConsentRedirects`, höchstens 10; sonst fragte ein Client mit claude.ai- und claude.com-Callback bei jedem Wechsel neu). Gespeichert wird beim „Zulassen“ erst nach Session und Code, nicht fatal. Gültig 30 Tage (nicht 90 wie im ersten Entwurf: entspricht der Session-Höchstdauer) und nur bei Loopback-Redirect, bestätigter Redirect-URI und gleichem `mcpEpoch` (`isConsentValid`; Loopback-Einschränkung nach Security-Review: bei `https`-Redirects bleibt die Seite als Schutz gegen untergeschobene `/authorize`-Links). Der Callback prüft sie vor dem Übergang nach `authenticated` und schließt direkt `pending → consumed` ab, über dieselbe Funktion `approveRequest` wie die Zustimmungsseite; scheitert das, widerruft er das Genesys-Token. Zurückgenommen wird sie durch „Ablehnen“ und in `revokeFamily` (Widerruf per `/revoke`, Wiederverwendung von Code oder Refresh-Token), nicht bei toter Genesys-Sitzung (`keepConsent`). Das Aufräumen beim Abschalten erfasst die Einträge über das GSI `byTenant` (`tenantId` steht im Eintrag).
 - **Endgültige Werte:** 120 Aufrufe je Minute und Session, 200 DCR-Clients je Mandant, Drosselung der Routen unverändert (Werte aus M5). Es gab keine Messung auf einer Umgebung; die Werte bleiben nach Bedarf anpassbar (Konstanten in `mcp/oauth.ts`).
 - **`api_tests.py`:** [M11]–[M17] laufen ohne Anmeldung und schreiben nichts; sie nehmen die MCP-URL aus [M10] und werden übersprungen, wenn MCP in der Umgebung aus ist (alle Routen 404). Der Kill-Switch selbst lässt sich ohne Änderung der Lambda-Variablen nicht prüfen.
 - **Review (`review-de`) umgesetzt:** Rücknahme der Zustimmung, Speichern erst nach Session und Code, Genesys-Widerruf auf dem Weg ohne Seite, mehrere Redirect-URIs, Vorprüfung in `api_tests.py` gegen Netzfehler abgesichert, verwaister Kommentar an `hashToken`. Tests decken Rücknahme und Redirect-Liste ab; der Handler selbst bleibt ohne Unit-Test (DynamoDB/KMS).
@@ -341,6 +341,21 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Audit-Log** mit `themeId` (bei `create_web_theme` nur die vom Server vergebene), dazu `isDefault` und `created`, ohne Tokens oder Namen.
 - **Review (`review-de`) umgesetzt:** IAM ohne Löschen, Design-Namen in den Server-Instructions als Daten, `create_web_theme` als `destructiveHint`, `theme_busy` statt `theme_conflict` bei parallelem Speichern eines anderen Designs, veralteter `expectedUpdatedAt` ohne Transaktion abgewiesen, Design ohne `updatedAt` per `expectedUpdatedAt: null` änderbar (`saveWebThemes` mit `""`), Kontrastwert abgerundet, Name erst nach `trim` auf Länge geprüft, Cache-Invalidierung in `saveWebThemes`.
 - **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json` und Test, nicht deployt.** Beim ersten Lauf auf einer Branch-Umgebung achten auf: `TransactWriteItems` der Lambda `mcp` auf `WebSurveyThemesTable` (nur `PutItem`/`UpdateItem` gegrantet, kein Löschen), ein in Claude angelegtes Design erscheint in den App-Einstellungen, eine parallele Änderung in der App ergibt `theme_conflict`.
+
+### Branch-Reviews (2026-11-15/19, `review-de` und `secreview-de` über den Diff `main...feature/mcp`)
+
+- **Access-Token 4 h** statt 60 min (8 h waren zum Testen gesetzt), aus Usability-Gründen; Test prüft gegen die Konstante.
+- **Security-Review umgesetzt:** gemerkte Zustimmung nur bei Loopback-Redirects; unbenutzte DCR-Clients 1 h, höchstens 20, Verdrängung der ältesten (`planClientRegistration`, Store `listClients`/`deleteClient`).
+- **Code-Review umgesetzt:**
+  - Technische Namen eindeutig, auch gegen Stage/Prod/Backup (`findTechnicalNameCollisions`, App und MCP).
+  - Paralleler Genesys-Refresh: `useWinner` liest nach 250 und 750 ms erneut (`WINNER_WAIT_MS`, `wait` in `GenesysSessionDeps`), statt die Session sofort zu löschen.
+  - Refresh-Rotation: Token wird erst nach Session- und Genesys-Prüfung verbraucht; Wiederholung innerhalb von 30 s (`REFRESH_REUSE_GRACE_MS`) nur `invalid_grant` ohne Widerruf.
+  - JSON-RPC-Batches mit 400 abgelehnt (`handleMcpPost`), das Rate-Limit zählt damit Aufrufe.
+  - Rating-Skala und Bedingungswerte bei rating/nps nur ganzzahlig (`ratingValueNotInteger`, `isFollowUpValueValid` in `surveyRules.ts`, wirkt auch in der App).
+  - Ein Zeitbudget pro Anfrage (`McpToolContext.deadline`, 24 s ab Eingang, `requestDeadline`), auch an `summarizeSessions`/`readSessions` (2 s Reserve).
+  - `get_responses` liest nur so weit wie nötig (`createResponsesReadStop`, `stopBefore` in `readSessions`).
+- **Bewusst akzeptiert** (in `polly_mcp.md`, Abschnitt 11.1): eingelöster Code beendet die Session vor der Client-Prüfung (RFC 9700), Genesys-Token nach abgebrochener Zustimmung, Kulanzfenster, Access-Token 4 h.
+- **Offen:** Scopes des MCP-Genesys-Clients (`architect`, `user-basic-info`) gegen eine Org mit Scope-Prüfung testen. Nicht gegen DynamoDB, Genesys oder ein Deployment geprüft.
 
 ## Modelle und Reviews
 
@@ -468,7 +483,7 @@ Neu in `amplify/functions/shared/`:
 | `AUTHREQ#` | Anmeldeanfrage inkl. Genesys-PKCE-Verifier, CSRF-Nonce | 10 min |
 | `CODE#` | Einmal-Code (Hash) | 2 min |
 | `SESSION#` | Nutzer, Mandant, `mcpEpoch`, Genesys-Tokens (KMS) | höchstens 30 Tage |
-| `AT#` / `RT#` | Access-/Refresh-Token (Hash), Rotation, `familyId` | 60 min / 30 Tage |
+| `AT#` / `RT#` | Access-/Refresh-Token (Hash), Rotation, `familyId` | 4 h (aus Usability-Gründen statt 60 min) / 30 Tage |
 | `CONSENT#` | gemerkte Zustimmung | 90 Tage |
 | `RATE#` | Zähler | 2 min |
 
@@ -584,7 +599,7 @@ Gilt für create/save/validate. Deploy durchläuft die Schritte 6–8 auf dem ge
 1. Body ≤ 256 KB (`readRequestBody`), zod-Strukturprüfung, Whitelist-Kopie (unbekannte Felder werden verworfen).
 2. Servergeführte Felder (`version`, `created_at`, `updated_at`, `id`) setzt der Server.
 3. IDs sind UUIDs und eindeutig; fehlende vergibt der Server, Duplikate ergeben `invalid_id`.
-4. Technische Namen: gespeicherte bleiben (`ensureSurveyTechnicalNames` + `collectTechnicalNames`), neue entstehen aus Titel + ID. Bei Abweichung kommt die Warnung `name_immutable_ignored`.
+4. Technische Namen: gespeicherte bleiben (`ensureSurveyTechnicalNames` + `collectTechnicalNames`), neue entstehen aus Titel + ID. Bei Abweichung kommt die Warnung `name_immutable_ignored`. Ein neuer Name, der schon vergeben ist (auch in Stage/Prod/Backup), ergibt `invalid_id` (`name_collision`).
 5. Web-Felder:
    - Ist `web_survey` aus, wird `resetWebSettings` angewendet, mit einer Warnung.
    - Ist es an, muss `web_theme_id` beim Mandanten existieren.

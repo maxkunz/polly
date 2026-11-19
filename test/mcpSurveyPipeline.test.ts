@@ -257,6 +257,28 @@ await test("Pipeline: ID keine UUID oder doppelt → invalid_id mit Pfad; gespei
 	assert.deepEqual(!surveyIdReused.ok && surveyIdReused.error, { code: "invalid_id", details: { path: "questions[0].id", reason: "duplicate" } });
 });
 
+await test("Pipeline: gleicher Titel und gleicher ID-Anfang → invalid_id name_collision", () => {
+	// Zwei gültige, verschiedene UUIDs mit denselben ersten 8 Zeichen ergeben denselben technischen Namen
+	const twin = "47cc5f41-1111-4111-8111-111111111111";
+	const collision = prepareDraft(survey([question(), question({ id: twin })]), options());
+	assert.deepEqual(!collision.ok && collision.error, {
+		code: "invalid_id",
+		details: { path: "questions[1].id", reason: "name_collision", name: "was_koennen_wir_besser_machen_47cc5f41" }
+	});
+	assert.ok(prepareDraft(survey([question(), question({ id: twin, title: "Anderer Titel" })]), options()).ok);
+
+	// Gespeicherte Frage behält ihren Namen, die neue Frage kollidiert
+	const saved = survey([question({ name: "was_koennen_wir_besser_machen_47cc5f41" })]);
+	const withSaved = prepareDraft(survey([question({ id: twin }), question()]), options({ saved }));
+	assert.equal(!withSaved.ok && withSaved.error.details?.path, "questions[0].id");
+
+	// Name einer gelöschten, noch deployten Frage (Reporting-Schlüssel) ist gesperrt, gleiche ID darf zurück
+	const prod = JSON.stringify({ id: SURVEY_ID, name: "kundenzufriedenheit_a0eebc99", questions: [{ id: Q1, name: "was_koennen_wir_besser_machen_47cc5f41" }] });
+	const deleted = prepareDraft(survey([question({ id: twin })]), options({ deployed: [undefined, prod, "kaputt"] }));
+	assert.equal(!deleted.ok && deleted.error.details?.reason, "name_collision");
+	assert.ok(prepareDraft(survey([question()]), options({ deployed: [prod] })).ok, "Wiederherstellen mit gleicher ID");
+});
+
 await test("Pipeline: IDs von Auswahloptionen werden vergeben und geprüft", () => {
 	const choice = question({ type: "choice", options: { labels: [{ id: "", label: "Ja" }, { id: "", label: "Nein" }] } });
 	const result = prepareDraft(survey([choice]), options());

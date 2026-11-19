@@ -150,7 +150,8 @@ export const fr: MessageSchema = {
 			successSummary: "Enregistrement réussi",
 			successDetail: "L'enquête « {title} » a été mise à jour.",
 			errorSummary: "Erreur d'enregistrement",
-			errorFallback: "Erreur lors de l'enregistrement de l'enquête dans la Data Table."
+			errorFallback: "Erreur lors de l'enregistrement de l'enquête dans la Data Table.",
+			nameCollision: "Le nom technique « {name} » est déjà utilisé dans cette enquête. Veuillez modifier le titre de la nouvelle question."
 		},
 		flowSize: {
 			warnTitle: "Le volume de texte de l'enquête approche de la limite",
@@ -338,6 +339,7 @@ export const fr: MessageSchema = {
 		ratingMinRange: "La valeur minimale doit être comprise entre {min} et {max}.",
 		ratingMaxRange: "La valeur maximale doit être comprise entre {min} et {max}.",
 		ratingMinLessThanMax: "La valeur minimale doit être inférieure à la valeur maximale.",
+		ratingValueNotInteger: "Seuls les nombres entiers sont autorisés.",
 		choiceOptionsInvalid: "Les options de réponse ne sont pas valides.",
 		choiceMinOptions: "Une question à choix nécessite au moins {min} options.",
 		choiceMaxOptions: "Une question à choix peut comporter au maximum {max} options.",

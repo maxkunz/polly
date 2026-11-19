@@ -352,6 +352,38 @@ function compareEntries(a: Entry, b: Entry): number {
   return compareCodeUnits(a.startedAt, b.startedAt) || compareCodeUnits(a.pseudonym, b.pseudonym);
 }
 
+function matchesResponsesFilter(session: ExportSession | undefined, filter: ResponsesFilter): session is ExportSession {
+  if (!session || typeof session.responseId !== "string") return false;
+  if (filter.channel !== undefined && (session.channel || DEFAULT_CHANNEL) !== filter.channel) return false;
+  return filter.status === undefined || (session.status ?? "unknown") === filter.status;
+}
+
+/**
+ * Früher Abbruch beim Lesen für `get_responses`: Sitzungen kommen aufsteigend nach Start. Gezählt werden passende
+ * Sitzungen, die sicher hinter dem Cursor liegen (späterer Start; gleiche Startzeit ordnet erst das Pseudonym, die
+ * werden nur mitgelesen). Ab der `limit + 1`-ten steht fest, dass es eine nächste Seite gibt; danach werden nur noch
+ * Sitzungen mit genau dieser Startzeit gelesen, weil das Pseudonym sie noch davor einsortieren kann. Liefert `true`
+ * für die erste Sitzung, die nicht mehr gebraucht wird. Ohne Abbruch wüchse der Lesebedarf mit jeder Seite.
+ */
+export function createResponsesReadStop(options: {
+  filter: ResponsesFilter;
+  after?: CursorPosition;
+  limit: number;
+}): (session: ExportSession) => boolean {
+  const { filter, after, limit } = options;
+  let counted = 0;
+  let boundary: string | undefined;
+  return (session) => {
+    const startedAt = session?.startedAt ?? "";
+    if (boundary !== undefined) return compareCodeUnits(startedAt, boundary) > 0;
+    if (!matchesResponsesFilter(session, filter)) return false;
+    if (after && compareCodeUnits(startedAt, after.t) <= 0) return false;
+    counted += 1;
+    if (counted > limit) boundary = startedAt;
+    return false;
+  };
+}
+
 /**
  * Eine Seite Sitzungen: gefiltert nach Kanal und Status, sortiert nach Sitzungsstart und Pseudonym (die Klar-ID
  * bestimmt die Reihenfolge nicht, damit sie nicht in den Cursor muss), nach dem Cursor abgeschnitten.
@@ -363,9 +395,7 @@ export function buildResponsesPage(sessions: readonly ExportSession[], options: 
 
   const entries: Entry[] = [];
   for (const session of sessions) {
-    if (!session || typeof session.responseId !== "string") continue;
-    if (filter.channel !== undefined && (session.channel || DEFAULT_CHANNEL) !== filter.channel) continue;
-    if (filter.status !== undefined && (session.status ?? "unknown") !== filter.status) continue;
+    if (!matchesResponsesFilter(session, filter)) continue;
     entries.push({ pseudonym: pseudonymize(keys, tenantId, surveyId, session.responseId), startedAt: session.startedAt ?? "", session });
   }
   entries.sort(compareEntries);

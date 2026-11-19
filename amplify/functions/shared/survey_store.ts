@@ -387,6 +387,7 @@ export function saveDraft(
         knownThemeIds: options.knownThemeIds,
         surveyId,
         saved: parseSurveyDraft(currentRow.Draft),
+        deployed: [currentRow.Stage, currentRow.Prod, currentRow.Backup],
         version: (currentVersion ?? 0) + 1,
         now,
       });

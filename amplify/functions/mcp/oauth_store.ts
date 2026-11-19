@@ -8,6 +8,7 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import type { ClientSlot } from "./oauth";
 
 /**
  * Zustand der OAuth-Fassade in der `McpOAuthTable` (`documentation/polly_mcp.md`, Abschnitt 9). Die Logik in
@@ -114,8 +115,9 @@ export interface OAuthStore {
   putClient(client: ClientRecord): Promise<void>;
   /** Verlängert die Lebensdauer nach Nutzung; ein gelöschter Client wird nicht neu angelegt. */
   touchClient(clientId: string, now: number, expiresAt: number): Promise<void>;
-  /** Zählt nur nicht abgelaufene Clients (DynamoDB löscht per TTL erst verzögert). */
-  countClients(tenantId: string, now: number): Promise<number>;
+  /** Nur nicht abgelaufene Clients des Mandanten (DynamoDB löscht per TTL erst verzögert). */
+  listClients(tenantId: string, now: number): Promise<ClientSlot[]>;
+  deleteClient(clientId: string): Promise<void>;
 
   putAuthRequest(request: AuthRequestRecord): Promise<void>;
   getAuthRequest(id: string): Promise<AuthRequestRecord | undefined>;
@@ -242,8 +244,11 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
         if (!isConditionFailure(err)) throw err;
       }
     },
-    async countClients(tenantId, now) {
-      // Der Index projiziert nur Schlüssel: `expiresAt` per BatchGet nachlesen (höchstens 200 Clients pro Mandant)
+    async deleteClient(clientId) {
+      await remove(PK_PREFIX.client + clientId);
+    },
+    async listClients(tenantId, now) {
+      // Der Index projiziert nur Schlüssel: Zeitpunkte per BatchGet nachlesen (höchstens 200 Clients pro Mandant)
       const keys: Array<{ pk: string; sk: string }> = [];
       let lastEvaluatedKey: Record<string, any> | undefined;
       do {
@@ -260,21 +265,35 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
         lastEvaluatedKey = page.LastEvaluatedKey;
       } while (lastEvaluatedKey);
 
-      let count = 0;
+      const clients: ClientSlot[] = [];
       for (let offset = 0; offset < keys.length; offset += BATCH_GET_MAX_KEYS) {
         let pending: Array<Record<string, any>> = keys.slice(offset, offset + BATCH_GET_MAX_KEYS);
         for (let attempt = 0; pending.length > 0; attempt++) {
           if (attempt >= BATCH_GET_MAX_ATTEMPTS) throw new Error("BatchGet of MCP clients incomplete");
           const res = await ddb.send(
             new BatchGetCommand({
-              RequestItems: { [tableName]: { Keys: pending, ProjectionExpression: "expiresAt", ConsistentRead: true } },
+              RequestItems: {
+                [tableName]: {
+                  Keys: pending,
+                  ProjectionExpression: "clientId, createdAt, lastUsedAt, expiresAt",
+                  ConsistentRead: true,
+                },
+              },
             })
           );
-          count += (res.Responses?.[tableName] ?? []).filter((item) => Number(item.expiresAt) > now).length;
+          for (const item of res.Responses?.[tableName] ?? []) {
+            if (Number(item.expiresAt) <= now) continue;
+            clients.push({
+              clientId: String(item.clientId),
+              createdAt: Number(item.createdAt),
+              lastUsedAt: Number(item.lastUsedAt),
+              expiresAt: Number(item.expiresAt),
+            });
+          }
           pending = res.UnprocessedKeys?.[tableName]?.Keys ?? [];
         }
       }
-      return count;
+      return clients;
     },
 
     putAuthRequest: (request) => put(PK_PREFIX.authRequest + request.id, request, request.expiresAt),

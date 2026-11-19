@@ -1,7 +1,7 @@
 ## Constraints
 * Eine Umfrage darf 1 bis maximal 20 Fragen haben (Folgefragen zählen zu den 20).
 * Der Titel der Umfrage sowie der Titel jeder Frage (auch Folgefragen) dürfen nicht leer sein.
-* Der Fragetyp "rating" kann von 0 bis maximal 8 frei konfiguriert werden; es ist also auch möglich, Rating 0 bis 3 oder 0 bis 4 usw. zu definieren. Der Minimalwert muss dabei kleiner als der Maximalwert sein.
+* Der Fragetyp "rating" kann von 0 bis maximal 8 frei konfiguriert werden; es ist also auch möglich, Rating 0 bis 3 oder 0 bis 4 usw. zu definieren. Der Minimalwert muss dabei kleiner als der Maximalwert sein, beide sind ganze Zahlen.
 * Der Fragetyp "choice" darf maximal 5 Auswahlmöglichkeiten haben und muss mindestens zwei Auswahlmöglichkeiten haben.
 * Der Fragetyp "comment" darf keine Folgefragen haben.
 * Folgefragen dürfen selbst keine Folgefragen haben und zählen zu den maximal 20 Fragen der Umfrage.
@@ -11,7 +11,7 @@
 * Als Bedingungen (Operator) für Folgefragen sind nur "equals", "less_than" und "greater_than" erlaubt; bei "yes_no" und "choice" nur "equals".
 * Bei den Fragetypen "rating" und "nps" darf jeder Operator ("equals", "less_than", "greater_than") pro Frage nur einmal als Folgefragen-Bedingung verwendet werden.
 * Bei den Fragetypen "choice" und "yes_no" gibt es keine Operator-Auswahl (immer "equals") und es dürfen mehrere Folgefragen mit "equals" existieren, aber pro möglichem Antwortwert (Auswahlmöglichkeit bzw. ja/nein) darf es maximal eine Folgefrage geben (jeder Wert darf also nur einmal als Bedingung verwendet werden).
-* Der Bedingungswert ("condition.value") jeder Folgefrage muss zum Typ der Elternfrage passen: bei "yes_no" true/false, bei "choice" die ID einer vorhandenen Auswahlmöglichkeit, bei "rating" und "nps" eine Zahl. Ein leerer oder ungültiger Wert (z. B. nach dem Löschen der referenzierten Auswahlmöglichkeit) ist ein Validierungsfehler.
+* Der Bedingungswert ("condition.value") jeder Folgefrage muss zum Typ der Elternfrage passen: bei "yes_no" true/false, bei "choice" die ID einer vorhandenen Auswahlmöglichkeit, bei "rating" und "nps" eine ganze Zahl. Ein leerer oder ungültiger Wert (z. B. nach dem Löschen der referenzierten Auswahlmöglichkeit) ist ein Validierungsfehler.
 * Bei den Auswahlmöglichkeiten des Fragetyps "choice" können optional Synonyme angegeben werden (z. B. damit im Voice Flow auch das Nennen eines Synonyms als gültige Antwort erkannt wird). Im Editor werden Label und Synonyme durch Komma getrennt in ein Feld eingegeben (z. B. "Orange, Apfelsine, Saftorange"); der erste kommagetrennte Eintrag wird als "label" gespeichert, alle weiteren als "synonyms".
 * Innerhalb einer "choice"-Frage darf ein Label oder Synonym nicht bei mehreren Auswahlmöglichkeiten vorkommen, da eine genannte Antwort sonst nicht mehr eindeutig einer Option zugeordnet werden kann (der Vergleich erfolgt getrimmt und ohne Beachtung der Groß-/Kleinschreibung).
 * Texte, die im Voice-Flow per Sprachausgabe (TTS) vorgelesen werden, dürfen jeweils höchstens 3.000 Zeichen lang sein (Genesys-Limit pro TTS-Anfrage). Das betrifft "greeting_message", "closing_message" sowie "title" und "reprompt_message" jeder Frage (auch Folgefragen). Eine Überschreitung ist ein Validierungsfehler; der Draft kann dann nicht gespeichert werden.

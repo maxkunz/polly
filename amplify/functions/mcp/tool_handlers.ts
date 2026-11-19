@@ -38,6 +38,7 @@ import { checkWebThemeName, isValidThemeId } from "../shared/web_themes";
 import type { SaveWebThemesResult, WebThemeInput } from "../shared/web_themes_table";
 import {
   buildResponsesPage,
+  createResponsesReadStop,
   collectQuestionIndex,
   cursorPayload,
   CURSOR_TTL_MS,
@@ -94,6 +95,18 @@ export interface McpToolContext {
   /** Feature Flags aus `__meta` (`web_survey`). */
   features: FeatureFlags;
   now: number;
+  /**
+   * Ende des Zeitbudgets der ganzen Anfrage (ms, `requestDeadline`). Store-Operationen und Auswertungen teilen es,
+   * damit die Summe nie über das Lambda-Timeout reicht (sonst bräche die Lambda z. B. nach geschriebenem Draft ab).
+   */
+  deadline: number;
+}
+
+/** Zeitbudget einer MCP-Anfrage ab Eingang; die Lambda `mcp` läuft höchstens 28 s, der Rest bleibt für die Antwort. */
+export const MCP_REQUEST_BUDGET_MS = 24 * 1000;
+
+export function requestDeadline(receivedAt: number): number {
+  return receivedAt + MCP_REQUEST_BUDGET_MS;
 }
 
 /** Polly-Rollen der Person (Rollennamen ohne Projekt-Präfix) oder Fehler beim Laden. */
@@ -145,18 +158,22 @@ export interface McpToolDeps {
   ): Promise<{ ok: true; summary: ExportSummary } | { ok: false }>;
   /** Aggregate je Frage (alle Versionen). */
   loadAggregates(tenantId: string, surveyId: string): Promise<SurveyAggregateItem[]>;
-  /** Sitzungen mit Antworten; `ok: false` bei mehr als `MAX_SESSIONS` Sitzungen oder wenn `deadline` (ms) erreicht ist. */
+  /**
+   * Sitzungen mit Antworten, aufsteigend nach Start; `ok: false` bei mehr als `MAX_SESSIONS` Sitzungen oder wenn
+   * `deadline` (ms) erreicht ist. `stopBefore`: Lesen endet vor der ersten Sitzung, für die es `true` liefert.
+   */
   readSessions(
     tenantId: string,
     params: { surveyId: string; fromIso: string; toIso: string; version?: number },
-    deadline: number
+    deadline: number,
+    stopBefore?: (session: ExportSession) => boolean
   ): Promise<{ ok: true; sessions: ExportSession[] } | { ok: false }>;
   /** Schlüssel für Pseudonyme und Cursor (aus `McpPseudonymSecret`). Wirft, wenn das Secret nicht lesbar ist. */
   pseudonymKeys(): Promise<PseudonymKeys>;
 }
 
-/** So lange darf eine Auswertung lesen (die Lambda läuft höchstens 28 s). */
-const RESULTS_READ_BUDGET_MS = 20 * 1000;
+/** So viel vom Zeitbudget bleibt einer Auswertung nach dem Lesen (Pseudonyme, Seite aufbauen). */
+const RESULTS_PROCESSING_RESERVE_MS = 2 * 1000;
 
 const REQUIRED_ROLES: Record<Exclude<ToolRole, "any">, string> = {
   write: POLLY_ROLE_WRITE,
@@ -180,6 +197,7 @@ function storeContext(ctx: McpToolContext, deps: McpToolDeps): SurveyStoreContex
     userName: ctx.call.userName,
     isBeingDeleted: deps.isSurveyBeingDeleted,
     now: () => new Date(ctx.now),
+    deadline: ctx.deadline,
   };
 }
 
@@ -355,18 +373,21 @@ async function validateSurvey(args: { survey: any; surveyId?: string }, ctx: Mcp
   const webSurvey = webSurveyEnabled(ctx);
   let surveyId: string = randomUUID();
   let saved = null;
+  let deployed: unknown[] = [];
   let version = 1;
   if (args.surveyId !== undefined) {
     const read = await deps.readSurveyRow(storeContext(ctx, deps), args.surveyId);
     if (!read.ok) return failed(read.error);
     surveyId = args.surveyId;
     saved = read.value.draft;
+    deployed = [read.value.row.Stage, read.value.row.Prod, read.value.row.Backup];
     version = (read.value.versions.draft ?? 0) + 1;
   }
   const survey = toSurveyInput(args.survey);
   const prepared = prepareDraft(survey, {
     surveyId,
     saved,
+    deployed,
     version,
     webSurvey,
     knownThemeIds: await themeIdsFor(survey, ctx, deps),
@@ -455,7 +476,7 @@ async function getResultsSummary(args: { surveyId: string; from: string; to: str
   // Wie bei get_aggregates: Die Umfrage muss in der Data Table stehen und für die Person (Genesys-Token) lesbar sein
   const read = await deps.readSurveyRow(storeContext(ctx, deps), surveyId);
   if (!read.ok) return failed(read.error);
-  const result = await deps.summarizeSessions(tenantId, surveyId, range.fromIso, range.toIso, Date.now() + RESULTS_READ_BUDGET_MS);
+  const result = await deps.summarizeSessions(tenantId, surveyId, range.fromIso, range.toIso, ctx.deadline - RESULTS_PROCESSING_RESERVE_MS);
   // Ein unfertiger Zeitraum ergäbe eine zu niedrige Zählung: lieber ablehnen
   if (!result.ok) return { ok: false, code: "range_too_large", details: { maxMs: MAX_SUMMARY_RANGE_MS } };
   return { ok: true, value: toV1ResultsSummary(result.summary), audit: { from: range.fromIso, to: range.toIso } };
@@ -505,7 +526,14 @@ async function getResponses(
 
   // Sitzungen vor der Cursor-Position fallen ohnehin weg: erst ab dort lesen (gleicher Start ist enthalten, BETWEEN)
   const readFrom = after && after.t > range.fromIso ? after.t : range.fromIso;
-  const read = await deps.readSessions(tenantId, { surveyId, fromIso: readFrom, toIso: range.toIso, version: args.version }, Date.now() + RESULTS_READ_BUDGET_MS);
+  // und nur so weit, wie die Seite und die Entscheidung über `nextCursor` brauchen
+  const limit = args.limit ?? RESPONSES_DEFAULT_LIMIT;
+  const read = await deps.readSessions(
+    tenantId,
+    { surveyId, fromIso: readFrom, toIso: range.toIso, version: args.version },
+    ctx.deadline - RESULTS_PROCESSING_RESERVE_MS,
+    createResponsesReadStop({ filter, after, limit })
+  );
   if (!read.ok) return { ok: false, code: "range_too_large", details: { maxMs: MAX_RANGE_MS } };
 
   const allowComments = ctx.call.tenant.allowComments;
@@ -517,7 +545,7 @@ async function getResponses(
     choiceLabels,
     filter,
     after,
-    limit: args.limit ?? RESPONSES_DEFAULT_LIMIT,
+    limit,
   });
   return {
     ok: true,

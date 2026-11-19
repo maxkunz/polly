@@ -151,7 +151,8 @@ export const la: MessageSchema = {
 			successSummary: "Feliciter servatum",
 			successDetail: "Percontatio „{title}“ renovata est.",
 			errorSummary: "Error servandi",
-			errorFallback: "Error in percontatione in Data Table servanda."
+			errorFallback: "Error in percontatione in Data Table servanda.",
+			nameCollision: "Nomen technicum \"{name}\" iam in hac percontatione adhibetur. Titulum novae quaestionis muta."
 		},
 		flowSize: {
 			warnTitle: "Copia textuum percontationis ad terminum appropinquat",
@@ -339,6 +340,7 @@ export const la: MessageSchema = {
 		ratingMinRange: "Valor minimus inter {min} et {max} esse debet.",
 		ratingMaxRange: "Valor maximus inter {min} et {max} esse debet.",
 		ratingMinLessThanMax: "Valor minimus minor valore maximo esse debet.",
+		ratingValueNotInteger: "Numeri integri tantum admittuntur.",
 		choiceOptionsInvalid: "Optiones electionis invalidae sunt.",
 		choiceMinOptions: "Quaestio electionis saltem {min} optiones requirit.",
 		choiceMaxOptions: "Quaestio electionis maxime {max} optiones habere potest.",

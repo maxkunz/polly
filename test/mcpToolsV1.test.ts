@@ -10,7 +10,7 @@ import { derivePseudonymKeys, openCursor, pseudonymize } from "../amplify/functi
 import { sessionVersion, type ExportSession } from "../amplify/functions/shared/answer_records";
 import type { SurveyAggregateItem } from "../amplify/functions/shared/survey_results";
 import type { WebThemeInput } from "../amplify/functions/shared/web_themes_table";
-import { buildResponsesPage } from "../amplify/functions/mcp/results_v1";
+import { buildResponsesPage, createResponsesReadStop } from "../amplify/functions/mcp/results_v1";
 import {
 	beginEdit,
 	createSurvey,
@@ -95,6 +95,7 @@ function context(features: Record<string, boolean> = {}): McpToolContext {
 		credentials: { region: TENANT.region, clientId: "cc", clientSecret: "secret", allowedDataTableIds: ["dt-1"], surveyDataTableId: "dt-1" },
 		features,
 		now: NOW,
+		deadline: Date.now() + 60_000,
 	};
 }
 
@@ -216,14 +217,14 @@ function fakeDeps(overrides: {
 			calls.push("aggregates");
 			return overrides.aggregates ?? [];
 		},
-		async readSessions(_tenantId, params) {
+		async readSessions(_tenantId, params, _deadline, stopBefore) {
 			calls.push("sessions");
-			return {
-				ok: true,
-				sessions: inRange(overrides.sessions ?? [], params.fromIso, params.toIso).filter(
-					(session) => params.version === undefined || sessionVersion(session) === params.version
-				),
-			};
+			// Wie DynamoDB: aufsteigend nach Start, Lesen endet vor der ersten Sitzung mit `stopBefore`
+			const sorted = inRange(overrides.sessions ?? [], params.fromIso, params.toIso)
+				.filter((session) => params.version === undefined || sessionVersion(session) === params.version)
+				.sort((a, b) => (a.startedAt ?? "").localeCompare(b.startedAt ?? ""));
+			const end = stopBefore ? sorted.findIndex((session) => stopBefore(session)) : -1;
+			return { ok: true, sessions: end < 0 ? sorted : sorted.slice(0, end) };
 		},
 		async pseudonymKeys() {
 			calls.push("keys");
@@ -1362,6 +1363,40 @@ await test("get_responses: Seiten ergeben alle Sitzungen genau einmal, auch bei 
 	assert.equal(success("get_responses", await call("get_responses", responsesArgs(), context(), deps)).nextCursor, undefined);
 });
 
+await test("get_responses: liest nur so viele Sitzungen, wie Seite und nächster Cursor brauchen", async () => {
+	// 1 und 2 starten gleichzeitig, danach je eine Minute später
+	const sessions = [1, 2, 3, 4, 5, 6].map((index) => session(index, index <= 2 ? { startedAt: "2026-10-30T10:01:00.000Z" } : {}));
+	const deps = resultsDeps({ sessions });
+	const readCounts: number[] = [];
+	const readSessions = deps.readSessions;
+	deps.readSessions = async (...args) => {
+		const result = await readSessions(...args);
+		if (result.ok) readCounts.push(result.sessions.length);
+		return result;
+	};
+	const seen: string[] = [];
+	let cursor: string | undefined;
+	for (let page = 0; page < 6; page++) {
+		const result = success("get_responses", await call("get_responses", responsesArgs({ limit: 1, ...(cursor ? { cursor } : {}) }), context(), deps));
+		seen.push(...result.responses.map((response: any) => response.responseId));
+		cursor = result.nextCursor;
+		if (!cursor) break;
+	}
+	assert.equal(new Set(seen).size, 6, "alle Sitzungen genau einmal");
+	// Je Seite: ab der Cursor-Zeit (gleiche Startzeit wird mitgelesen, das Pseudonym ordnet) bis zur ersten Sitzung,
+	// die über den nächsten Cursor entscheidet – nie mehr alle restlichen Sitzungen
+	assert.deepEqual(readCounts, [2, 4, 4, 3, 3, 2]);
+
+	// Gleiche Startzeit an der Grenze wird ganz gelesen, der Filter zählt nur passende Sitzungen
+	const stop = createResponsesReadStop({ filter: { fromIso: "", toIso: "", channel: "web" }, limit: 1 });
+	const at = (index: number, startedAt: string, channel = "web") => ({ ...session(index), startedAt, channel });
+	assert.equal(stop(at(1, "2026-10-30T10:01:00.000Z", "flow")), false);
+	assert.equal(stop(at(2, "2026-10-30T10:02:00.000Z")), false);
+	assert.equal(stop(at(3, "2026-10-30T10:03:00.000Z")), false);
+	assert.equal(stop(at(4, "2026-10-30T10:03:00.000Z")), false, "gleiche Startzeit wie die Grenze");
+	assert.equal(stop(at(5, "2026-10-30T10:04:00.000Z")), true);
+});
+
 await test("get_responses: Zeitpunkte nur grob (Stunde, Sekunden seit Start), Folgeseiten lesen ab der Cursor-Position", async () => {
 	const deps = resultsDeps({ sessions: SESSIONS });
 	const reads: string[] = [];
@@ -1612,6 +1647,13 @@ await test("HTTP: zu großer Body 413, ohne passenden Accept-Header 406", async 
 		fakeDeps()
 	);
 	assert.equal(notAcceptable.statusCode, 406);
+});
+
+await test("HTTP: JSON-RPC-Batch wird abgelehnt (Rate-Limit zählt Anfragen)", async () => {
+	const batch = Array.from({ length: 3 }, (_, i) => ({ jsonrpc: "2.0", id: i, method: "tools/list" }));
+	const result = await handleMcpPost(mcpEvent(batch), context(), fakeDeps());
+	assert.equal(result.statusCode, 400);
+	assert.equal(JSON.parse(result.body).error.code, -32600);
 });
 
 await test("Fehlertexte: jeder Translator-Schlüssel hat einen Satz, Grenzen stehen im Satz und in den Tool-Beschreibungen", async () => {

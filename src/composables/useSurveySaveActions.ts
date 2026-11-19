@@ -8,7 +8,8 @@ import {
 	fetchSurveyDetail,
 	deleteSurvey,
 	surveyTableId,
-	SurveyDraftConflictError
+	SurveyDraftConflictError,
+	SurveyTechnicalNameCollisionError
 } from "@/services/surveyService";
 import { requestSurveyResultsDeletion } from "@/services/surveyResultsDeletionService";
 import { useAppStore } from "@/stores/appStore";
@@ -197,7 +198,10 @@ export function useSurveySaveActions(options: SurveySaveActionsOptions) {
 			toast.add({
 				severity: "error",
 				summary: t("surveyEditor.save.errorSummary"),
-				detail: err?.message || t("surveyEditor.save.errorFallback"),
+				detail:
+					err instanceof SurveyTechnicalNameCollisionError
+						? t("surveyEditor.save.nameCollision", { name: err.technicalName })
+						: err?.message || t("surveyEditor.save.errorFallback"),
 				life: 5000
 			});
 			return null;

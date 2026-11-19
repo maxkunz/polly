@@ -268,6 +268,68 @@ export function ensureSurveyTechnicalNames(survey: Survey, savedNames = new Map<
 	for (const q of survey.questions ?? []) visit(q);
 }
 
+/**
+ * Technische Namen (Name → ID) aus deployten Fassungen (Flow-JSON aus Stage/Prod/Backup als Zellen-String). Damit
+ * bekommt keine neue Frage den Reporting-Schlüssel einer gelöschten Frage, die noch Ergebnisse hat. Unlesbare Zellen
+ * werden übersprungen.
+ */
+export function collectDeployedTechnicalNames(cells: readonly unknown[]): Map<string, string> {
+	const names = new Map<string, string>();
+	const add = (element: any) => {
+		if (typeof element?.name === "string" && element.name.trim() && typeof element.id === "string") {
+			const key = element.name.trim().toLowerCase();
+			if (!names.has(key)) names.set(key, element.id);
+		}
+	};
+	for (const cell of cells) {
+		let flow: any;
+		try {
+			flow = typeof cell === "string" && cell.trim() ? JSON.parse(cell) : undefined;
+		} catch {
+			continue;
+		}
+		add(flow);
+		for (const question of Array.isArray(flow?.questions) ? flow.questions : []) add(question);
+	}
+	return names;
+}
+
+/**
+ * Neue Elemente (nicht in `savedNames`), deren technischer Name schon einem anderen Element gehört: in der Umfrage
+ * selbst oder in `deployedNames` (`collectDeployedTechnicalNames`). Reporting-Schlüssel müssen eindeutig sein; weil
+ * der Name nur die ersten 8 Zeichen der ID nutzt, schützt eine eindeutige ID allein nicht davor. Kollisionen unter
+ * gespeicherten Namen werden nicht gemeldet (unveränderlich). Aufruf nach `ensureSurveyTechnicalNames`.
+ */
+export function findTechnicalNameCollisions(
+	survey: Survey,
+	savedNames: ReadonlyMap<string, string> = new Map(),
+	deployedNames: ReadonlyMap<string, string> = new Map()
+): Array<{ id: string; name: string }> {
+	const elements: Array<{ id: string; name: string }> = [survey];
+	const visit = (question: SurveyQuestion) => {
+		elements.push(question);
+		for (const fu of question.follow_ups ?? []) {
+			if (fu.question) visit(fu.question);
+		}
+	};
+	for (const q of survey.questions ?? []) visit(q);
+
+	const owners = new Map(deployedNames);
+	const key = (element: { name: string }) => (element.name ?? "").trim().toLowerCase();
+	// Gespeicherte zuerst: Sie behalten ihren Namen, kollidieren kann nur ein neues Element
+	for (const element of elements) {
+		if (savedNames.has(element.id)) owners.set(key(element), element.id);
+	}
+	const collisions: Array<{ id: string; name: string }> = [];
+	for (const element of elements) {
+		if (savedNames.has(element.id)) continue;
+		const owner = owners.get(key(element));
+		if (owner !== undefined && owner !== element.id) collisions.push({ id: element.id, name: element.name });
+		else owners.set(key(element), element.id);
+	}
+	return collisions;
+}
+
 export function createEmptySurvey(): Survey {
 	const id = crypto.randomUUID();
 	return {

@@ -148,7 +148,8 @@ export const de = {
 			successSummary: "Erfolgreich gespeichert",
 			successDetail: "Umfrage „{title}“ wurde aktualisiert.",
 			errorSummary: "Speicherfehler",
-			errorFallback: "Fehler beim Speichern der Umfrage in der Data Table."
+			errorFallback: "Fehler beim Speichern der Umfrage in der Data Table.",
+			nameCollision: "Der technische Name „{name}“ ist in dieser Umfrage schon vergeben. Bitte den Titel der neuen Frage ändern."
 		},
 		flowSize: {
 			warnTitle: "Textmenge der Umfrage nähert sich dem Limit",
@@ -336,6 +337,7 @@ export const de = {
 		ratingMinRange: "Minimalwert muss zwischen {min} und {max} liegen.",
 		ratingMaxRange: "Maximalwert muss zwischen {min} und {max} liegen.",
 		ratingMinLessThanMax: "Minimalwert muss kleiner als der Maximalwert sein.",
+		ratingValueNotInteger: "Nur ganze Zahlen erlaubt.",
 		choiceOptionsInvalid: "Auswahloptionen sind ungültig.",
 		choiceMinOptions: "Eine Auswahlabfrage benötigt mindestens {min} Optionen.",
 		choiceMaxOptions: "Eine Auswahlabfrage darf maximal {max} Optionen haben.",

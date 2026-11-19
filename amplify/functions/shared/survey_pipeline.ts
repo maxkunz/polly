@@ -3,8 +3,10 @@ import { evaluateFlowPayloadSize, type FlowPayloadSize } from "../../../src/doma
 import { FlowTranslationError, translateSurveyForFlow } from "../../../src/domain/survey/flowTranslator";
 import { surveyRules } from "../../../src/domain/survey/surveyRules";
 import {
+  collectDeployedTechnicalNames,
   collectTechnicalNames,
   ensureSurveyTechnicalNames,
+  findTechnicalNameCollisions,
   isChoiceOptions,
   resetWebSettings,
   type Survey,
@@ -67,6 +69,8 @@ export interface PrepareDraftOptions {
   surveyId: string;
   /** Gespeicherter Draft (frisch gelesen) oder `null` bei einer neuen Umfrage. */
   saved: Survey | null;
+  /** Zellen Stage/Prod/Backup derselben Zeile (Flow-JSON); ihre technischen Namen darf keine neue Frage bekommen. */
+  deployed?: readonly unknown[];
   /** Version, die der neue Draft bekommt. */
   version: number;
   /** Feature Flag `web_survey` der Installation. */
@@ -151,11 +155,15 @@ function assignIds(survey: Survey, savedIds: ReadonlySet<string>): SurveyStoreEr
 /**
  * Schritt 4: Gespeicherte technische Namen bleiben (Reporting-Schlüssel), neue entstehen aus Titel und ID –
  * auch wenn die Eingabe einen Namen vorgibt. Jede Abweichung der Eingabe ergibt `name_immutable_ignored`.
+ * Trifft ein neuer Name einen vorhandenen (gleicher Titel, gleicher ID-Anfang), ist das `invalid_id`
+ * (`name_collision`): Die ID wählt der Client, also muss er eine andere wählen oder sie weglassen.
  */
-function applyTechnicalNames(survey: Survey, saved: Survey | null): SurveyWarning[] {
+function applyTechnicalNames(survey: Survey, saved: Survey | null, deployed: readonly unknown[]): { warnings: SurveyWarning[]; error?: SurveyStoreError } {
   const savedNames = collectTechnicalNames(saved);
   const requested = new Map<string, { path: string; name: string }>();
+  const paths = new Map<string, string>();
   const take = (element: { id: string; name?: unknown }, path: string) => {
+    paths.set(element.id, path);
     const name = typeof element.name === "string" ? element.name.trim() : "";
     if (name) requested.set(element.id, { path, name });
     if (!savedNames.has(element.id)) element.name = "";
@@ -164,6 +172,12 @@ function applyTechnicalNames(survey: Survey, saved: Survey | null): SurveyWarnin
   visitQuestions(survey.questions, "questions", take);
 
   ensureSurveyTechnicalNames(survey, savedNames);
+
+  const [collision] = findTechnicalNameCollisions(survey, savedNames, collectDeployedTechnicalNames(deployed));
+  if (collision) {
+    const path = `${paths.get(collision.id)}.id`;
+    return { warnings: [], error: { code: "invalid_id", details: { path, reason: "name_collision", name: collision.name } } };
+  }
 
   const warnings: SurveyWarning[] = [];
   const compare = (element: { id: string; name: string }) => {
@@ -174,7 +188,7 @@ function applyTechnicalNames(survey: Survey, saved: Survey | null): SurveyWarnin
   };
   compare(survey);
   visitQuestions(survey.questions, "questions", compare);
-  return warnings;
+  return { warnings };
 }
 
 /** Schritt 5: Web-Felder. Ohne `web_survey` Standardwerte (Warnung nur, wenn sich etwas ändert). */
@@ -249,7 +263,9 @@ export function prepareDraft(input: Survey, options: PrepareDraftOptions): Prepa
   const idError = assignIds(survey, collectIds(options.saved));
   if (idError) return { ok: false, error: idError };
 
-  const warnings = applyTechnicalNames(survey, options.saved);
+  const names = applyTechnicalNames(survey, options.saved, options.deployed ?? []);
+  if (names.error) return { ok: false, error: names.error };
+  const warnings = names.warnings;
 
   const web = applyWebSettings(survey, options);
   if (web.error) return { ok: false, error: web.error };

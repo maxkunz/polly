@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+	ACCESS_TOKEN_TTL_SECONDS,
 	buildAuthorizationServerMetadata,
 	buildMcpUrls,
 	buildProtectedResourceMetadata,
@@ -21,8 +22,11 @@ import {
 	CONSENT_TTL_SECONDS,
 	consentKey,
 	isConsentValid,
+	MAX_DCR_CLIENTS_PER_TENANT,
 	MAX_REDIRECT_URIS,
+	MAX_UNUSED_DCR_CLIENTS_PER_TENANT,
 	mergeConsentRedirects,
+	planClientRegistration,
 	verifyPkce,
 	type RegisteredClient,
 } from "../amplify/functions/mcp/oauth";
@@ -38,6 +42,7 @@ import type {
 import { escapeHtml, pageHeaders, renderConsentPage } from "../amplify/functions/mcp/oauth_pages";
 import {
 	redeemAuthorizationCode,
+	REFRESH_REUSE_GRACE_MS,
 	revokeToken,
 	rotateRefreshToken,
 	verifyAccessToken,
@@ -75,9 +80,10 @@ class MemoryStore implements OAuthStore {
 		const client = this.clients.get(id);
 		if (client) Object.assign(client, { lastUsedAt: now, expiresAt });
 	}
-	async countClients(tenantId: string, now: number) {
-		return [...this.clients.values()].filter((c) => c.tenantId === tenantId && c.expiresAt > now).length;
+	async listClients(tenantId: string, now: number) {
+		return [...this.clients.values()].filter((c) => c.tenantId === tenantId && c.expiresAt > now);
 	}
+	async deleteClient(id: string) { this.clients.delete(id); }
 	async putAuthRequest(request: AuthRequestRecord) { this.requests.set(request.id, { ...request }); }
 	async getAuthRequest(id: string) { const r = this.requests.get(id); return r && { ...r }; }
 	async transitionAuthRequest(id: string, from: AuthRequestRecord["status"], to: AuthRequestRecord["status"], patch = {}) {
@@ -330,7 +336,8 @@ await test("Code einlösen: liefert Token-Paar, das Access-Token gilt für die S
 	assert.equal(result.ok, true);
 	if (!result.ok) return;
 	assert.equal(result.response.token_type, "Bearer");
-	assert.equal(result.response.expires_in, 3600);
+	assert.equal(result.response.expires_in, ACCESS_TOKEN_TTL_SECONDS);
+	assert.equal(ACCESS_TOKEN_TTL_SECONDS, 4 * 60 * 60, "4 h, bewusst länger als 60 min (Usability)");
 	const check = await verifyAccessToken(store, TENANT, result.response.access_token, NOW + 1000);
 	assert.equal(check.ok, true);
 	if (check.ok) assert.equal(check.session.sessionId, s.sessionId);
@@ -394,7 +401,11 @@ await test("Refresh: Wiederverwendung widerruft die ganze Familie", async () => 
 	assert.ok(first.ok);
 	const rotated = await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW);
 	assert.ok(rotated.ok);
-	const reuse = await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW);
+	// Wiederholung im Kulanzfenster (z. B. Antwort verloren): abgelehnt, Session bleibt
+	const retry = await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW + REFRESH_REUSE_GRACE_MS - 1);
+	assert.equal(!retry.ok && retry.error.revokedSession, undefined);
+	assert.equal((await verifyAccessToken(store, TENANT, rotated.response.access_token, NOW)).ok, true);
+	const reuse = await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW + REFRESH_REUSE_GRACE_MS);
 	assert.equal(reuse.ok, false);
 	if (!reuse.ok) assert.equal(reuse.error.revokedSession?.sessionId, s.sessionId);
 	// Auch das neue Paar ist damit ungültig
@@ -427,6 +438,18 @@ await test("Refresh: tote Genesys-Sitzung widerruft die Session", async () => {
 	assert.equal(store.sessions.has(s.sessionId), false);
 });
 
+await test("Refresh: Fehler in der Prüfung verbraucht das Token nicht, Wiederholen klappt", async () => {
+	const store = new MemoryStore();
+	const { code, session: s } = await seedCode(store);
+	const first = await redeem(store, code);
+	assert.ok(first.ok);
+	const params = { clientId: CLIENT_ID, refreshToken: first.response.refresh_token };
+	await assert.rejects(rotateRefreshToken(store, TENANT, params, NOW, async () => { throw new Error("KMS"); }));
+	const retry = await rotateRefreshToken(store, TENANT, params, NOW + 1000, async () => true);
+	assert.equal(retry.ok, true);
+	assert.equal(store.sessions.has(s.sessionId), true);
+});
+
 await test("Access-Token: fehlend, Format, Ablauf, anderer Mandant", async () => {
 	const store = new MemoryStore();
 	const { code } = await seedCode(store);
@@ -434,7 +457,7 @@ await test("Access-Token: fehlend, Format, Ablauf, anderer Mandant", async () =>
 	assert.ok(first.ok);
 	assert.deepEqual(await verifyAccessToken(store, TENANT, "", NOW), { ok: false, reason: "missing" });
 	assert.deepEqual(await verifyAccessToken(store, TENANT, "not a token", NOW), { ok: false, reason: "invalid" });
-	assert.deepEqual(await verifyAccessToken(store, TENANT, first.response.access_token, NOW + 3600_000), { ok: false, reason: "expired" });
+	assert.deepEqual(await verifyAccessToken(store, TENANT, first.response.access_token, NOW + ACCESS_TOKEN_TTL_SECONDS * 1000), { ok: false, reason: "expired" });
 	const other = { ...TENANT, tenantId: "tenant-b" };
 	assert.deepEqual(await verifyAccessToken(store, other, first.response.access_token, NOW), { ok: false, reason: "invalid" });
 	const otherUrl = { ...TENANT, mcpUrl: "https://api.example.com/mcp/OtherKeyOtherKeyOther1" };
@@ -488,6 +511,7 @@ function fakeDeps(store: MemoryStore, refresh: GenesysSessionDeps["refresh"]): G
 		},
 		encryptTokens: async (_t: string, _s: string, tokens: { accessToken: string }) => `enc:${tokens.accessToken.replace("access-", "")}`,
 		clientSecret: async () => "secret",
+		wait: async () => {},
 		refresh: async (...args: Parameters<GenesysSessionDeps["refresh"]>) => {
 			deps.refreshCalls += 1;
 			return refresh(...args);
@@ -526,6 +550,18 @@ await test("Genesys: paralleler Refresh – der Verlierer nimmt die Tokens des G
 	const lonely = session({ genesysExpiresAt: NOW - 1000 });
 	await store.putSession(lonely);
 	assert.deepEqual(await ensureGenesysAccess(loser, MCP_TENANT, lonely, NOW), { ok: false, reason: "session_dead" });
+	// Gewinner speichert erst, während der Verlierer wartet: kein Löschen, dessen Tokens werden genommen
+	const slow = session({ genesysExpiresAt: NOW - 1000 });
+	await store.putSession(slow);
+	let waits = 0;
+	const patient = {
+		...loser,
+		wait: async () => {
+			if (++waits === 1) await store.updateSessionGenesys(slow.sessionId, 0, { genesysTokensEnc: "enc:v7", genesysExpiresAt: NOW + 3600_000 });
+		},
+	};
+	const late = await ensureGenesysAccess(patient, MCP_TENANT, slow, NOW);
+	assert.equal(late.ok && late.accessToken, "access-v7");
 });
 
 await test("Genesys: nicht erreichbar – noch gültiges Token weiter nutzen, abgelaufenes ergibt upstream", async () => {
@@ -611,6 +647,7 @@ await test("Rate-Limit pro Session und Minute", async () => {
 });
 
 const CLAUDE_COM = "https://claude.com/api/mcp/auth_callback";
+const LOOPBACK = "http://localhost:33418/callback";
 
 /** Gemerkte Zustimmung wie nach „Zulassen“ für Person `user-1` und `CLIENT_ID`. */
 async function seedConsent(store: MemoryStore, redirectUris = [REDIRECT]): Promise<string> {
@@ -619,18 +656,35 @@ async function seedConsent(store: MemoryStore, redirectUris = [REDIRECT]): Promi
 	return key;
 }
 
-await test("Gemerkte Zustimmung: nur gleicher Mandant, Client, bestätigte Redirect-URI, Epoch und vor Ablauf", async () => {
+await test("DCR-Plätze: unbenutzte Clients werden verdrängt, genutzte begrenzen", () => {
+	const slot = (id: string, createdAt: number, used = false) => ({ clientId: id, createdAt, lastUsedAt: used ? createdAt + 1 : createdAt, expiresAt: NOW + 1000 });
+	const unused = Array.from({ length: 50 }, (_, i) => slot(`u${i}`, NOW - 1000 + i));
+	const plan = planClientRegistration(unused, NOW);
+	assert.ok(plan.ok);
+	if (plan.ok) {
+		assert.equal(plan.evict.length, 50 - MAX_UNUSED_DCR_CLIENTS_PER_TENANT + 1);
+		assert.equal(plan.evict[0], "u0", "älteste zuerst");
+	}
+	const expired = { ...slot("x", NOW - 5000), expiresAt: NOW };
+	assert.deepEqual(planClientRegistration([expired, slot("u", NOW)], NOW), { ok: true, evict: [] });
+	const used = Array.from({ length: MAX_DCR_CLIENTS_PER_TENANT - 1 }, (_, i) => slot(`g${i}`, NOW - 1000, true));
+	assert.deepEqual(planClientRegistration([...used, slot("u", NOW)], NOW), { ok: true, evict: ["u"] }, "Platz für den neuen");
+	assert.deepEqual(planClientRegistration([...used, slot("g", NOW, true)], NOW), { ok: false });
+});
+
+await test("Gemerkte Zustimmung: nur Loopback, gleicher Mandant, Client, bestätigte Redirect-URI, Epoch und vor Ablauf", async () => {
 	const store = new MemoryStore();
 	const key = await seedConsent(store);
 	assert.notEqual(key, consentKey(TENANT.tenantId, "user-2", CLIENT_ID));
 	assert.notEqual(key, consentKey("tenant-b", "user-1", CLIENT_ID));
 	assert.ok(!key.includes("user-1"));
-	const stored = await store.getConsent(key);
-	const current = { tenantId: TENANT.tenantId, clientId: CLIENT_ID, redirectUri: REDIRECT, epoch: TENANT.epoch };
+	assert.equal(isConsentValid(await store.getConsent(key), { tenantId: TENANT.tenantId, clientId: CLIENT_ID, redirectUri: REDIRECT, epoch: TENANT.epoch }, NOW), false, "https-Redirect: Zustimmungsseite bleibt");
+	const stored = await store.getConsent(await seedConsent(store, [LOOPBACK]));
+	const current = { tenantId: TENANT.tenantId, clientId: CLIENT_ID, redirectUri: LOOPBACK, epoch: TENANT.epoch };
 	assert.equal(isConsentValid(stored, current, NOW), true);
 	assert.equal(isConsentValid(undefined, current, NOW), false);
 	assert.equal(isConsentValid(stored, { ...current, epoch: TENANT.epoch + 1 }, NOW), false, "Abschalten widerruft");
-	assert.equal(isConsentValid(stored, { ...current, redirectUri: CLAUDE_COM }, NOW), false);
+	assert.equal(isConsentValid(stored, { ...current, redirectUri: "http://localhost:9999/cb" }, NOW), false);
 	assert.equal(isConsentValid(stored, { ...current, clientId: "other" }, NOW), false);
 	assert.equal(isConsentValid(stored, { ...current, tenantId: "tenant-b" }, NOW), false);
 	assert.equal(isConsentValid(stored, current, NOW + CONSENT_TTL_SECONDS * 1000), false, "abgelaufen");
@@ -665,7 +719,7 @@ await test("Gemerkte Zustimmung: Widerruf durch den Client und Wiederverwendung 
 	first = await redeem(store, (await seedCode(store)).code);
 	assert.ok(first.ok);
 	assert.ok((await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW)).ok);
-	assert.equal((await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW)).ok, false);
+	assert.equal((await rotateRefreshToken(store, TENANT, { clientId: CLIENT_ID, refreshToken: first.response.refresh_token }, NOW + REFRESH_REUSE_GRACE_MS)).ok, false);
 	assert.equal(await store.getConsent(key), undefined);
 
 	// Ein Access-Token widerruft nur sich selbst, die Zustimmung bleibt

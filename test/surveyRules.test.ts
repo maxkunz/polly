@@ -72,6 +72,21 @@ test("Fehler an Fragen und Folgefragen nennen die Frage", () => {
 	]);
 });
 
+test("Rating: Skala und Bedingungswerte nur ganzzahlig", () => {
+	const followUp = (value: number | string) => ({ condition: { operator: "equals" as const, value }, question: question({ id: "fu", name: "fu_x" }) });
+	const rating = (options: { min_value: number; max_value: number }, value: number | string = 3) =>
+		survey([question({ type: "rating", options, follow_ups: [followUp(value)] })]);
+	assert.deepEqual(surveyRules(rating({ min_value: 1, max_value: 5 })), []);
+	assert.deepEqual(
+		surveyRules(rating({ min_value: 1.5, max_value: 4.5 })).map(issue => [issue.code, issue.field]),
+		[["ratingValueNotInteger", `${Q}.options.min_value`], ["ratingValueNotInteger", `${Q}.options.max_value`]]
+	);
+	assert.deepEqual(surveyRules(rating({ min_value: 1, max_value: 5 }, 2.5)).map(issue => issue.code), ["followUpValueRequired"]);
+	assert.deepEqual(surveyRules(rating({ min_value: 1, max_value: 5 }, "3")), []);
+	const nps = survey([question({ type: "nps", follow_ups: [followUp(6.5)] })]);
+	assert.deepEqual(surveyRules(nps).map(issue => issue.code), ["followUpValueRequired"]);
+});
+
 test("Web-Felder werden nur mit Option webSurvey geprüft", () => {
 	const s = survey([question()], { base_url: "http://example.com", language: "xx" as never, web_theme_id: "kein-design" });
 	assert.deepEqual(surveyRules(s).map(issue => issue.code), ["baseUrlInvalid", "languageInvalid", "webThemeInvalid"]);

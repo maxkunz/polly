@@ -65,7 +65,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
 
 1. **Ohne Token** → 401 mit `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp/{key}"`.
 2. **Metadaten des Autorisierungsservers:** Issuer `<base>/mcp/{key}`, nur PKCE S256, `token_endpoint_auth_methods_supported: ["none"]`, Grants `authorization_code` und `refresh_token`.
-3. **DCR:** `redirect_uris` nur `https` mit Ursprung und Pfad exakt aus der Allow-List (`MCP_ALLOWED_REDIRECT_URIS`, Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`; ein anderer Pfad auf demselben Host ist nicht erlaubt, damit kein Open Redirect dort den Code abgreift) oder Loopback (RFC 8252, immer erlaubt). Keine Wildcards. Höchstens 200 Clients pro Mandant, gezählt werden nur nicht abgelaufene. Ein neuer Client verfällt nach einem Tag, wenn er bis dahin kein Token bekommen hat; mit dem ersten Token gilt die Frist von 90 Tagen nach letzter Nutzung. So belegen anonyme Registrierungen die Plätze nicht dauerhaft.
+3. **DCR:** `redirect_uris` nur `https` mit Ursprung und Pfad exakt aus der Allow-List (`MCP_ALLOWED_REDIRECT_URIS`, Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`; ein anderer Pfad auf demselben Host ist nicht erlaubt, damit kein Open Redirect dort den Code abgreift) oder Loopback (RFC 8252, immer erlaubt). Keine Wildcards. Höchstens 200 Clients pro Mandant, gezählt werden nur nicht abgelaufene. Ein neuer Client verfällt nach einer Stunde, wenn er bis dahin kein Token bekommen hat; mit dem ersten Token gilt die Frist von 90 Tagen nach letzter Nutzung. Von den unbenutzten Clients bleiben höchstens 20; eine neue Registrierung verdrängt die ältesten (`planClientRegistration`). So können anonyme Registrierungen nur unbenutzte Plätze belegen, nie die Grenze für genutzte Clients erreichen.
 4. **`/authorize`:**
    - `client_id` muss an den Key gebunden sein, `redirect_uri` muss exakt passen.
    - Pflicht sind PKCE S256 und `resource` = MCP-URL dieses Mandanten.
@@ -79,16 +79,17 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    - `loadCallerRoles`: Mindestens eine Polly-Rolle ist nötig, sonst Fehlerseite.
    - Bei Ablehnung wird das Genesys-Token sofort widerrufen.
    - Die Genesys-Tokens kommen KMS-verschlüsselt in die Anmeldeanfrage. Die Session entsteht erst mit der Zustimmung, damit abgebrochene Anmeldungen keine Sessions hinterlassen.
+   - Schließt die Person die Zustimmungsseite ohne Entscheidung, wird das Genesys-Token nicht widerrufen (bewusst akzeptiert, Abschnitt 11.1).
 6. **Zustimmungsseite:** zeigt Client (Name wie selbst angegeben), Redirect-Host (bei Loopback „ein Programm auf diesem Rechner“), Installation (`tenantName`) und Person.
    - Geschützt durch `X-Frame-Options: DENY`, CSP mit `frame-ancestors 'none'` und `form-action` (eigener Ursprung und Ursprung der Redirect-URI), CSRF-Nonce und das Browser-Cookie. Kein Skript.
    - Sprache Deutsch oder Englisch nach `Accept-Language`.
    - „Zulassen“ legt Session und Einmal-Code an. „Ablehnen“ widerruft das Genesys-Token und leitet mit `access_denied` zurück. Jede Anmeldeanfrage lässt sich nur einmal bestätigen.
-   - Mit „Zulassen“ wird die Zustimmung pro (Mandant, Person, Client) 30 Tage gemerkt (`CONSENT#`, Schlüssel als Hash), zusammen mit den bestätigten Redirect-URIs (höchstens 10). Sie gilt nur für eine dieser Redirect-URIs und denselben `mcpEpoch`: Abschalten von MCP oder Wechsel des Genesys-Clients macht sie ungültig. Bei gültiger Zustimmung überspringt der Callback die Seite und stellt den Code sofort aus; der Genesys-Login bleibt Pflicht. Ein anderer Client oder eine noch nicht bestätigte Redirect-URI fragt neu.
+   - Mit „Zulassen“ wird die Zustimmung pro (Mandant, Person, Client) 30 Tage gemerkt (`CONSENT#`, Schlüssel als Hash), zusammen mit den bestätigten Redirect-URIs (höchstens 10). Sie gilt nur für eine dieser Redirect-URIs und denselben `mcpEpoch`: Abschalten von MCP oder Wechsel des Genesys-Clients macht sie ungültig. Bei gültiger Zustimmung überspringt der Callback die Seite und stellt den Code sofort aus; der Genesys-Login bleibt Pflicht. Das gilt nur für Loopback-Redirects (Claude Code, Claude Desktop): Bei `https`-Redirects (claude.ai/claude.com) erscheint die Seite immer, weil ein untergeschobener `/authorize`-Link mit fremdem `state` sonst ohne Klick einen Code an den Client ausstellen könnte. Ein anderer Client oder eine noch nicht bestätigte Redirect-URI fragt neu.
    - Zurückgenommen wird sie durch „Ablehnen“, durch den Widerruf eines Refresh-Tokens (`/revoke`) und bei erkannter Wiederverwendung von Code oder Refresh-Token. Endet nur die Genesys-Sitzung, bleibt sie bestehen. Gespeichert wird sie erst, wenn Session und Code angelegt sind; scheitert das Speichern, erscheint die Seite beim nächsten Mal wieder.
 7. **`/token`:**
    - Der Code ist einmalig. PKCE, `redirect_uri`, `client_id` und `resource` müssen mit der Anfrage übereinstimmen.
    - Tokens sind opake Zufallswerte mit 256 bit und werden nur als SHA-256 gespeichert.
-   - Refresh-Tokens rotieren. Bei Wiederverwendung wird die ganze Token-Familie widerrufen und die Session gelöscht.
+   - Refresh-Tokens rotieren. Verbraucht wird das alte erst nach allen Prüfungen (Session, Genesys-Sitzung) direkt vor der Ausgabe des neuen Paars; scheitert eine Prüfung vorübergehend, bleibt es gültig. Bei Wiederverwendung wird die ganze Token-Familie widerrufen und die Session gelöscht, außer innerhalb von 30 s nach dem Einlösen (`REFRESH_REUSE_GRACE_MS`): Eine solche Wiederholung (Antwort verloren, Retry, zwei parallele Refreshes desselben Clients) bekommt nur `invalid_grant`.
    - **Familie = Session:** Jedes Token verweist auf seine Session, ohne Session ist keins mehr gültig. Ein schon eingelöster Code widerruft ebenso die daraus entstandene Session (RFC 9700).
    - Beim Refresh muss die Genesys-Sitzung noch leben (bei Bedarf Genesys-Refresh). Lehnt Genesys ab, wird die Session gelöscht (`invalid_grant`, neue Anmeldung). Ist Genesys nur nicht erreichbar, bleibt sie bestehen.
    - `client_id` kommt aus dem Body oder aus HTTP Basic (ohne Secret).
@@ -99,8 +100,9 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    2. Mandant per Key: `mcpEnabled`, `APPROVED`, Epoch der Session = `mcpEpoch`
    3. `__meta`-Flag `mcp` (Cache 60 s)
    4. Access-Token (`ConsistentRead`)
-   5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`. Lehnt Genesys das Token während des Aufrufs vor dem gespeicherten Ablauf mit 401 ab (Abmeldung, Widerruf), wird es einmal sofort erneuert (höchstens einmal pro Anfrage). Bei der Rollenprüfung wird sie danach wiederholt, ein Tool dagegen nicht (es kann schon geschrieben haben, der Client bekommt `upstream_error` und der nächste Aufruf nutzt das neue Token). Lehnt Genesys auch den Refresh ab, wird die Session gelöscht und die Anfrage bekommt statt des Tool-Ergebnisses 401 `invalid_token`; ist Genesys beim Refresh nicht erreichbar, bleibt es bei `upstream_error`.
-   6. Rate-Limit pro Session (feste Fenster pro Minute, 120; 429 mit `Retry-After`)
+   5. Session, bei Bedarf Genesys-Refresh (2 min vor Ablauf; parallele Aufrufe sperren optimistisch über `genesysVersion`, wer verliert, nimmt die gespeicherten neuen Tokens. Hat der Gewinner noch nicht gespeichert, liest der Verlierer nach 250 und 750 ms erneut, bevor er die Session für tot hält). Ist die Genesys-Sitzung tot, wird die Session gelöscht und der Aufruf bekommt 401 `invalid_token`. Lehnt Genesys das Token während des Aufrufs vor dem gespeicherten Ablauf mit 401 ab (Abmeldung, Widerruf), wird es einmal sofort erneuert (höchstens einmal pro Anfrage). Bei der Rollenprüfung wird sie danach wiederholt, ein Tool dagegen nicht (es kann schon geschrieben haben, der Client bekommt `upstream_error` und der nächste Aufruf nutzt das neue Token). Lehnt Genesys auch den Refresh ab, wird die Session gelöscht und die Anfrage bekommt statt des Tool-Ergebnisses 401 `invalid_token`; ist Genesys beim Refresh nicht erreichbar, bleibt es bei `upstream_error`.
+   6. Rate-Limit pro Session (feste Fenster pro Minute, 120; 429 mit `Retry-After`). Gezählt wird pro HTTP-Anfrage; JSON-RPC-Batches (seit MCP 2025-06-18 nicht mehr Teil der Spezifikation) werden mit 400 abgelehnt, damit eine Anfrage genau einen Aufruf enthält.
+   7. Zeitbudget: Alle Store-Operationen und Auswertungen einer Anfrage teilen eine Frist von 24 s ab Eingang (`MCP_REQUEST_BUDGET_MS`, Lambda-Timeout 28 s), statt pro Operation neu zu beginnen.
    7. Rolle des Tools (Abschnitt 4)
    8. Audit-Log: Mandant, Person, Tool, Umfrage, Ergebnis-Code, **keine Inhalte**; bei der Auswertung zusätzlich Zeitraum, Filter, Anzahl der ausgegebenen Sitzungen, Folgeseite ja/nein und ob Kommentare freigegeben waren
 9. **Das MCP-Token geht nie an Genesys, das Genesys-Token verlässt den Server nie.** Genesys-Tokens liegen nur KMS-verschlüsselt (`McpTokenKey`, `EncryptionContext` mit Mandant und Session) in der Session.
@@ -205,7 +207,7 @@ Fehler kommen als Tool-Ergebnis mit `isError: true` und `{ code, message, detail
 | `forbidden` | Polly-Rolle für das Tool fehlt | `requiredRole` |
 | `not_found` | Umfrage unbekannt oder in Löschung | – |
 | `invalid_input` | Eingabe entspricht nicht dem Schema | `issues` |
-| `invalid_id` | ID keine UUID oder doppelt | `path`, `reason` (`not_uuid` \| `duplicate`) |
+| `invalid_id` | ID keine UUID, doppelt oder ergibt einen schon vergebenen technischen Namen | `path`, `reason` (`not_uuid` \| `duplicate` \| `name_collision`), bei `name_collision` `name` |
 | `validation_failed` | Validierung der Umfrage fehlgeschlagen, nichts geschrieben | `errors`, bei Translator-Fehlern `translation` (`key`, `message`, `params`, `questionId?`) |
 | `survey_locked` | Fremdes, gültiges Lock | `lockedBy`, `since`, `expiresAt`, `via` |
 | `lock_lost` | Eigenes Lock fehlt oder gehört jetzt anderen | `lockedBy`, `since`, `via` |
@@ -271,7 +273,7 @@ Sie gilt für `create_survey`, `save_draft` und `validate_survey`. `deploy_surve
 1. Body ≤ 256 KB (`readRequestBody`), zod-Strukturprüfung, Whitelist-Kopie (unbekannte Felder werden verworfen).
 2. Servergeführte Felder (`version`, `created_at`, `updated_at`, `id`) setzt der Server.
 3. IDs von Fragen und Auswahloptionen sind UUIDs und über die Umfrage eindeutig. Fehlende vergibt der Server, Duplikate ergeben `invalid_id`. IDs, die schon gespeichert sind, bleiben erlaubt (ältere Umfragen).
-4. Technische Namen: bereits gespeicherte bleiben unverändert (`ensureSurveyTechnicalNames`, `collectTechnicalNames`), neue entstehen immer aus Titel + erste 8 Zeichen der ID. Weicht die Eingabe ab, gilt der Name des Servers und die Warnung `name_immutable_ignored` wird gemeldet (der Name ist Reporting-Schlüssel).
+4. Technische Namen: bereits gespeicherte bleiben unverändert (`ensureSurveyTechnicalNames`, `collectTechnicalNames`), neue entstehen immer aus Titel + erste 8 Zeichen der ID. Weicht die Eingabe ab, gilt der Name des Servers und die Warnung `name_immutable_ignored` wird gemeldet (der Name ist Reporting-Schlüssel). Weil der Name nur die ersten 8 Zeichen der ID nutzt, schützt eine eindeutige ID nicht vor doppelten Namen: Trifft der Name eines neuen Elements einen Namen der Umfrage oder aus Stage/Prod/Backup mit anderer ID (`findTechnicalNameCollisions`, `collectDeployedTechnicalNames` in `surveyTypes.ts`), ist das `invalid_id` mit `reason: "name_collision"`. Die gleiche ID darf zurückkommen (gelöschte Frage wiederherstellen). Kollisionen unter gespeicherten Namen werden nicht gemeldet. Die App prüft beim Speichern dieselbe Regel (`SurveyTechnicalNameCollisionError`).
 5. Web-Felder:
    - Ist `web_survey` aus, wird `resetWebSettings` angewendet (Warnung `web_settings_reset`).
    - Ist es an, muss `web_theme_id` beim Mandanten existieren (`theme_unknown`).
@@ -290,6 +292,7 @@ Gilt für `get_responses`, die Regeln für Werte auch für `get_aggregates`. Ums
 - **Cursor:** versiegelt mit AES-256-GCM (Schlüssel per HKDF abgeleitet), die AAD bindet ihn an Mandant und Umfrage, dazu ein Ablauf (15 Minuten). Er trägt nur Sitzungsstart, Pseudonym der letzten Sitzung und einen Abdruck von Zeitraum und Filtern; Klar-IDs kommen nie hinein. Die Reihenfolge ist Sitzungsstart, dann Pseudonym, deshalb bleibt die Position auch bei neuen Sitzungen stabil. Fremde, manipulierte, abgelaufene Cursor und Cursor einer anderen Abfrage (anderer Zeitraum oder Filter) → `cursor_invalid`.
 - **Zeitpunkte nur grob:** `startedHour` ist der Sitzungsstart, auf die volle Stunde abgerundet; Antworten tragen `secondsFromStart` (ganze Sekunden seit dem Start) statt eines Zeitstempels. Genaue Zeitpunkte ließen sich mit Genesys-Interaktionsdaten verknüpfen und so die Conversation (Anrufer, Agent) bestimmen. Intern (Sortierung, versiegelter Cursor) zählt weiter der genaue Start.
 - **Freitext** gibt es nur bei Fragetyp `comment` und nur mit `mcpAllowComments`. Nur `rating`/`nps` mit Zahl, `yes_no` mit Wahrheitswert und `choice` mit einem Label dieser Frage (aus Draft, Prod, Stage oder Backup; bereinigt, höchstens 200 Zeichen) erscheinen unverändert. Alles andere, auch ein unbekannter Typ, ein Wert, der nicht zum Typ passt, oder ein Auswahlwert, der kein bekanntes Label ist (z. B. ein Transkript), gilt als Freitext. Labels von Versionen, die in keinem Stand mehr stehen, sind nicht bekannt; solche Antworten erscheinen ebenfalls als Freitext. Ohne Freigabe erscheint `{ questionId, type, secondsFromStart, redacted: true, hasText }`. Mit Freigabe wird der Text von Steuer- und Formatzeichen bereinigt, Zeilenumbrüche werden zu Leerzeichen, und er wird auf 2.000 Zeichen gekürzt. Der Text ist weiterhin Daten, keine Anweisung (Server-Instructions). Ein unbekannter Typ erscheint als `unknown`. `questionId` enthält nur `[A-Za-z0-9_-]` (anderes wird zu `_`, höchstens 100 Zeichen), damit kein Text mit Anweisungen über den Schlüssel kommt.
+- **Lesen:** Sitzungen kommen aufsteigend nach Start. Gelesen wird ab der Cursor-Zeit nur so weit, wie die Seite und die Entscheidung über `nextCursor` brauchen (`createResponsesReadStop`), nicht alle restlichen Sitzungen des Zeitraums.
 - **Weitere Einschränkungen:** Zeitraum höchstens 24 Stunden, höchstens `limit` Sitzungen pro Seite (Standard 50, höchstens 100) und 256 KB pro Seite, Filter `channel` (`flow`/`web`), `status`, `version`.
 - **Ausgabe je Sitzung:** `{ responseId, channel, status, version, startedHour, answers: [{ questionId, type, secondsFromStart, value | redacted, hasText }] }`.
 - **`get_results_summary`** zählt nur (Status, Version, Kanal). **`get_aggregates`** liefert pro Frage Anzahl, Mittelwert, Verteilung und NPS mit dem Fragetitel. Eine Verteilung gibt es nur für `yes_no`, `choice`, `rating`, `nps` und nur mit Werten, die zum Typ passen (`true`/`false`, Labels der Frage, Zahlen, `empty`); andere Werte zählen nur in `otherCount`. Kommentarfragen und unbekannte Typen haben keine Verteilung, bei mehr als 100 Werten entfällt sie ganz. Beide enthalten keine Einzelantworten und brauchen keine Pseudonymisierung.
@@ -305,7 +308,7 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | `AUTHREQ#` | Anmeldeanfrage inkl. Genesys-PKCE-Verifier und CSRF-Nonce | 10 min |
 | `CODE#` | Einmal-Code (Hash) | 2 min |
 | `SESSION#` | Person, Mandant, `mcpEpoch`, Genesys-Tokens (KMS-verschlüsselt) | höchstens 30 Tage |
-| `AT#` / `RT#` | Access-/Refresh-Token (Hash), Rotation, `familyId` | 60 min / 30 Tage |
+| `AT#` / `RT#` | Access-/Refresh-Token (Hash), Rotation, `familyId` | 4 h / 30 Tage |
 | `CONSENT#` | gemerkte Zustimmung (Client, bestätigte Redirect-URIs, `mcpEpoch`) | 30 Tage |
 | `RATE#` | Zähler pro Session | 2 min |
 
@@ -331,11 +334,13 @@ DynamoDB, `RemovalPolicy.RETAIN`, PAY_PER_REQUEST, Schlüssel `pk`/`sk`, TTL-Att
 | Kommentar | 2.000 Zeichen | Pseudonymisierung |
 | Cursor von `get_responses` | 15 Minuten | `CURSOR_TTL_MS` in `mcp/results_v1.ts` |
 | Lock-Dauer | 60 Minuten | `SURVEY_LOCK_TTL_MINUTES` |
-| Access-Token | 60 Minuten | `McpOAuthTable` |
+| Access-Token | 4 Stunden (ursprünglich 60 min, aus Usability-Gründen verlängert: weniger Refresh-Runden in KI-Clients) | `ACCESS_TOKEN_TTL_SECONDS` in `mcp/oauth.ts` |
 | Refresh-Token / Session | 30 Tage | `McpOAuthTable` |
-| Rate-Limit pro Session | 120 pro Minute | `SESSION_RATE_LIMIT_PER_MINUTE` in `mcp/oauth.ts` |
-| DCR-Clients pro Mandant | 200 | `MAX_DCR_CLIENTS_PER_TENANT` |
-| DCR-Client ohne Token / nach letzter Nutzung | 1 / 90 Tage | `CLIENT_UNUSED_TTL_SECONDS` / `CLIENT_IDLE_TTL_SECONDS` |
+| Rate-Limit pro Session | 120 pro Minute (keine JSON-RPC-Batches) | `SESSION_RATE_LIMIT_PER_MINUTE` in `mcp/oauth.ts` |
+| Zeitbudget pro Anfrage | 24 Sekunden ab Eingang | `MCP_REQUEST_BUDGET_MS` in `mcp/tool_handlers.ts` |
+| Kulanzfenster Refresh-Token | 30 Sekunden | `REFRESH_REUSE_GRACE_MS` in `mcp/tokens.ts` |
+| DCR-Clients pro Mandant | 200, davon höchstens 20 unbenutzte | `MAX_DCR_CLIENTS_PER_TENANT` / `MAX_UNUSED_DCR_CLIENTS_PER_TENANT` |
+| DCR-Client ohne Token / nach letzter Nutzung | 1 Stunde / 90 Tage | `CLIENT_UNUSED_TTL_SECONDS` / `CLIENT_IDLE_TTL_SECONDS` |
 | Anmeldeanfrage / Einmal-Code | 10 / 2 Minuten | `mcp/oauth.ts` |
 | Redirect-URIs pro Client | 10 | DCR |
 
@@ -351,6 +356,17 @@ Zusätzlich gilt die Drosselung pro Route in `routeSettings` (`backend.ts`).
 - **Datenschutz:** Pseudonymisierte Einzelantworten, Kommentare nur mit Mandanten-Flag, Audit-Log ohne Inhalte.
 - **Prompt Injection:** Umfragetexte, Design-Namen (auch per App oder Import der Kunden-API gesetzt) und Antworten sind Fremdinhalt. Die Server-Instructions weisen darauf hin. Zusätzlich gilt: Deploy, Rollback, das Ändern eines Web-Designs und ein neues Standard-Design verlangen `confirm: true`; Löschen, Einladungen und Queue-Mapping gibt es per MCP nicht, damit ein manipulierter Inhalt nur begrenzten Schaden anrichten kann. Designs bestehen nur aus geprüften Tokens (kein CSS, keine fremden Quellen); die Lambda `mcp` darf Designs per IAM nur anlegen und ändern (`PutItem`/`UpdateItem`), nicht löschen.
 - **Mehrere Installationen:** Der Genesys-Client ist pro Installation, die Org-Prüfung verhindert den Login aus einer fremden Genesys-Org.
+
+### 11.1 Bewusst akzeptierte Restrisiken
+
+Aus Reviews bekannt, geprüft und bewusst so gelassen. Bei künftigen Reviews nicht erneut als Befund melden, solange sich die genannten Voraussetzungen nicht ändern.
+
+| Risiko | Warum akzeptiert | Stelle |
+|---|---|---|
+| **Access-Token gilt 4 h** statt der ursprünglich geplanten 60 min | Usability: weniger Refresh-Runden in KI-Clients. Session, Epoch und Rolle werden trotzdem bei jedem Aufruf geprüft; Abschalten und Widerruf greifen sofort. | `ACCESS_TOKEN_TTL_SECONDS` in `mcp/oauth.ts` |
+| **Schon eingelöster Code beendet die Session**, bevor Client, Redirect-URI und PKCE geprüft sind. Wer einen eingelösten Code kennt (Browser-Verlauf, Logs), kann damit die Session des Opfers beenden. | So verlangt es RFC 9700, 4.2.1: Die Wiederverwendung eines Codes gilt als Anzeichen für Diebstahl, die Session wird unabhängig vom Vorleger widerrufen. Der Schaden beschränkt sich auf eine neue Anmeldung; Zugriff auf Daten bekommt der Angreifer nicht. Der Code ist nur 2 min gültig. | `redeemAuthorizationCode` in `mcp/tokens.ts` |
+| **Genesys-Token nach abgebrochener Zustimmung** wird nicht widerrufen | Die Anmeldeanfrage verfällt nach 10 min per TTL. Das Token ist nur KMS-verschlüsselt gespeichert und danach gelöscht, also nicht mehr lesbar. Das Access-Token läuft nach `MCP_CLIENT_TOKEN_VALIDITY_SECONDS` (1 h) ab, das Refresh-Token ist ohne das Client-Secret des Backends nutzlos. Ein echter Widerruf bräuchte einen DynamoDB-Stream auf die TTL-Löschungen samt eigener Lambda. | `callback` in `mcp/handler.ts` |
+| **Kulanzfenster beim Refresh-Token** (30 s ohne Widerruf der Familie) | Ohne Fenster beendete jeder Retry nach verlorener Antwort die Session. Ein Angreifer mit gestohlenem Token gewinnt dadurch nichts: Seine Wiederholung bekommt ebenfalls nur `invalid_grant`. Erst nach dem Fenster gilt erneutes Vorlegen als Missbrauch. | `REFRESH_REUSE_GRACE_MS` in `mcp/tokens.ts` |
 
 ## 12. Einrichtung im MCP-Client
 

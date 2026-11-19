@@ -40,6 +40,7 @@ export type SurveyRuleCode =
 	| "ratingMinRange"
 	| "ratingMaxRange"
 	| "ratingMinLessThanMax"
+	| "ratingValueNotInteger"
 	| "choiceOptionsInvalid"
 	| "choiceMinOptions"
 	| "choiceMaxOptions"
@@ -192,9 +193,10 @@ function isFollowUpValueValid(parent: SurveyQuestion, value: unknown): boolean {
 			return isChoiceOptions(parent.options) && parent.options.labels.some(label => label.id === value);
 		case "rating":
 		case "nps":
+			// Nur ganze Zahlen: Antworten auf der Skala sind immer ganzzahlig
 			return (
 				(typeof value === "number" || (typeof value === "string" && value.trim() !== "")) &&
-				Number.isFinite(Number(value))
+				Number.isInteger(Number(value))
 			);
 		default:
 			return true;
@@ -295,6 +297,22 @@ export function questionRules(
 					questionId: question.id,
 					fieldId: ids.ratingMin(question.id)
 				});
+			}
+			// Die Skala wird Schritt für Schritt aufgezählt (Translator): Kommazahlen ergäben Werte wie 1.5, 2.5, …
+			const bounds = [
+				["min_value", min_value, ids.ratingMin(question.id)],
+				["max_value", max_value, ids.ratingMax(question.id)]
+			] as const;
+			for (const [key, value, fieldId] of bounds) {
+				if (!Number.isInteger(value)) {
+					errors.push({
+						field: `${qField}.options.${key}`,
+						code: "ratingValueNotInteger",
+						params: {},
+						questionId: question.id,
+						fieldId
+					});
+				}
 			}
 		}
 	} else if (question.type === "choice") {

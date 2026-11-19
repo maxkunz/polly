@@ -87,7 +87,7 @@ const ERROR_MESSAGES: Record<McpToolErrorCode, string> = {
   forbidden: "Your Polly role does not allow this tool. Do not retry; ask an administrator for the role in details.requiredRole.",
   not_found: "Survey not found (unknown ID or being deleted).",
   invalid_input: "The arguments do not match the tool's input schema. See details.issues.",
-  invalid_id: "An ID is not a UUID or is used twice. Omit IDs of new elements; the server assigns them. Keep the IDs of existing questions and options.",
+  invalid_id: "An ID is not a UUID, is used twice or gives a new question the technical name of another one. Omit IDs of new elements; the server assigns them. Keep the IDs of existing questions and options.",
   validation_failed:
     "The survey violates the authoring rules. Nothing was written. Read details.errors[].message and, for flow errors, details.translation.message; see get_authoring_guide.",
   theme_unknown: "web_theme_id is not a web design of this installation. Use a themeId from list_web_themes or omit the field.",
@@ -163,8 +163,8 @@ const choiceLabelInput = z.object({
 const optionsInput = z
   .object({
     labels: z.array(choiceLabelInput).max(MAX_LABELS_INPUT).optional().describe("choice only"),
-    min_value: z.number().optional().describe("rating only"),
-    max_value: z.number().optional().describe("rating only"),
+    min_value: z.number().optional().describe("rating only, whole number"),
+    max_value: z.number().optional().describe("rating only, whole number"),
     min_label: z.string().max(1000).optional().describe("rating and nps, shown on the web page only"),
     max_label: z.string().max(1000).optional().describe("rating and nps, shown on the web page only"),
   })
@@ -712,6 +712,7 @@ const ISSUE_MESSAGES: Record<SurveyRuleCode, (params: MessageParams) => string> 
   ratingMinRange: (p) => `options.min_value must be between ${param(p, "min")} and ${param(p, "max")}.`,
   ratingMaxRange: (p) => `options.max_value must be between ${param(p, "min")} and ${param(p, "max")}.`,
   ratingMinLessThanMax: () => "options.min_value must be smaller than options.max_value.",
+  ratingValueNotInteger: () => "options.min_value and options.max_value must be whole numbers.",
   choiceOptionsInvalid: () => "A choice question needs options.labels, a list of objects with a label.",
   choiceMinOptions: (p) => `A choice question needs at least ${param(p, "min")} options (options.labels).`,
   choiceMaxOptions: (p) => `A choice question may have at most ${param(p, "max")} options (options.labels). Remove options or split the question.`,
@@ -722,7 +723,7 @@ const ISSUE_MESSAGES: Record<SurveyRuleCode, (params: MessageParams) => string> 
   followUpMissing: () => "A follow-up entry has no question. Add the question or remove the entry.",
   followUpOperatorDuplicate: (p) =>
     `The operator "${param(p, "operator")}" is already used by follow-up ${param(p, "number")}. Each operator may be used once per question.`,
-  followUpValueRequired: () => "A follow-up condition needs a valid value.",
+  followUpValueRequired: () => "A follow-up condition needs a valid value (rating/nps: a whole number, choice: the id of an option).",
   followUpValueDuplicate: (p) => `This condition value is already used by follow-up ${param(p, "number")}. Each answer value may have one follow-up.`,
   followUpsTooDeep: () => "Follow-up questions cannot have follow-up questions of their own.",
 };
@@ -793,8 +794,14 @@ function toV1Validation(result: PrepareDraftResult | DeployCheckResult): z.infer
     };
   }
   if (code === "invalid_id") {
-    const message = `The ID is ${details.reason === "duplicate" ? "used more than once" : "not a UUID"}. ${ERROR_MESSAGES.invalid_id}`;
-    return { valid: false, errors: [{ code, message, field: String(details.path ?? ""), params: { reason: details.reason } }], warnings: [] };
+    const reason =
+      details.reason === "duplicate"
+        ? "used more than once"
+        : details.reason === "name_collision"
+          ? `too similar to another one: the technical name ${JSON.stringify(details.name)} (title plus first 8 characters of the ID) already exists in this survey or a deployed version`
+          : "not a UUID";
+    const message = `The ID is ${reason}. ${ERROR_MESSAGES.invalid_id}`;
+    return { valid: false, errors: [{ code, message, field: String(details.path ?? ""), params: pick(details, ["reason", "name"]) }], warnings: [] };
   }
   if (code === "theme_unknown") {
     return { valid: false, errors: [{ code, message: ERROR_MESSAGES.theme_unknown, field: "web_theme_id", params: { themeId: details.themeId } }], warnings: [] };
@@ -815,7 +822,7 @@ function pick(details: Record<string, unknown>, fields: readonly string[]): Reco
 /** Felder der `details` je Fehlercode aus Store bzw. Pipeline (Abschnitt 4.2); alles andere fällt weg. */
 const ERROR_DETAIL_FIELDS: Record<Exclude<SurveyStoreErrorCode, "validation_failed">, readonly string[]> = {
   not_found: [],
-  invalid_id: ["path", "reason"],
+  invalid_id: ["path", "reason", "name"],
   theme_unknown: ["themeId"],
   survey_locked: ["lockedBy", "since", "expiresAt", "via"],
   lock_lost: ["lockedBy", "since", "expiresAt", "via"],

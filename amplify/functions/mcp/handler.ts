@@ -29,12 +29,12 @@ import {
   isConsentValid,
   isOpaqueToken,
   mergeConsentRedirects,
-  MAX_DCR_CLIENTS_PER_TENANT,
   needsClientTouch,
   parseClientRegistration,
   parseParams,
   pickClientId,
   pkceChallenge,
+  planClientRegistration,
   randomToken,
   readCookie,
   safeEqual,
@@ -47,6 +47,7 @@ import { authenticateMcpCall, ensureGenesysAccess, kmsGenesysDeps, revokeSession
 import { handleMcpPost } from "./server";
 import { resolveMcpTenant, type McpTenant } from "./tenant";
 import { defaultToolDeps } from "./tool_deps";
+import { requestDeadline } from "./tool_handlers";
 import { redeemAuthorizationCode, revokeToken, rotateRefreshToken, type TokenTenant } from "./tokens";
 
 /**
@@ -102,6 +103,8 @@ interface RouteContext {
   tokenTenant: TokenTenant;
   lang: PageLang;
   now: number;
+  /** Eingang der Anfrage in der Lambda (echte Uhr), Beginn des Zeitbudgets der Tools. */
+  receivedAt: number;
 }
 
 type Route = { html: boolean; handle: (ctx: RouteContext) => Promise<AnyResult> };
@@ -170,10 +173,14 @@ async function register(ctx: RouteContext): Promise<AnyResult> {
   }
   const parsed = parseClientRegistration(json, ALLOWED_REDIRECT_URIS);
   if (!parsed.ok) return oauthError(400, parsed.error, parsed.description);
-  if ((await store.countClients(ctx.tenant.tenantId, ctx.now)) >= MAX_DCR_CLIENTS_PER_TENANT) {
+  const plan = planClientRegistration(await store.listClients(ctx.tenant.tenantId, ctx.now), ctx.now);
+  if (!plan.ok) {
     console.warn("[mcp] client limit reached", { tenantId: ctx.tenant.tenantId });
     return oauthError(400, "invalid_client_metadata", "Client limit of this installation reached");
   }
+  // Älteste unbenutzte Registrierungen verdrängen: anonyme DCR kann so keine Plätze dauerhaft belegen
+  for (const clientId of plan.evict) await store.deleteClient(clientId);
+  if (plan.evict.length > 0) console.warn("[mcp] unused clients evicted", { tenantId: ctx.tenant.tenantId, count: plan.evict.length });
   const client: ClientRecord = {
     clientId: randomToken(),
     tenantId: ctx.tenant.tenantId,
@@ -514,7 +521,7 @@ async function mcpEndpoint(ctx: RouteContext): Promise<AnyResult> {
   }
   const result = await handleMcpPost(
     ctx.event,
-    { call: auth.context, credentials: ctx.credentials, features: ctx.features, now: ctx.now },
+    { call: auth.context, credentials: ctx.credentials, features: ctx.features, now: ctx.now, deadline: requestDeadline(ctx.receivedAt) },
     defaultToolDeps
   );
   // Genesys-Sitzung während des Aufrufs gestorben (Session gelöscht): 401 statt Tool-Fehler, damit der Client neu anmeldet
@@ -542,6 +549,7 @@ const ROUTES: Record<string, Route> = {
 };
 
 export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
+  const receivedAt = Date.now();
   if (!isMcpEnabled()) return notFound();
   const route = ROUTES[String(event?.routeKey ?? "")];
   if (!route) return notFound();
@@ -562,7 +570,7 @@ export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
     tenantId = tenant.tenantId;
     const urls = buildMcpUrls(MCP_PUBLIC_BASE_URL, tenant.mcpTenantKey);
     const tokenTenant: TokenTenant = { tenantId: tenant.tenantId, mcpTenantKey: tenant.mcpTenantKey, epoch: tenant.epoch, mcpUrl: urls.mcpUrl };
-    return await route.handle({ event, tenant, credentials, features, urls, tokenTenant, lang, now: Date.now() });
+    return await route.handle({ event, tenant, credentials, features, urls, tokenTenant, lang, now: Date.now(), receivedAt });
   } catch (err: any) {
     console.error("[mcp] unhandled error", { tenantId, routeKey: event?.routeKey, name: err?.name, message: err?.message });
     return route.html ? errorPage(500, lang, "internal") : jsonResponse(500, { error: "server_error" });

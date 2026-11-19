@@ -150,7 +150,8 @@ export const en: MessageSchema = {
 			successSummary: "Saved successfully",
 			successDetail: "Survey „{title}“ was updated.",
 			errorSummary: "Save error",
-			errorFallback: "Failed to save the survey in the data table."
+			errorFallback: "Failed to save the survey in the data table.",
+			nameCollision: "The technical name \"{name}\" is already used in this survey. Please change the title of the new question."
 		},
 		flowSize: {
 			warnTitle: "Survey text volume is approaching the limit",
@@ -338,6 +339,7 @@ export const en: MessageSchema = {
 		ratingMinRange: "Minimum value must be between {min} and {max}.",
 		ratingMaxRange: "Maximum value must be between {min} and {max}.",
 		ratingMinLessThanMax: "Minimum value must be smaller than the maximum value.",
+		ratingValueNotInteger: "Only whole numbers are allowed.",
 		choiceOptionsInvalid: "Answer options are invalid.",
 		choiceMinOptions: "A choice question requires at least {min} options.",
 		choiceMaxOptions: "A choice question may have a maximum of {max} options.",

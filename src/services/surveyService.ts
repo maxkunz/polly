@@ -1,6 +1,11 @@
 import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { collectTechnicalNames, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
+import {
+	collectDeployedTechnicalNames,
+	collectTechnicalNames,
+	ensureSurveyTechnicalNames,
+	findTechnicalNameCollisions
+} from "@/domain/survey/surveyTypes";
 import {
 	EMPTY_SURVEY_LOCK,
 	SURVEY_LIST_ROW_KEY,
@@ -219,6 +224,21 @@ export class SurveyDraftConflictError extends Error {
 	}
 }
 
+/** Ein neuer technischer Name (Reporting-Schlüssel) gehört schon einer anderen Frage der Umfrage. */
+export class SurveyTechnicalNameCollisionError extends Error {
+	constructor(public readonly technicalName: string) {
+		super(`Technical name already in use: ${technicalName}`);
+		this.name = "SurveyTechnicalNameCollisionError";
+	}
+}
+
+/** Gleiche Regel wie im Backend (`findTechnicalNameCollisions`), auch gegen Stage/Prod/Backup der Zeile. */
+function assertUniqueTechnicalNames(survey: Survey, savedNames: Map<string, string>, row: Record<string, any> | null): void {
+	const deployed = row ? collectDeployedTechnicalNames([row.Stage, row.Prod, row.Backup]) : new Map<string, string>();
+	const [collision] = findTechnicalNameCollisions(survey, savedNames, deployed);
+	if (collision) throw new SurveyTechnicalNameCollisionError(collision.name);
+}
+
 /**
  * Speichert den Draft und gibt dabei das Umfrage-Lock frei. Stage/Prod/Backup bleiben auf dem
  * aktuellen Stand der Zeile.
@@ -239,6 +259,7 @@ export async function saveSurveyDetail(
 
 	if (isNew) {
 		ensureSurveyTechnicalNames(updatedSurvey);
+		assertUniqueTechnicalNames(updatedSurvey, new Map(), null);
 		updatedSurvey.version = (survey.version ?? 0) + 1;
 		const patch = { Draft: JSON.stringify(updatedSurvey), lock: EMPTY_SURVEY_LOCK };
 		await addDataTableRow(resolvedTableId, buildSurveyRowPayload(survey.id, null, patch));
@@ -251,7 +272,9 @@ export async function saveSurveyDetail(
 			const savedDraft = parseSurveyDraft(currentRow.Draft);
 			// Bereits gespeicherte technische Namen sind Reporting-Schlüssel und werden unverändert
 			// übernommen; nur neu hinzugekommene Fragen erhalten einmalig einen Namen aus dem Titel.
-			ensureSurveyTechnicalNames(updatedSurvey, collectTechnicalNames(savedDraft));
+			const savedNames = collectTechnicalNames(savedDraft);
+			ensureSurveyTechnicalNames(updatedSurvey, savedNames);
+			assertUniqueTechnicalNames(updatedSurvey, savedNames, currentRow);
 			// Von der höheren Version aus zählen: Hat jemand zwischenzeitlich gespeichert, bekäme
 			// ein anderer Inhalt sonst dieselbe Versionsnummer (Deploy-Prüfungen vergleichen Versionen).
 			const latest = Math.max(survey.version ?? 0, currentVersion ?? 0);

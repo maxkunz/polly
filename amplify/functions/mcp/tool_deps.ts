@@ -80,10 +80,11 @@ export const defaultToolDeps: McpToolDeps = {
     return slices.every((slice) => slice.done) ? { ok: true, summary } : { ok: false };
   },
   loadAggregates: loadSurveyAggregates,
-  async readSessions(tenantId, params, deadline) {
+  async readSessions(tenantId, params, deadline, stopBefore) {
     const sessions: ExportSession[] = [];
     try {
       for await (const { session } of iterateSessions(tenantId, params, () => Date.now() < deadline)) {
+        if (stopBefore?.(session)) break;
         if (sessions.length >= MAX_SESSIONS) return { ok: false };
         sessions.push(session);
       }
