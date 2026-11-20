@@ -148,6 +148,7 @@ curl -X POST "https://<branch>.<appId>.amplifyapp.com/api_websurveys/onboarding/
 | `Tenant not approved` bzw. 401/403 nach dem Setup | Mandant steht noch auf `PENDING` (Schritt 6) |
 | Antworten landen im Backend von `main` | Data Action wurde vor dem Präfix angelegt und zeigt noch auf `/api/survey-responses`. In Genesys anpassen oder Setup neu ausführen |
 | Mandant (`PENDING`) steht in der Tenants-Tabelle von `main` statt im Branch | Setup lief gegen `/api`: Build ohne `VITE_API_PREFIX`-Override oder Branch nach dem Setzen nicht neu gebaut. Eintrag und Secret in `main` von Hand löschen, Branch neu bauen, Setup wiederholen |
+| Einzelne Route liefert nach einem Deploy `404 {"message":"Not Found"}` (Text des API Gateway, nicht `{"error":…}` der Lambda), obwohl Route und Integration in der Konsole stehen; andere Routen derselben Lambda gehen | Die `$default`-Stage hat die Route nicht live geschaltet: Auto-Deploy verpasst bei vielen neuen Routen in einem CloudFormation-Update (z. B. Merge eines großen Features nach `main`) gelegentlich die letzte Änderung. Gegenprobe direkt an der execute-api-URL (ohne Amplify-Rewrite). Lösung: in der Konsole unter *Stages → `$default` → Edit* Auto-Deploy aus- und wieder einschalten (oder bei ausgeschaltetem Auto-Deploy einmal *Deploy* auf `$default`). Ein Rebuild ohne Codeänderung hilft nicht, weil CloudFormation dann nichts tut. Aufgetreten nach dem Merge von `feature/mcp` bei `ANY /mcp/{tenantKey}` |
 
 ## Lokal entwickeln
 
