@@ -135,7 +135,8 @@ export interface QuestionIndex {
 function addChoiceLabels(index: QuestionIndex, key: string, labels: readonly unknown[]): void {
   const known = index.choiceLabels.get(key) ?? new Set<string>();
   for (const label of labels) {
-    const value = text(label);
+    // Getrimmt wie die Aggregat-Schlüssel (`normalizeCountKey`) und die Suche in `toV1ResponseAnswer`
+    const value = text(label).trim();
     if (value) known.add(value);
   }
   index.choiceLabels.set(key, known);

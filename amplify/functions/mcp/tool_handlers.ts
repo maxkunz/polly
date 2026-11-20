@@ -461,9 +461,9 @@ function rangeFailure(range: Exclude<ResultsRange, { ok: true }>): ToolOutcome {
     : { ok: false, code: "range_too_large", details: { maxMs: range.maxMs } };
 }
 
-/** Umfrage-ID kleingeschrieben wie in der Kunden-API; `undefined` bei ungültiger ID (keine Abfrage). */
+/** Geprüfte Umfrage-ID (das Eingabeschema schreibt sie schon klein); `undefined` bei ungültiger ID (keine Abfrage). */
 function resultsSurveyId(raw: string): string | undefined {
-  return isValidSurveyId(raw) ? raw.toLowerCase() : undefined;
+  return isValidSurveyId(raw) ? raw : undefined;
 }
 
 async function getResultsSummary(args: { surveyId: string; from: string; to: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {

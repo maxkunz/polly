@@ -26,6 +26,8 @@ export interface ClientRecord {
   createdAt: number;
   lastUsedAt: number;
   expiresAt: number;
+  /** Letzter Start einer Anmeldung (`/authorize`), nur bei unbenutzten Clients gesetzt; schützt vor Verdrängung */
+  authorizeAt?: number;
 }
 
 export type AuthRequestStatus = "pending" | "authenticated" | "consumed";
@@ -115,6 +117,8 @@ export interface OAuthStore {
   putClient(client: ClientRecord): Promise<void>;
   /** Verlängert die Lebensdauer nach Nutzung; ein gelöschter Client wird nicht neu angelegt. */
   touchClient(clientId: string, now: number, expiresAt: number): Promise<void>;
+  /** Merkt den Start einer Anmeldung (`authorizeAt`); ein gelöschter Client wird nicht neu angelegt. */
+  markClientAuthorize(clientId: string, now: number): Promise<void>;
   /** Nur nicht abgelaufene Clients des Mandanten (DynamoDB löscht per TTL erst verzögert). */
   listClients(tenantId: string, now: number): Promise<ClientSlot[]>;
   deleteClient(clientId: string): Promise<void>;
@@ -247,6 +251,22 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
     async deleteClient(clientId) {
       await remove(PK_PREFIX.client + clientId);
     },
+    async markClientAuthorize(clientId, now) {
+      try {
+        await ddb.send(
+          new UpdateCommand({
+            TableName: tableName,
+            Key: { pk: PK_PREFIX.client + clientId, sk: SK },
+            UpdateExpression: "SET authorizeAt = :now",
+            ConditionExpression: "attribute_exists(pk)",
+            ExpressionAttributeValues: { ":now": now },
+          })
+        );
+      } catch (err) {
+        if (!isConditionFailure(err)) throw err;
+      }
+    },
+
     async listClients(tenantId, now) {
       // Der Index projiziert nur Schlüssel: Zeitpunkte per BatchGet nachlesen (höchstens 200 Clients pro Mandant)
       const keys: Array<{ pk: string; sk: string }> = [];
@@ -275,7 +295,7 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
               RequestItems: {
                 [tableName]: {
                   Keys: pending,
-                  ProjectionExpression: "clientId, createdAt, lastUsedAt, expiresAt",
+                  ProjectionExpression: "clientId, createdAt, lastUsedAt, expiresAt, authorizeAt",
                   ConsistentRead: true,
                 },
               },
@@ -288,6 +308,7 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
               createdAt: Number(item.createdAt),
               lastUsedAt: Number(item.lastUsedAt),
               expiresAt: Number(item.expiresAt),
+              authorizeAt: item.authorizeAt === undefined ? undefined : Number(item.authorizeAt),
             });
           }
           pending = res.UnprocessedKeys?.[tableName]?.Keys ?? [];

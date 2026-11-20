@@ -12,6 +12,7 @@ import { deleteGroup, deleteRole } from "@/services/genesys/groups";
 import { inactiveOAuth, deleteBackend, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import { getErrorStatus, getErrorMessage, sleep } from "@/services/genesys/retry";
 import { disableMcp } from "@/services/SetupMcp";
+import { loadSetupMcpClient } from "@/services/metaSettingsService";
 
 export async function runFullDelete(
   setup: any,
@@ -121,6 +122,16 @@ export async function runFullDelete(
     await removeResource(setup.dataActionIntegration, "data action integration", deleteIntegration);
     await removeResource(setup.dataActionCredential, "integration credentials", id => apiIntegration.deleteIntegrationsCredential(id));
 
+    // `setup` stammt vom Login: Hat eine andere Sitzung MCP später aktiviert, steht der Client nur frisch in `__meta`.
+    // Ohne diesen Abgleich bliebe der Genesys-Client samt Secret verwaist zurück.
+    if (!options.rollback && !setup.mcpClient?.id && setup.dataTable?.id) {
+      try {
+        const mcpClient = await loadSetupMcpClient(setup.dataTable.id);
+        if (mcpClient) setup.mcpClient = mcpClient;
+      } catch (err) {
+        if (getErrorStatus(err) !== 404) throw err;
+      }
+    }
     // MCP vor dem Backend-Cleanup abschalten: danach ist der Mandant DELETED und /mcp-settings nicht mehr erreichbar
     if (setup.mcpClient?.id) {
       await disableMcp({ setup, onProgress, ignoreBackendErrors: true });

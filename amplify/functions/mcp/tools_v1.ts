@@ -286,7 +286,8 @@ export function toSurveyInput(input: SurveyInput): Survey {
 // Eingaben der Tools
 // ---------------------------------------------------------------------------
 
-const surveyIdInput = z.string().min(1).max(100).describe("Survey ID (UUID) from list_surveys");
+// Kleingeschrieben wie Frontend, Flow und Auswertung: Lösch-Prüfung, `survey_list` und Draft-`id` vergleichen exakt
+const surveyIdInput = z.string().trim().toLowerCase().min(1).max(100).describe("Survey ID (UUID) from list_surveys");
 
 export const SURVEY_FIELDS = ["draft", "stage", "prod", "backup"] as const;
 export type SurveyField = (typeof SURVEY_FIELDS)[number];

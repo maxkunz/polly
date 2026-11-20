@@ -224,6 +224,14 @@ async function authorize(ctx: RouteContext): Promise<AnyResult> {
   const browser = randomToken();
   const id = randomToken();
   const genesysVerifier = randomToken();
+  // Unbenutzten Client während der Anmeldung vor DCR-Verdrängung schützen; nicht fatal, schlimmstenfalls wie bisher
+  if (client && client.lastUsedAt <= client.createdAt) {
+    try {
+      await store.markClientAuthorize(client.clientId, ctx.now);
+    } catch (err: any) {
+      console.warn("[mcp] client authorize mark failed", { tenantId: ctx.tenant.tenantId, clientId: client.clientId, name: err?.name });
+    }
+  }
   await store.putAuthRequest({
     id,
     tenantId: ctx.tenant.tenantId,
@@ -366,7 +374,13 @@ async function consentDecision(ctx: RouteContext): Promise<AnyResult> {
   if (!request.csrfNonce || !form.nonce || !safeEqual(form.nonce, request.csrfNonce)) return errorPage(400, lang, "invalid_request");
 
   if (form.decision === "allow") {
-    return (await approveRequest(ctx, request, "authenticated", { remember: true })) ?? errorPage(400, lang, "expired");
+    try {
+      return (await approveRequest(ctx, request, "authenticated", { remember: true })) ?? errorPage(400, lang, "expired");
+    } catch (err) {
+      // Wie im Callback: Genesys-Token nicht gültig liegen lassen, wenn Session oder Code nicht angelegt werden konnten
+      await revokeRequestGenesys(request, tenant.region);
+      throw err;
+    }
   }
   // Einmalig: ein zweites Absenden findet die Anfrage nicht mehr im Zustand „authenticated“
   if (!(await store.transitionAuthRequest(request.id, "authenticated", "consumed"))) return errorPage(400, lang, "expired");
@@ -487,7 +501,13 @@ async function token(ctx: RouteContext): Promise<AnyResult> {
     return oauthError(result.error.status, result.error.error, result.error.description);
   }
   if (needsClientTouch(client, now)) {
-    await store.touchClient(client.clientId, now, now + CLIENT_IDLE_TTL_SECONDS * 1000);
+    // Nicht fatal: Code bzw. Refresh-Token sind schon verbraucht, ein 500 würde die Wiederholung als Wiederverwendung
+    // werten und die Session widerrufen. Ohne Touch wird es beim nächsten Token erneut versucht.
+    try {
+      await store.touchClient(client.clientId, now, now + CLIENT_IDLE_TTL_SECONDS * 1000);
+    } catch (err: any) {
+      console.warn("[mcp] client touch failed", { tenantId: tenant.tenantId, clientId: client.clientId, name: err?.name });
+    }
   }
   return jsonResponse(200, result.response);
 }

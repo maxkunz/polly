@@ -374,16 +374,24 @@ export function needsClientTouch(client: { expiresAt: number }, now: number): bo
   return client.expiresAt - now < CLIENT_IDLE_TTL_SECONDS * 1000 - CLIENT_TOUCH_INTERVAL_MS;
 }
 
-export type ClientSlot = { clientId: string; createdAt: number; lastUsedAt: number; expiresAt: number };
+export type ClientSlot = { clientId: string; createdAt: number; lastUsedAt: number; expiresAt: number; authorizeAt?: number };
+
+/** Läuft für diesen Client gerade eine Anmeldung (`/authorize` innerhalb der Gültigkeit einer Anmeldeanfrage)? */
+function isAuthorizing(client: ClientSlot, now: number): boolean {
+  return client.authorizeAt !== undefined && now - client.authorizeAt < AUTH_REQUEST_TTL_SECONDS * 1000;
+}
 
 /**
  * Plätze für eine neue DCR-Registrierung: abgelehnt, wenn die genutzten Clients die Grenze erreichen; sonst die
  * ältesten unbenutzten Clients, die weichen müssen, damit höchstens `MAX_UNUSED_DCR_CLIENTS_PER_TENANT` bleiben.
- * Unbenutzt = nie ein Token bekommen (`touchClient` setzt `lastUsedAt` erst dann neu).
+ * Unbenutzt = nie ein Token bekommen (`touchClient` setzt `lastUsedAt` erst dann neu). Clients mit laufender
+ * Anmeldung weichen erst nach allen anderen, damit eine Flut von Registrierungen keine Anmeldung abbricht.
  */
 export function planClientRegistration(clients: ClientSlot[], now: number): { ok: false } | { ok: true; evict: string[] } {
   const active = clients.filter((c) => c.expiresAt > now);
-  const unused = active.filter((c) => c.lastUsedAt <= c.createdAt).sort((a, b) => a.createdAt - b.createdAt);
+  const unused = active
+    .filter((c) => c.lastUsedAt <= c.createdAt)
+    .sort((a, b) => Number(isAuthorizing(a, now)) - Number(isAuthorizing(b, now)) || a.createdAt - b.createdAt);
   const used = active.length - unused.length;
   if (used >= MAX_DCR_CLIENTS_PER_TENANT) return { ok: false };
   const keep = Math.min(MAX_UNUSED_DCR_CLIENTS_PER_TENANT, MAX_DCR_CLIENTS_PER_TENANT - used) - 1;

@@ -25,6 +25,7 @@ import {
 	MAX_DCR_CLIENTS_PER_TENANT,
 	MAX_REDIRECT_URIS,
 	MAX_UNUSED_DCR_CLIENTS_PER_TENANT,
+	AUTH_REQUEST_TTL_SECONDS,
 	mergeConsentRedirects,
 	planClientRegistration,
 	verifyPkce,
@@ -79,6 +80,10 @@ class MemoryStore implements OAuthStore {
 	async touchClient(id: string, now: number, expiresAt: number) {
 		const client = this.clients.get(id);
 		if (client) Object.assign(client, { lastUsedAt: now, expiresAt });
+	}
+	async markClientAuthorize(id: string, now: number) {
+		const client = this.clients.get(id);
+		if (client) client.authorizeAt = now;
 	}
 	async listClients(tenantId: string, now: number) {
 		return [...this.clients.values()].filter((c) => c.tenantId === tenantId && c.expiresAt > now);
@@ -670,6 +675,16 @@ await test("DCR-Plätze: unbenutzte Clients werden verdrängt, genutzte begrenze
 	const used = Array.from({ length: MAX_DCR_CLIENTS_PER_TENANT - 1 }, (_, i) => slot(`g${i}`, NOW - 1000, true));
 	assert.deepEqual(planClientRegistration([...used, slot("u", NOW)], NOW), { ok: true, evict: ["u"] }, "Platz für den neuen");
 	assert.deepEqual(planClientRegistration([...used, slot("g", NOW, true)], NOW), { ok: false });
+	// Laufende Anmeldung weicht zuletzt, eine abgelaufene Anmeldung schützt nicht mehr
+	const authorizing = { ...slot("a", NOW - 2000), authorizeAt: NOW - 1000 };
+	const stale = { ...slot("s", NOW - 3000), authorizeAt: NOW - AUTH_REQUEST_TTL_SECONDS * 1000 };
+	const crowded = [authorizing, stale, ...unused];
+	const prioritized = planClientRegistration(crowded, NOW);
+	assert.ok(prioritized.ok);
+	if (prioritized.ok) {
+		assert.ok(!prioritized.evict.includes("a"), "Client mit laufender Anmeldung bleibt");
+		assert.equal(prioritized.evict[0], "s", "abgelaufene Anmeldung zählt wie unbenutzt");
+	}
 });
 
 await test("Gemerkte Zustimmung: nur Loopback, gleicher Mandant, Client, bestätigte Redirect-URI, Epoch und vor Ablauf", async () => {

@@ -33,7 +33,7 @@ Vorgaben:
 - [x] **M1 Spike: Genesys-PKCE-Client und MCP-Transport in Lambda** (siehe „Offene Punkte“) · Modell: Opus · erledigt 2026-10-30 (ohne Test-Org, siehe Abweichungen)
   - [ ] Genesys-OAuth-Client (CODE, ohne Secret) testweise anlegen. Geklärt per Doku, Swagger, Forum und AS-Metadaten; die Gegenprüfung in einer Test-Org ist offen:
     - Gibt es Refresh-Tokens (Laufzeit, Rotation)? → Ohne Secret keine; mit Secret Rotation, Laufzeit nicht dokumentiert.
-    - Welche minimalen Scopes reichen für Data Table lesen/schreiben und `users/me?expand=authorization`? → `architect`, `user-basic-info` (offen: ob `expand=authorization` mehr braucht).
+    - Welche minimalen Scopes reichen für Data Table lesen/schreiben und `users/me?expand=authorization`? → `architect`, `user-basic-info` (reicht auch für `expand=authorization`, am 2026-11-20 mit echter Anmeldung bestätigt).
     - Welche `accessTokenValiditySeconds` sind sinnvoll? → 300–172.800 s erlaubt, Vorschlag 3.600 s mit Refresh.
   - [x] Prüfen, ob Genesys als OIDC-Anbieter taugt (`id_token`, Discovery): nein.
   - [x] `@modelcontextprotocol/sdk` in einer Lambda hinter HttpApi: Web-Standard-Transport, JSON-Modus, Bundle-Größe, Kaltstart lokal.
@@ -145,7 +145,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Keine Test-Org verfügbar:** Die Genesys-Fragen wurden über Resource Center, Swagger, Forum und einen eigenen Abruf der AS-Metadaten geklärt. Diese drei Punkte vor M6 in einer Test-Org gegenprüfen:
   1. Liefert ein `CODE`-Client mit PKCE ohne Secret wirklich keinen Refresh-Token?
   2. Wie lange gilt der Refresh-Token beim Client mit Secret?
-  3. Reicht `user-basic-info` für `users/me?expand=authorization` bei aktiver Scope-Prüfung?
+  3. Reicht `user-basic-info` für `users/me?expand=authorization` bei aktiver Scope-Prüfung? → Ja, am 2026-11-20 bestätigt: Anmeldung und Tools laufen mit dem von `enableMcp()` angelegten Client (ohne die Rollen würde der Callback mit `genesys_error` bzw. `no_role` abbrechen).
 - **Abweichung von Entscheidung 1** („ohne Secret wie der Frontend-Client“): Ohne Secret gibt es keinen Genesys-Refresh. Der Token-Endpunkt erlaubt nur `client_secret_basic`/`client_secret_post`. Die Session wäre damit auf höchstens 48 h begrenzt. **Vorschlag:** vertraulicher CODE-Client mit Secret plus PKCE. Das Secret liegt KMS-verschlüsselt in `TenantsTable` und wird bei `PUT /mcp-settings` einmalig übergeben. Die Entscheidung fällt vor M6; sie betrifft `createCodeGrantClient` und den Body von `PUT /mcp-settings`.
 - `tokens/me` liefert keine Personen-ID, die kommt aus `users/me`. Widerruf über `DELETE /api/v2/tokens/me`; einen Endpunkt nach RFC 7009 gibt es bei Genesys nicht.
 - **MCP-Transport:**
@@ -207,7 +207,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 
 ### M6
 
-- **Nur geprüft per `vue-tsc` und Test, nicht deployt und nicht gegen Genesys erprobt.** Beim ersten Lauf auf einer Branch-Umgebung achten auf: `EncryptionContext` bei KMS (`purpose`, `tenantId`), `GET /api/v2/oauth/clients/{id}` mit dem Token der Person (braucht `oauth:client:view`), `POST /api/v2/oauth/clients` mit `registeredRedirectUri`/`scope` für `CODE`, und ob das Secret in der Antwort steht. Die drei offenen Punkte aus M1 (Refresh ohne Secret, Laufzeit des Refresh-Tokens, `user-basic-info` für `expand=authorization`) sind weiter offen und wirken auf M7.
+- **Nur geprüft per `vue-tsc` und Test, nicht deployt und nicht gegen Genesys erprobt.** Beim ersten Lauf auf einer Branch-Umgebung achten auf: `EncryptionContext` bei KMS (`purpose`, `tenantId`), `GET /api/v2/oauth/clients/{id}` mit dem Token der Person (braucht `oauth:client:view`), `POST /api/v2/oauth/clients` mit `registeredRedirectUri`/`scope` für `CODE`, und ob das Secret in der Antwort steht. Die drei offenen Punkte aus M1 (Refresh ohne Secret, Laufzeit des Refresh-Tokens, `user-basic-info` für `expand=authorization`) sind weiter offen und wirken auf M7. Nachtrag 2026-11-20: der dritte Punkt ist geklärt, `user-basic-info` reicht.
 - **Entscheidung zu M1 übernommen:** vertraulicher CODE-Client **mit Secret** (Plan-Vorschlag). `enableMcp()` legt ihn an und übergibt das Secret einmalig im Body von `PUT /mcp-settings`; die Lambda verschlüsselt es mit `McpTokenKey` (`EncryptionContext` mit Mandant) und speichert es als `mcpClientSecretEnc`. `GET` liefert es nie, `decryptClientSecret` (`shared/mcp_secret.ts`, getrennt von `mcp_tenant.ts`, damit Onboarding kein KMS bündelt) ist für den Token-Tausch in M7 da. Scopes `architect` und `user-basic-info`, Gültigkeit 3.600 s (`SetupMcp.ts`).
 - **`PUT /mcp-settings` hat zwei Formen:** `{ clientId, clientSecret }` aktiviert, `{ allowComments }` schaltet nur das Flag um; beides zusammen ist 400. Aktivieren prüft in dieser Reihenfolge: Kill-Switch (409 `server_disabled`), Flag `mcp` in `__meta` (409 `feature_disabled`), den Genesys-Client mit dem Token der Person (`client_not_found`, `genesys_forbidden`, 400 `client_invalid` mit `reason` `grant_type`/`redirect_uri`/`inactive`) und die Org über `organizations/me`. Ein **anderer** Client als bisher erhöht `mcpEpoch` und räumt die Sitzungen ab.
 - **`DELETE` und Kill-Switch:** `DELETE` funktioniert auch bei ausgeschaltetem Kill-Switch und ausgeschaltetem Flag (Aufräumen muss immer gehen). Reihenfolge: erst `mcpEnabled = false` mit `mcpEpoch + 1` und Entfernen von Client-ID, Secret und Org-ID, dann die Einträge löschen. Bricht das Löschen ab, ist MCP trotzdem schon aus und der Aufruf wiederholbar. `mcpTenantKey` und `mcpAllowComments` bleiben, damit die MCP-URL beim erneuten Aktivieren dieselbe ist.
@@ -224,7 +224,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
 - **Nur geprüft per `vue-tsc`, `tsc -p amplify/tsconfig.json` und Test, nicht deployt und nicht gegen Genesys oder einen MCP-Client erprobt.** Beim ersten Lauf auf einer Branch-Umgebung (mit `MCP_ENABLED=true`) achten auf:
   - Cookie über `cookies` im Lambda-Ergebnis (Payload 2.0) und beim Callback von Genesys (`SameSite=Lax`, Top-Level-Navigation).
   - Antwort von `login.<region>/oauth/token` mit Basic-Auth plus `code_verifier`; ob `refresh_token` kommt (offen aus M1).
-  - `tokens/me` mit den Scopes `architect`/`user-basic-info`; ob `users/me?expand=authorization` reicht (offen aus M1).
+  - `tokens/me` mit den Scopes `architect`/`user-basic-info`; ob `users/me?expand=authorization` reicht (aus M1, inzwischen geklärt: reicht).
   - Ablauf mit Claude Code und claude.ai: DCR, `resource`, Redirect auf `http://localhost:<port>`.
 - **Dateien:** Statt nur `session.ts` ist die Fassade aufgeteilt:
   - `oauth.ts`: reine Prüfungen, Metadaten, PKCE.
@@ -355,7 +355,7 @@ Hier pro Meilenstein eintragen, was anders umgesetzt wurde als geplant, und waru
   - Ein Zeitbudget pro Anfrage (`McpToolContext.deadline`, 24 s ab Eingang, `requestDeadline`), auch an `summarizeSessions`/`readSessions` (2 s Reserve).
   - `get_responses` liest nur so weit wie nötig (`createResponsesReadStop`, `stopBefore` in `readSessions`).
 - **Bewusst akzeptiert** (in `polly_mcp.md`, Abschnitt 11.1): eingelöster Code beendet die Session vor der Client-Prüfung (RFC 9700), Genesys-Token nach abgebrochener Zustimmung, Kulanzfenster, Access-Token 4 h.
-- **Offen:** Scopes des MCP-Genesys-Clients (`architect`, `user-basic-info`) gegen eine Org mit Scope-Prüfung testen. Nicht gegen DynamoDB, Genesys oder ein Deployment geprüft.
+- **Geklärt (2026-11-20):** Scopes des MCP-Genesys-Clients (`architect`, `user-basic-info`) reichen, mit echter Anmeldung geprüft. Nicht gegen DynamoDB, Genesys oder ein Deployment geprüft.
 
 ## Modelle und Reviews
 

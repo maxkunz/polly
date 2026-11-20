@@ -10,7 +10,7 @@ import { derivePseudonymKeys, openCursor, pseudonymize } from "../amplify/functi
 import { sessionVersion, type ExportSession } from "../amplify/functions/shared/answer_records";
 import type { SurveyAggregateItem } from "../amplify/functions/shared/survey_results";
 import type { WebThemeInput } from "../amplify/functions/shared/web_themes_table";
-import { buildResponsesPage, createResponsesReadStop } from "../amplify/functions/mcp/results_v1";
+import { buildResponsesPage, collectQuestionIndex, createResponsesReadStop } from "../amplify/functions/mcp/results_v1";
 import {
 	beginEdit,
 	createSurvey,
@@ -1690,6 +1690,15 @@ await test("Fehlertexte: jeder Translator-Schlüssel hat einen Satz, Grenzen ste
 		assert.match(description, /limits and error handling of create_survey/, name);
 		assert.doesNotMatch(description, /options per choice question/, name);
 	}
+});
+
+await test("Auswertung: Auswahl-Labels mit Leerzeichen passen zu den getrimmten Aggregat-Schlüsseln", () => {
+	const draft = {
+		id: "s1",
+		questions: [{ id: "q1", name: "farbe_q1", title: "Farbe?", type: "choice", options: { labels: [{ label: "Rot " }, { label: " Blau" }] } }],
+	} as unknown as Survey;
+	const index = collectQuestionIndex(draft, [], "s1");
+	assert.deepEqual([...(index.choiceLabels.get("farbe_q1") ?? [])], ["Rot", "Blau"]);
 });
 
 console.log(`${passed} Tests bestanden`);
