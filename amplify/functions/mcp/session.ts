@@ -112,16 +112,23 @@ async function useWinner(deps: GenesysSessionDeps, session: SessionRecord, now: 
   }
 }
 
+/**
+ * Widerruft ein verschlüsselt gespeichertes Genesys-Token (Session oder Anmeldeanfrage) nach Möglichkeit; Fehler
+ * werden nur geloggt.
+ */
+export async function revokeStoredGenesysTokens(stored: Pick<SessionRecord, "tenantId" | "sessionId" | "region" | "genesysTokensEnc">): Promise<void> {
+  try {
+    const tokens = await decryptGenesysTokens(stored.tenantId, stored.sessionId, stored.genesysTokensEnc);
+    const revoked = await revokeGenesysToken(stored.region, tokens.accessToken);
+    if (!revoked) console.warn("[mcp] Genesys token not revoked", { tenantId: stored.tenantId, sessionId: stored.sessionId });
+  } catch (err: any) {
+    console.warn("[mcp] Genesys token revocation failed", { tenantId: stored.tenantId, name: err?.name });
+  }
+}
+
 /** Widerruft das Genesys-Token einer gelöschten Session (nach Möglichkeit, Fehler werden nur geloggt). */
 export async function revokeSessionGenesys(session: SessionRecord | undefined): Promise<void> {
-  if (!session) return;
-  try {
-    const tokens = await decryptGenesysTokens(session.tenantId, session.sessionId, session.genesysTokensEnc);
-    const revoked = await revokeGenesysToken(session.region, tokens.accessToken);
-    if (!revoked) console.warn("[mcp] Genesys token not revoked", { tenantId: session.tenantId, sessionId: session.sessionId });
-  } catch (err: any) {
-    console.warn("[mcp] Genesys token revocation failed", { tenantId: session.tenantId, name: err?.name });
-  }
+  if (session) await revokeStoredGenesysTokens(session);
 }
 
 export type RateCheck = { ok: true } | { ok: false; retryAfterSeconds: number };
@@ -171,6 +178,9 @@ export async function authenticateMcpCall(
   const check = await verifyAccessToken(deps.store, tokenTenant, bearer, now);
   if (!check.ok) return check.reason === "missing" ? { ok: false, kind: "unauthorized" } : { ok: false, kind: "unauthorized", error: "invalid_token" };
 
+  // Vor dem Genesys-Zugang: Abgewiesene Aufrufe kosten so keinen KMS-Decrypt und keinen Genesys-Refresh
+  const rate = await checkSessionRate(deps.store, check.session, now);
+  if (!rate.ok) return { ok: false, kind: "rate_limited", retryAfterSeconds: rate.retryAfterSeconds };
   const access = await ensureGenesysAccess(deps, tenant, check.session, now);
   if (!access.ok) {
     if (access.reason === "upstream") return { ok: false, kind: "upstream" };
@@ -178,8 +188,6 @@ export async function authenticateMcpCall(
     await deps.store.deleteSession(check.session.sessionId);
     return { ok: false, kind: "unauthorized", error: "invalid_token" };
   }
-  const rate = await checkSessionRate(deps.store, access.session, now);
-  if (!rate.ok) return { ok: false, kind: "rate_limited", retryAfterSeconds: rate.retryAfterSeconds };
   const context: McpCallContext = {
     tenant,
     session: access.session,

@@ -167,6 +167,8 @@ const SK = "MAIN";
 const TENANT_INDEX = "byTenant";
 const BATCH_GET_MAX_KEYS = 100;
 const BATCH_GET_MAX_ATTEMPTS = 5;
+/** Wartezeit vor der ersten Wiederholung unverarbeiteter Schlüssel, danach verdoppelt (50, 100, 200, 400 ms). */
+const BATCH_GET_RETRY_BASE_MS = 50;
 
 export const PK_PREFIX = {
   client: "CLIENT#",
@@ -290,6 +292,8 @@ export function createDynamoOAuthStore(tableName: string = process.env.MCP_OAUTH
         let pending: Array<Record<string, any>> = keys.slice(offset, offset + BATCH_GET_MAX_KEYS);
         for (let attempt = 0; pending.length > 0; attempt++) {
           if (attempt >= BATCH_GET_MAX_ATTEMPTS) throw new Error("BatchGet of MCP clients incomplete");
+          // Unverarbeitete Schlüssel kommen bei Drosselung: kurz warten, wie es DynamoDB empfiehlt
+          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, BATCH_GET_RETRY_BASE_MS * 2 ** (attempt - 1)));
           const res = await ddb.send(
             new BatchGetCommand({
               RequestItems: {

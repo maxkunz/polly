@@ -1,10 +1,4 @@
-import {
-  POLLY_ROLE_DEPLOY,
-  POLLY_ROLE_REPORTING,
-  POLLY_ROLE_WRITE,
-} from "../../../src/constants/permissionConstants";
-import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
-import { loadCallerRoles, loadInstallationProjectTag } from "../shared/caller_roles";
+import { loadCallerRoles, loadInstallationProjectTag, pollyRolesOf } from "../shared/caller_roles";
 import {
   beginEdit,
   createSurvey,
@@ -31,8 +25,6 @@ import { rolesFailureStatus, type McpToolDeps, type PollyRolesResult } from "./t
  * die Tools ohne AWS-SDK und ohne Genesys ausführen kann.
  */
 
-const POLLY_ROLES = [POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING];
-
 /** Rollenänderungen greifen nach höchstens 60 s (`documentation/polly_mcp.md`, Abschnitt 11). Fehler werden nicht gemerkt. */
 const ROLE_CACHE_TTL_MS = 60 * 1000;
 const roleCache = new TtlCache<PollyRolesResult>({ ttlMs: ROLE_CACHE_TTL_MS, maxEntries: 1000 });
@@ -50,7 +42,7 @@ export const defaultToolDeps: McpToolDeps = {
         console.warn("[mcp] cannot load roles", { tenantId: tenant.tenantId, callerStatus: caller.status, status });
         return { value: { ok: false, ...(status !== undefined ? { status } : {}) }, ttlMs: 0 };
       }
-      const roles = POLLY_ROLES.filter((role) => hasPollyRole(caller.roles, role, projectTag.projectTag));
+      const roles = pollyRolesOf(caller.roles, projectTag.projectTag);
       return { value: { ok: true, roles: new Set(roles) } };
     });
   },

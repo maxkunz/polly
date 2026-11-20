@@ -48,6 +48,7 @@ import {
   RESPONSES_DEFAULT_LIMIT,
   toV1AggregatesResult,
   toV1ResultsSummary,
+  type QuestionIndex,
   type ResultsRange,
 } from "./results_v1";
 import type { GenesysRenewal, McpCallContext } from "./session";
@@ -453,29 +454,35 @@ async function rollbackSurvey(
 
 // --- Auswertung (Rolle `polly_reporting`, Datenschutz: documentation/polly_mcp.md, Abschnitt 8) --------------------
 
-const NOT_FOUND: ToolOutcome = { ok: false, code: "not_found" };
-
 function rangeFailure(range: Exclude<ResultsRange, { ok: true }>): ToolOutcome {
   return range.kind === "invalid"
     ? { ok: false, code: "invalid_input", details: { issues: range.issues } }
     : { ok: false, code: "range_too_large", details: { maxMs: range.maxMs } };
 }
 
-/** Geprüfte Umfrage-ID (das Eingabeschema schreibt sie schon klein); `undefined` bei ungültiger ID (keine Abfrage). */
-function resultsSurveyId(raw: string): string | undefined {
-  return isValidSurveyId(raw) ? raw : undefined;
+/**
+ * Einstieg der Auswertungs-Tools: Die Umfrage muss in der Data Table stehen und für die Person (Genesys-Token)
+ * lesbar sein. Ungültige ID und laufende Löschung ergeben `not_found` (prüft `readSurveyRow` selbst). Liefert
+ * Fragetitel und Auswahl-Labels aus Draft und deployten Ständen.
+ */
+async function readResultsSurvey(
+  surveyId: string,
+  ctx: McpToolContext,
+  deps: McpToolDeps
+): Promise<{ ok: true; index: QuestionIndex } | { ok: false; outcome: ToolOutcome }> {
+  const read = await deps.readSurveyRow(storeContext(ctx, deps), surveyId);
+  if (!read.ok) return { ok: false, outcome: failed(read.error) };
+  const { row, draft } = read.value;
+  return { ok: true, index: collectQuestionIndex(draft, [row.Prod, row.Stage, row.Backup], surveyId) };
 }
 
 async function getResultsSummary(args: { surveyId: string; from: string; to: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
-  const surveyId = resultsSurveyId(args.surveyId);
-  if (!surveyId) return NOT_FOUND;
+  const surveyId = args.surveyId;
   const range = parseResultsRange(args.from, args.to, MAX_SUMMARY_RANGE_MS);
   if (!range.ok) return rangeFailure(range);
   const tenantId = ctx.call.tenant.tenantId;
-  if (await deps.isSurveyBeingDeleted(tenantId, surveyId)) return NOT_FOUND;
-  // Wie bei get_aggregates: Die Umfrage muss in der Data Table stehen und für die Person (Genesys-Token) lesbar sein
-  const read = await deps.readSurveyRow(storeContext(ctx, deps), surveyId);
-  if (!read.ok) return failed(read.error);
+  const survey = await readResultsSurvey(surveyId, ctx, deps);
+  if (!survey.ok) return survey.outcome;
   const result = await deps.summarizeSessions(tenantId, surveyId, range.fromIso, range.toIso, ctx.deadline - RESULTS_PROCESSING_RESERVE_MS);
   // Ein unfertiger Zeitraum ergäbe eine zu niedrige Zählung: lieber ablehnen
   if (!result.ok) return { ok: false, code: "range_too_large", details: { maxMs: MAX_SUMMARY_RANGE_MS } };
@@ -483,16 +490,12 @@ async function getResultsSummary(args: { surveyId: string; from: string; to: str
 }
 
 async function getAggregates(args: { surveyId: string }, ctx: McpToolContext, deps: McpToolDeps): Promise<ToolOutcome> {
-  const surveyId = resultsSurveyId(args.surveyId);
-  if (!surveyId) return NOT_FOUND;
-  const tenantId = ctx.call.tenant.tenantId;
-  if (await deps.isSurveyBeingDeleted(tenantId, surveyId)) return NOT_FOUND;
-  // Die Zeile der Umfrage (Genesys-Token der Person) liefert die Fragetitel und stellt sicher, dass es die Umfrage gibt
-  const [read, items] = await Promise.all([deps.readSurveyRow(storeContext(ctx, deps), surveyId), deps.loadAggregates(tenantId, surveyId)]);
-  if (!read.ok) return failed(read.error);
-  const { row, draft } = read.value;
-  const index = collectQuestionIndex(draft, [row.Prod, row.Stage, row.Backup], surveyId);
-  return { ok: true, value: toV1AggregatesResult(items, index) };
+  const surveyId = args.surveyId;
+  // Erst die Zeile (Fragetitel, Existenz, Lösch-Prüfung), dann die Aggregate: bei Fehlern keine Tabelle umsonst lesen
+  const survey = await readResultsSurvey(surveyId, ctx, deps);
+  if (!survey.ok) return survey.outcome;
+  const items = await deps.loadAggregates(ctx.call.tenant.tenantId, surveyId);
+  return { ok: true, value: toV1AggregatesResult(items, survey.index) };
 }
 
 async function getResponses(
@@ -500,12 +503,10 @@ async function getResponses(
   ctx: McpToolContext,
   deps: McpToolDeps
 ): Promise<ToolOutcome> {
-  const surveyId = resultsSurveyId(args.surveyId);
-  if (!surveyId) return NOT_FOUND;
+  const surveyId = args.surveyId;
   const range = parseResultsRange(args.from, args.to, MAX_RANGE_MS);
   if (!range.ok) return rangeFailure(range);
   const tenantId = ctx.call.tenant.tenantId;
-  if (await deps.isSurveyBeingDeleted(tenantId, surveyId)) return NOT_FOUND;
 
   const filter = { fromIso: range.fromIso, toIso: range.toIso, channel: args.channel, status: args.status, version: args.version };
   const fingerprint = queryFingerprint(filter);
@@ -517,12 +518,10 @@ async function getResponses(
     if (!after) return { ok: false, code: "cursor_invalid" };
   }
 
-  // Die Umfrage muss in der Data Table stehen (Genesys-Token der Person); ihre Labels entscheiden, welche Auswahlwerte
-  // als strukturiert gelten
-  const survey = await deps.readSurveyRow(storeContext(ctx, deps), surveyId);
-  if (!survey.ok) return failed(survey.error);
-  const { row, draft } = survey.value;
-  const { choiceLabels } = collectQuestionIndex(draft, [row.Prod, row.Stage, row.Backup], surveyId);
+  // Nach der lokalen Cursor-Prüfung: Die Labels der Umfrage entscheiden, welche Auswahlwerte als strukturiert gelten
+  const survey = await readResultsSurvey(surveyId, ctx, deps);
+  if (!survey.ok) return survey.outcome;
+  const { choiceLabels } = survey.index;
 
   // Sitzungen vor der Cursor-Position fallen ohnehin weg: erst ab dort lesen (gleicher Start ist enthalten, BETWEEN)
   const readFrom = after && after.t > range.fromIso ? after.t : range.fromIso;

@@ -398,8 +398,16 @@ export function planClientRegistration(clients: ClientSlot[], now: number): { ok
   return { ok: true, evict: unused.slice(0, Math.max(0, unused.length - keep)).map((c) => c.clientId) };
 }
 
-/** Cookie, das die Anmeldung an den Browser bindet, der `/authorize` aufgerufen hat. */
+/** Präfix des Cookies, das die Anmeldung an den Browser bindet, der `/authorize` aufgerufen hat. */
 export const BROWSER_COOKIE = "polly_mcp_auth";
+
+/**
+ * Ein Cookie pro Anmeldeanfrage: Parallele Anmeldungen im selben Browser (z. B. Claude Desktop und Claude Code)
+ * überschreiben sich so nicht gegenseitig. Die ID ist base64url und damit als Cookie-Name gültig.
+ */
+export function browserCookieName(requestId: string): string {
+  return `${BROWSER_COOKIE}_${requestId}`;
+}
 
 export function readCookie(cookies: unknown, name: string): string | undefined {
   const list: string[] = Array.isArray(cookies) ? cookies.map(String) : typeof cookies === "string" ? cookies.split(";") : [];
@@ -411,6 +419,6 @@ export function readCookie(cookies: unknown, name: string): string | undefined {
   return undefined;
 }
 
-export function buildBrowserCookie(value: string, path: string): string {
-  return `${BROWSER_COOKIE}=${value}; Path=${path}; Max-Age=${AUTH_REQUEST_TTL_SECONDS}; Secure; HttpOnly; SameSite=Lax`;
+export function buildBrowserCookie(requestId: string, value: string, path: string): string {
+  return `${browserCookieName(requestId)}=${value}; Path=${path}; Max-Age=${AUTH_REQUEST_TTL_SECONDS}; Secure; HttpOnly; SameSite=Lax`;
 }

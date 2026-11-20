@@ -1,20 +1,14 @@
-import {
-  POLLY_ROLE_DEPLOY,
-  POLLY_ROLE_REPORTING,
-  POLLY_ROLE_WRITE,
-} from "../../../src/constants/permissionConstants";
-import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
-import { loadCallerRoles, loadInstallationProjectTag } from "../shared/caller_roles";
+import { loadCallerRoles, loadInstallationProjectTag, pollyRolesOf } from "../shared/caller_roles";
 import { readRequestBody } from "../shared/http";
 import { isMcpEnabled, parseAllowedRedirectUris } from "../shared/mcp_config";
 import { exchangeGenesysCode, loadGenesysTokenInfo, revokeGenesysToken } from "../shared/mcp_genesys";
-import { decryptClientSecret, decryptGenesysTokens, encryptGenesysTokens } from "../shared/mcp_secret";
+import { decryptClientSecret, encryptGenesysTokens } from "../shared/mcp_secret";
 import { getAuthorizationToken, type TenantCredentials } from "../shared/tenant_auth";
 import type { FeatureFlags } from "../../../src/domain/features/featureFlags";
 import {
   AUTH_CODE_TTL_SECONDS,
   AUTH_REQUEST_TTL_SECONDS,
-  BROWSER_COOKIE,
+  browserCookieName,
   buildAuthorizationServerMetadata,
   buildBrowserCookie,
   buildMcpUrls,
@@ -43,7 +37,7 @@ import {
 } from "./oauth";
 import { pageHeaders, pickLang, renderConsentPage, renderErrorPage, type PageErrorKey, type PageLang } from "./oauth_pages";
 import { createDynamoOAuthStore, type AuthRequestRecord, type AuthRequestStatus, type ClientRecord } from "./oauth_store";
-import { authenticateMcpCall, ensureGenesysAccess, kmsGenesysDeps, revokeSessionGenesys } from "./session";
+import { authenticateMcpCall, ensureGenesysAccess, kmsGenesysDeps, revokeSessionGenesys, revokeStoredGenesysTokens } from "./session";
 import { handleMcpPost } from "./server";
 import { resolveMcpTenant, type McpTenant } from "./tenant";
 import { defaultToolDeps } from "./tool_deps";
@@ -68,7 +62,6 @@ const ALLOWED_REDIRECT_URIS = parseAllowedRedirectUris(process.env.MCP_ALLOWED_R
 const REGISTER_MAX_BODY_BYTES = 16 * 1024;
 const TOKEN_MAX_BODY_BYTES = 8 * 1024;
 const CONSENT_MAX_BODY_BYTES = 4 * 1024;
-const POLLY_ROLES = [POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING];
 
 function jsonResponse(statusCode: number, body: unknown, headers: Record<string, string> = {}): AnyResult {
   return {
@@ -131,19 +124,14 @@ async function loadAuthRequest(id: unknown, status: AuthRequestStatus, ctx: Rout
   const request = await store.getAuthRequest(id);
   if (!request || request.status !== status || request.expiresAt <= ctx.now) return undefined;
   if (request.tenantId !== ctx.tenant.tenantId || request.mcpTenantKey !== ctx.tenant.mcpTenantKey) return undefined;
-  const browser = readCookie(ctx.event?.cookies ?? header(ctx.event, "cookie"), BROWSER_COOKIE);
+  const browser = readCookie(ctx.event?.cookies ?? header(ctx.event, "cookie"), browserCookieName(id));
   if (!browser || !safeEqual(hashToken(browser), request.browserHash)) return undefined;
   return request;
 }
 
 async function revokeRequestGenesys(request: AuthRequestRecord, region: string): Promise<void> {
   if (!request.genesysTokensEnc || !request.sessionId) return;
-  try {
-    const tokens = await decryptGenesysTokens(request.tenantId, request.sessionId, request.genesysTokensEnc);
-    await revokeGenesysToken(region, tokens.accessToken);
-  } catch (err: any) {
-    console.warn("[mcp] Genesys token revocation failed", { tenantId: request.tenantId, name: err?.name });
-  }
+  await revokeStoredGenesysTokens({ tenantId: request.tenantId, sessionId: request.sessionId, region, genesysTokensEnc: request.genesysTokensEnc });
 }
 
 function clientErrorRedirect(request: Pick<AuthRequestRecord, "redirectUri" | "state">, urls: McpUrls, error: string): AnyResult {
@@ -251,7 +239,7 @@ async function authorize(ctx: RouteContext): Promise<AnyResult> {
     code_challenge: pkceChallenge(genesysVerifier),
     code_challenge_method: "S256",
   }).toString();
-  return redirect(genesysAuthorize.toString(), 302, [buildBrowserCookie(browser, ctx.urls.cookiePath)]);
+  return redirect(genesysAuthorize.toString(), 302, [buildBrowserCookie(id, browser, ctx.urls.cookiePath)]);
 }
 
 async function callback(ctx: RouteContext): Promise<AnyResult> {
@@ -302,7 +290,7 @@ async function callback(ctx: RouteContext): Promise<AnyResult> {
     console.warn("[mcp] cannot load roles", { tenantId: tenant.tenantId, status: caller.status });
     return reject(502, "genesys_error");
   }
-  if (!POLLY_ROLES.some((role) => hasPollyRole(caller.roles, role, projectTag.projectTag))) {
+  if (pollyRolesOf(caller.roles, projectTag.projectTag).length === 0) {
     console.warn("[mcp] sign-in without Polly role rejected", { tenantId: tenant.tenantId, userId: caller.userId });
     return reject(403, "no_role");
   }

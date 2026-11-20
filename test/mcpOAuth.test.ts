@@ -18,6 +18,8 @@ import {
 	pkceChallenge,
 	randomToken,
 	readCookie,
+	browserCookieName,
+	buildBrowserCookie,
 	SESSION_RATE_LIMIT_PER_MINUTE,
 	CONSENT_TTL_SECONDS,
 	consentKey,
@@ -237,6 +239,11 @@ await test("Client-ID aus Body oder HTTP Basic, Cookie aus Liste oder Header", (
 	assert.equal(readCookie(["a=1", "polly_mcp_auth=v"], "polly_mcp_auth"), "v");
 	assert.equal(readCookie("a=1; polly_mcp_auth=w", "polly_mcp_auth"), "w");
 	assert.equal(readCookie(undefined, "polly_mcp_auth"), undefined);
+	// Ein Cookie pro Anmeldeanfrage: parallele Anmeldungen überschreiben sich nicht
+	const first = buildBrowserCookie("req-a", "v1", "/p").split(";")[0];
+	const second = buildBrowserCookie("req-b", "v2", "/p").split(";")[0];
+	assert.equal(readCookie([first, second], browserCookieName("req-a")), "v1");
+	assert.equal(readCookie([first, second], browserCookieName("req-b")), "v2");
 });
 
 // --- Allow-List und DCR ---------------------------------------------------------------------------------------------
@@ -802,6 +809,28 @@ await test("Zustimmungsseite: escaped, nicht einbettbar, CSRF-Nonce im Formular"
 	assert.match(headers["Content-Security-Policy"], /frame-ancestors 'none'/);
 	assert.match(headers["Content-Security-Policy"], /form-action 'self' https:\/\/claude\.ai/);
 	assert.equal(headers["X-Frame-Options"], "DENY");
+});
+
+await test("Rate-Limit greift vor dem Genesys-Zugang: kein Decrypt und kein Refresh für abgewiesene Aufrufe", async () => {
+	const store = new MemoryStore();
+	const { code } = await seedCode(store);
+	const redeemed = await redeem(store, code);
+	assert.ok(redeemed.ok);
+	const deps = fakeDeps(store, async () => ({ ok: false, kind: "upstream" }));
+	let decrypts = 0;
+	const decrypt = deps.decryptTokens;
+	deps.decryptTokens = async (...args: Parameters<typeof decrypt>) => {
+		decrypts += 1;
+		return decrypt(...args);
+	};
+	const token = redeemed.response.access_token;
+	for (let i = 0; i < SESSION_RATE_LIMIT_PER_MINUTE; i++) assert.ok((await authenticateMcpCall(deps, MCP_TENANT, TENANT, token, NOW + 1000)).ok);
+	const before = decrypts;
+	assert.ok(before > 0, "erlaubte Aufrufe entschlüsseln");
+	const limited = await authenticateMcpCall(deps, MCP_TENANT, TENANT, token, NOW + 1000);
+	assert.equal(!limited.ok && limited.kind, "rate_limited");
+	assert.equal(decrypts, before, "kein KMS-Decrypt");
+	assert.equal(deps.refreshCalls, 0);
 });
 
 console.log(`${passed} Tests bestanden`);

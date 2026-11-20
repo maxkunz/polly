@@ -78,8 +78,8 @@ export type DeployTarget = "Stage" | "Prod";
 export type { SurveyListItem };
 
 /**
- * Zeitbudget einer Operation. Lesen und der erste Schreibversuch dauern je höchstens `GENESYS_REQUEST_TIMEOUT_MS`;
- * Wiederholungen und Index-Pflege nur, solange sie vor Ablauf fertig werden. So bleibt alles unter dem 30-s-Limit
+ * Zeitbudget einer Operation. Lesen und jeder Schreibversuch dauern je höchstens `GENESYS_REQUEST_TIMEOUT_MS`;
+ * der erste Schreibversuch, Wiederholungen und Index-Pflege starten nur, solange sie vor Ablauf fertig werden. So bleibt alles unter dem 30-s-Limit
  * von API Gateway, und die KI erhält kein 504 für einen schon geschriebenen Draft.
  */
 const OPERATION_BUDGET_MS = 24_000;
@@ -103,6 +103,15 @@ function upstreamError(status?: number): SurveyStoreError {
 
 function upstream(status?: number): never {
   throw new SurveyStoreFailure(upstreamError(status));
+}
+
+/**
+ * Vor dem ersten Schreibzugriff: Startet er erst kurz vor Ablauf, kann die Lambda mitten im Schreiben abbrechen,
+ * der Client sieht einen Fehler, obwohl die Zeile geschrieben ist (doppeltes `create_survey`, `draft_conflict`).
+ * Dann lieber gar nicht schreiben; die Wiederholung ist gefahrlos.
+ */
+function assertWriteBudget(deadline: number): void {
+  if (Date.now() + GENESYS_REQUEST_TIMEOUT_MS > deadline) fail("upstream_error", { timeBudget: true });
 }
 
 /** Führt eine Operation aus; `body` erhält das Ende des Zeitbudgets für die Schreibzugriffe. */
@@ -204,6 +213,7 @@ async function updateSurveyRow(
   const patch = change(currentRow);
   if (!patch) return currentRow;
   const payload = buildSurveyRowPayload(surveyId, currentRow, patch);
+  assertWriteBudget(deadline);
   await putRow(ctx.credentials, ctx.token, surveyRowKey(surveyId), payload, { deadline });
   return { ...currentRow, ...payload };
 }
@@ -340,6 +350,7 @@ export function createSurvey(
     const prepared = prepareDraft(input, { ...options, surveyId, saved: null, version: 1, now: nowIso(ctx) });
     if (!prepared.ok) fail(prepared.error.code, prepared.error.details);
     const payload = buildSurveyRowPayload(surveyId, null, { Draft: JSON.stringify(prepared.survey), lock: EMPTY_SURVEY_LOCK });
+    assertWriteBudget(deadline);
     await addRow(ctx.credentials, ctx.token, payload, { deadline });
     const listWarnings = await syncSurveyInListWithWarning(ctx, prepared.survey, deadline);
     return { surveyId, version: 1, warnings: [...prepared.warnings, ...listWarnings] };

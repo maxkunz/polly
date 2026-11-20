@@ -430,9 +430,27 @@ await test("create_survey: 21 Fragen → validation_failed, nichts geschrieben",
 	});
 });
 
-await test("create_survey: ohne Zeitbudget für den Index nur Warnung, die Umfrage bleibt gespeichert", async () => {
+await test("create_survey: ohne Zeitbudget für den ersten Schreibzugriff nichts geschrieben", async () => {
 	await withTable(async table => {
 		const result = await createSurvey(ctx({ deadline: Date.now() + 1000 }), survey([question()]), WRITE);
+		assert.deepEqual(!result.ok && result.error, { code: "upstream_error", details: { timeBudget: true } });
+		assert.deepEqual(table.writes(), []);
+	});
+});
+
+await test("save_draft/begin_edit: ohne Zeitbudget für den Schreibzugriff nichts geschrieben", async () => {
+	await withTable(async table => {
+		table.seedSurvey(survey([question()]));
+		const result = await beginEdit(ctx({ deadline: Date.now() + 1000 }), SURVEY_ID);
+		assert.deepEqual(!result.ok && result.error, { code: "upstream_error", details: { timeBudget: true } });
+		assert.deepEqual(table.writes(), []);
+	});
+});
+
+await test("create_survey: ohne Zeitbudget für den Index nur Warnung, die Umfrage bleibt gespeichert", async () => {
+	await withTable(async table => {
+		// reicht für den ersten Schreibzugriff (6 s), nicht für Lesen und Schreiben des Index
+		const result = await createSurvey(ctx({ deadline: Date.now() + 7000 }), survey([question()]), WRITE);
 		assert.ok(result.ok);
 		assert.deepEqual(result.value.warnings, [{ code: "survey_list_not_updated" }]);
 		assert.deepEqual(table.writes(), [{ method: "POST", key: `survey_${result.value.surveyId}` }]);

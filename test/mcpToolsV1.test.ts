@@ -167,8 +167,10 @@ function fakeDeps(overrides: {
 			calls.push("list");
 			return { ok: true, value: overrides.list ?? [] };
 		},
-		async readSurveyRow(_store, surveyId): Promise<StoreResult<SurveyRowView>> {
+		async readSurveyRow(store, surveyId): Promise<StoreResult<SurveyRowView>> {
 			calls.push(`row:${surveyId}`);
+			// Wie der echte Store: laufende Löschung ergibt not_found (über `isBeingDeleted` aus dem Kontext)
+			if (await store.isBeingDeleted?.(store.tenantId, surveyId)) return { ok: false, error: { code: "not_found" } };
 			const view = rows.find((candidate) => candidate.surveyId === surveyId);
 			return view ? { ok: true, value: view } : { ok: false, error: { code: "not_found" } };
 		},

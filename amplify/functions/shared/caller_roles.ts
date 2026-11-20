@@ -1,3 +1,4 @@
+import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE } from "../../../src/constants/permissionConstants";
 import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
 import { getSurveyTableAccess } from "./genesys_survey_check";
 import { fetchWithTimeout } from "./http";
@@ -9,6 +10,17 @@ import type { TenantCredentials } from "./tenant_auth";
  * Aufrufers mit seinem eigenen Token, Projekt-Tag der Installation aus `__meta`, Namenslogik wie im
  * Frontend (`hasPollyRole`, `src/domain/permissions/roleCheck.ts`).
  */
+
+/** Alle Polly-Rollen (ohne Projekt-Präfix). */
+export const POLLY_ROLES = [POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING] as const;
+
+/**
+ * Polly-Rollen des Aufrufers (Namen ohne Projekt-Präfix), gleiche Namenslogik wie im Frontend. Gemeinsam für die
+ * MCP-Anmeldung und die Tool-Prüfung, damit beide dieselben Personen zulassen.
+ */
+export function pollyRolesOf(roleNames: readonly string[], projectTag: string | undefined): string[] {
+  return POLLY_ROLES.filter((role) => hasPollyRole(roleNames, role, projectTag));
+}
 
 export type CallerRoles =
   | { status: "ok"; roles: string[]; userId?: string; userName?: string }
