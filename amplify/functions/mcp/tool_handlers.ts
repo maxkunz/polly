@@ -196,6 +196,7 @@ function storeContext(ctx: McpToolContext, deps: McpToolDeps): SurveyStoreContex
     credentials: ctx.credentials,
     token: ctx.call.genesysAccessToken,
     userName: ctx.call.userName,
+    userId: ctx.call.userId,
     isBeingDeleted: deps.isSurveyBeingDeleted,
     now: () => new Date(ctx.now),
     deadline: ctx.deadline,
@@ -257,7 +258,7 @@ async function listSurveys(
     value: toV1SurveyList(
       items.filter((item) => !deleting.has(item.id)),
       rows,
-      { includeVersions, includeLock, userName: ctx.call.userName, now: ctx.now }
+      { includeVersions, includeLock, userName: ctx.call.userName, userId: ctx.call.userId, now: ctx.now }
     ),
   };
 }
@@ -274,6 +275,7 @@ async function getSurvey(args: { surveyId: string; fields?: SurveyField[] }, ctx
       webSurvey,
       check: read.value.draft ? checkDraft(read.value.draft, { webSurvey }) : null,
       userName: ctx.call.userName,
+      userId: ctx.call.userId,
       now: ctx.now,
     }),
   };
@@ -606,7 +608,7 @@ async function renewGenesysAccess(ctx: McpToolContext): Promise<GenesysRenewal> 
   try {
     return await ctx.call.renewGenesysAccess();
   } catch (err: any) {
-    console.error("[mcp] Genesys renewal failed", { tenantId: ctx.call.tenant.tenantId, name: err?.name, message: err?.message });
+    console.error("[mcp] Genesys renewal failed", { tenantId: ctx.call.tenant.tenantId, name: err?.name, code: err?.code });
     return "upstream";
   }
 }
@@ -674,7 +676,7 @@ export async function callTool(name: string, rawArgs: unknown, ctx: McpToolConte
         : { ok: false, code: "invalid_input", details: { issues: toInputIssues(parsed.error.issues) } };
     }
   } catch (err: any) {
-    console.error("[mcp] tool failed", { tenantId: ctx.call.tenant.tenantId, tool: tool.name, name: err?.name, message: err?.message });
+    console.error("[mcp] tool failed", { tenantId: ctx.call.tenant.tenantId, tool: tool.name, name: err?.name, code: err?.code });
     outcome = { ok: false, code: "internal_error" };
   }
   // 401 im Tool (Rollen noch gemerkt): kein zweiter Versuch, das Tool kann schon geschrieben haben. Erneuern, damit

@@ -31,9 +31,10 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	/** Herkunft des fremden Locks im Konfliktfall (KI-Client über MCP oder App) */
 	const conflictVia = ref<SurveyLockVia>("ui");
 
-	async function getCurrentUsername(): Promise<string> {
+	/** Name (steht im Lock) und Genesys-User-ID (entscheidet über den Besitz, falls bekannt) */
+	async function getCurrentUser(): Promise<{ name: string; id?: string }> {
 		if (appStore.currentUser?.name) {
-			return appStore.currentUser.name;
+			return { name: appStore.currentUser.name, id: appStore.currentUser.id || undefined };
 		}
 		appStore.initGenesysClients();
 		if (appStore.genesys?.usersApi) {
@@ -46,13 +47,13 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 						name: String(me.name ?? me.username ?? t("surveyLock.unknownUser")),
 						email: me.email
 					};
-					return appStore.currentUser.name;
+					return { name: appStore.currentUser.name, id: appStore.currentUser.id || undefined };
 				}
 			} catch (err) {
 				console.warn("Could not fetch current user from Genesys API:", err);
 			}
 		}
-		return t("surveyLock.unknownUser");
+		return { name: t("surveyLock.unknownUser") };
 	}
 
 	function formatLockDate(dateStr?: string): string {
@@ -75,8 +76,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		try {
 			const lock = parseSurveyLock(options.existingRow.value?.lock);
 
-			const username = await getCurrentUsername();
-			const conflict = checkSurveyLockConflict(lock, username);
+			const user = await getCurrentUser();
+			const conflict = checkSurveyLockConflict(lock, user);
 
 			if (conflict.hasConflict && !isConflictDismissed.value) {
 				const formattedDate = formatLockDate(lock.locked_since);
@@ -114,8 +115,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		if (options.isNew || options.readOnly?.value || isLockReadOnly.value || isLockedByMe.value) return;
 
 		try {
-			const username = await getCurrentUsername();
-			options.existingRow.value = await acquireSurveyLock(options.surveyId, username);
+			const user = await getCurrentUser();
+			options.existingRow.value = await acquireSurveyLock(options.surveyId, user);
 			isLockedByMe.value = true;
 		} catch (err) {
 			console.error("Failed to acquire survey lock:", err);
@@ -126,8 +127,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		if (options.isNew || !isLockedByMe.value) return;
 
 		try {
-			const username = await getCurrentUsername();
-			const updatedRow = await releaseSurveyLock(options.surveyId, username);
+			const user = await getCurrentUser();
+			const updatedRow = await releaseSurveyLock(options.surveyId, user);
 			if (updatedRow) {
 				options.existingRow.value = updatedRow;
 			}

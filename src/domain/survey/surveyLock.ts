@@ -12,14 +12,21 @@ export type SurveyLockVia = "ui" | "mcp";
 export interface SurveyLockData {
 	locked_by: string;
 	locked_since: string;
+	/** Genesys-User-ID der Person; fehlt bei älteren Locks. Maßgeblich für den Besitz, wenn beide Seiten sie kennen. */
+	locked_by_id?: string;
 	via?: SurveyLockVia;
 }
+
+/** Person, die ein Lock prüft: nur Name (ältere Aufrufer) oder Name mit Genesys-User-ID. */
+export type SurveyLockUser = string | { name: string; id?: string };
 
 function toSurveyLock(raw: any): SurveyLockData {
 	const lock: SurveyLockData = {
 		locked_by: String(raw?.locked_by ?? "").trim(),
 		locked_since: String(raw?.locked_since ?? "").trim()
 	};
+	const lockedById = typeof raw?.locked_by_id === "string" ? raw.locked_by_id.trim() : "";
+	if (lockedById) lock.locked_by_id = lockedById;
 	// Unbekannte Werte werden verworfen, nicht übernommen
 	if (raw?.via === "ui" || raw?.via === "mcp") lock.via = raw.via;
 	return lock;
@@ -41,9 +48,15 @@ export function parseSurveyLock(lockRaw: unknown): SurveyLockData {
 	return defaultLock;
 }
 
-/** Lock gehört der Person: Name getrimmt und ohne Groß-/Kleinschreibung verglichen. */
-export function isSurveyLockOwnedBy(lock: SurveyLockData, username: string): boolean {
-	const cleanCurrent = username.trim().toLowerCase();
+/**
+ * Lock gehört der Person. Kennen Lock und Person die User-ID, entscheidet nur sie (zwei Personen mit gleichem
+ * Anzeigenamen sind dann verschieden). Sonst (ältere Locks) Name getrimmt und ohne Groß-/Kleinschreibung verglichen.
+ */
+export function isSurveyLockOwnedBy(lock: SurveyLockData, user: SurveyLockUser): boolean {
+	const { name, id } = typeof user === "string" ? { name: user, id: undefined } : user;
+	const cleanId = id?.trim();
+	if (lock.locked_by_id && cleanId) return lock.locked_by_id === cleanId;
+	const cleanCurrent = name.trim().toLowerCase();
 	return Boolean(cleanCurrent && lock.locked_by.trim().toLowerCase() === cleanCurrent);
 }
 
@@ -72,7 +85,7 @@ export function isSurveyLockStale(
 
 export function checkSurveyLockConflict(
 	lock: SurveyLockData,
-	currentUsername: string,
+	currentUser: SurveyLockUser,
 	ttlMinutes: number = SURVEY_LOCK_TTL_MINUTES,
 	now: number = Date.now()
 ): { hasConflict: boolean; lock: SurveyLockData } {
@@ -80,7 +93,7 @@ export function checkSurveyLockConflict(
 		return { hasConflict: false, lock };
 	}
 	return {
-		hasConflict: !isSurveyLockOwnedBy(lock, currentUsername),
+		hasConflict: !isSurveyLockOwnedBy(lock, currentUser),
 		lock
 	};
 }

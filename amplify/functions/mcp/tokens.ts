@@ -220,5 +220,7 @@ export async function verifyAccessToken(
   if (token.expiresAt <= now) return { ok: false, reason: "expired" };
   const session = await store.getSession(token.sessionId);
   if (!isSessionValid(session, tenant, now)) return { ok: false, reason: "session" };
+  // Token und Session müssen zum selben Client gehören (heute immer so ausgegeben, hier zusätzlich abgesichert)
+  if (token.clientId !== session.clientId) return { ok: false, reason: "invalid" };
   return { ok: true, token, session };
 }

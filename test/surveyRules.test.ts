@@ -147,6 +147,20 @@ test("Lock: Besitz, Ablauf und Konflikt mit übergebener Uhr", () => {
 	assert.ok(!checkSurveyLockConflict(lock, "ANNA", 60, since).hasConflict);
 });
 
+test("Lock: User-ID entscheidet, wenn beide Seiten sie kennen", () => {
+	const lock = parseSurveyLock({ locked_by: "Anna", locked_since: "2026-10-30T10:00:00.000Z", locked_by_id: " u-1 " });
+	const since = Date.parse(lock.locked_since);
+	assert.equal(lock.locked_by_id, "u-1");
+	assert.ok(isSurveyLockOwnedBy(lock, { name: "Anna", id: "u-1" }));
+	assert.ok(!isSurveyLockOwnedBy(lock, { name: "Anna", id: "u-2" }), "gleicher Name, andere Person");
+	assert.ok(checkSurveyLockConflict(lock, { name: "anna", id: "u-2" }, 60, since).hasConflict);
+	assert.ok(isSurveyLockOwnedBy(lock, { name: "Anna Neu", id: "u-1" }), "Umbenennung behält den Besitz");
+	// Ohne ID auf einer Seite: Vergleich über den Namen wie bisher
+	assert.ok(isSurveyLockOwnedBy(lock, "anna"));
+	assert.ok(isSurveyLockOwnedBy({ locked_by: "Anna", locked_since: lock.locked_since }, { name: "Anna", id: "u-2" }));
+	assert.equal(parseSurveyLock({ locked_by: "Anna", locked_since: "", locked_by_id: 5 }).locked_by_id, undefined);
+});
+
 test("Choice-Vorgaben kommen vom Aufrufer", () => {
 	assert.deepEqual(createDefaultChoiceOptions(n => `Option ${n}`).labels.map(label => label.label), ["Option 1", "Option 2"]);
 	const custom = createEmptyQuestion("choice", n => `Antwort ${n}`);

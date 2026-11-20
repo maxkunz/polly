@@ -640,6 +640,7 @@ const getResponsesOutput = z.object({
 
 export interface LockView {
   userName: string;
+  userId?: string;
   now: number;
 }
 
@@ -653,7 +654,7 @@ export function toV1Lock(lock: SurveyLockData, view: LockView): z.infer<typeof l
     expiresAt: expiresAt === null ? null : new Date(expiresAt).toISOString(),
     via: lock.via ?? "ui",
     active: !isSurveyLockStale(lock, SURVEY_LOCK_TTL_MINUTES, view.now),
-    ownedByYou: isSurveyLockOwnedBy(lock, view.userName),
+    ownedByYou: isSurveyLockOwnedBy(lock, { name: view.userName, id: view.userId }),
   };
 }
 

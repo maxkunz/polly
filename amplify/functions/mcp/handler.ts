@@ -580,7 +580,7 @@ export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
     const tokenTenant: TokenTenant = { tenantId: tenant.tenantId, mcpTenantKey: tenant.mcpTenantKey, epoch: tenant.epoch, mcpUrl: urls.mcpUrl };
     return await route.handle({ event, tenant, credentials, features, urls, tokenTenant, lang, now: Date.now(), receivedAt });
   } catch (err: any) {
-    console.error("[mcp] unhandled error", { tenantId, routeKey: event?.routeKey, name: err?.name, message: err?.message });
+    console.error("[mcp] unhandled error", { tenantId, routeKey: event?.routeKey, name: err?.name, code: err?.code });
     return route.html ? errorPage(500, lang, "internal") : jsonResponse(500, { error: "server_error" });
   }
 };

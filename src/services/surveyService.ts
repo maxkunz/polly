@@ -19,7 +19,7 @@ import {
 	type SurveyRowPatch
 } from "@/domain/survey/surveyRow";
 import { useAppStore } from "@/stores/appStore";
-import { isSurveyLockOwnedBy, isSurveyLockStale, parseSurveyLock, type SurveyLockData } from "@/domain/survey/surveyLock";
+import { isSurveyLockOwnedBy, isSurveyLockStale, parseSurveyLock, type SurveyLockData, type SurveyLockUser } from "@/domain/survey/surveyLock";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
 import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
 import { getErrorStatus } from "./genesys/retry";
@@ -300,24 +300,25 @@ export async function deleteSurvey(surveyId: string): Promise<void> {
 	await writeSurveyList(resolvedTableId, updatedList, listRow);
 }
 
-export async function acquireSurveyLock(surveyId: string, username: string): Promise<Record<string, any>> {
+export async function acquireSurveyLock(surveyId: string, user: { name: string; id?: string }): Promise<Record<string, any>> {
 	const newLock: SurveyLockData = {
-		locked_by: username,
+		locked_by: user.name,
 		locked_since: new Date().toISOString(),
+		...(user.id ? { locked_by_id: user.id } : {}),
 		via: "ui"
 	};
 	return await updateSurveyRow(surveyId, () => ({ lock: JSON.stringify(newLock) }));
 }
 
 /** Gibt das Lock frei, sofern es nicht inzwischen von jemand anderem gehalten wird. */
-export async function releaseSurveyLock(surveyId: string, username?: string): Promise<Record<string, any> | null> {
+export async function releaseSurveyLock(surveyId: string, user?: SurveyLockUser): Promise<Record<string, any> | null> {
 	try {
 		return await updateSurveyRow(surveyId, currentRow => {
 			const currentLock = parseSurveyLock(currentRow.lock);
 			const isHeldByOther =
-				username &&
+				user &&
 				currentLock.locked_by &&
-				!isSurveyLockOwnedBy(currentLock, username) &&
+				!isSurveyLockOwnedBy(currentLock, user) &&
 				!isSurveyLockStale(currentLock);
 			return isHeldByOther ? null : { lock: EMPTY_SURVEY_LOCK };
 		});

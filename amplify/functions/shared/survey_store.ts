@@ -54,6 +54,8 @@ export interface SurveyStoreContext {
   token: string;
   /** Genesys-Name der Person, steht im Lock (wie in der App). */
   userName: string;
+  /** Genesys-User-ID der Person, steht als `locked_by_id` im Lock und entscheidet über den Besitz. */
+  userId?: string;
   /** Standard `isSurveyBeingDeleted` (DynamoDB); in Tests ersetzbar. */
   isBeingDeleted?: (tenantId: string, surveyId: string) => Promise<boolean>;
   /** Standard `new Date()`; in Tests ersetzbar. Gilt für Zeitstempel und Lock-Ablauf. */
@@ -168,7 +170,7 @@ export function lockDetails(lock: SurveyLockData): Record<string, unknown> {
 /** Fremdes, gültiges Lock → `survey_locked` (begin_edit, deploy, rollback). */
 function assertNoForeignLock(ctx: SurveyStoreContext, row: Record<string, any>): SurveyLockData {
   const lock = parseSurveyLock(row.lock);
-  if (checkSurveyLockConflict(lock, ctx.userName, SURVEY_LOCK_TTL_MINUTES, now(ctx).getTime()).hasConflict) {
+  if (checkSurveyLockConflict(lock, lockUser(ctx), SURVEY_LOCK_TTL_MINUTES, now(ctx).getTime()).hasConflict) {
     fail("survey_locked", lockDetails(lock));
   }
   return lock;
@@ -178,14 +180,19 @@ function assertNoForeignLock(ctx: SurveyStoreContext, row: Record<string, any>):
  * Speichern nur mit eigenem Lock. Ein abgelaufenes eigenes Lock zählt noch: Hätte jemand anderes die Umfrage
  * seitdem geöffnet, stünde dessen Name im Lock. Fehlt das Lock oder gehört es anderen → `lock_lost`.
  */
-function assertOwnLock(row: Record<string, any>, userName: string): void {
+function assertOwnLock(row: Record<string, any>, ctx: SurveyStoreContext): void {
   const lock = parseSurveyLock(row.lock);
-  if (isSurveyLockOwnedBy(lock, userName)) return;
+  if (isSurveyLockOwnedBy(lock, lockUser(ctx))) return;
   fail("lock_lost", lock.locked_by ? lockDetails(lock) : {});
 }
 
+function lockUser(ctx: SurveyStoreContext): { name: string; id?: string } {
+  return { name: ctx.userName, id: ctx.userId };
+}
+
 function mcpLock(ctx: SurveyStoreContext, since: string): SurveyLockData & { via: SurveyLockVia } {
-  return { locked_by: ctx.userName.trim(), locked_since: since, via: "mcp" };
+  const userId = ctx.userId?.trim();
+  return { locked_by: ctx.userName.trim(), locked_since: since, ...(userId ? { locked_by_id: userId } : {}), via: "mcp" };
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +397,7 @@ export function saveDraft(
     const lock = mcpLock(ctx, now);
     let saved: { survey: Survey; warnings: SurveyWarning[] } | undefined;
     await updateSurveyRow(ctx, surveyId, deadline, (currentRow) => {
-      assertOwnLock(currentRow, ctx.userName);
+      assertOwnLock(currentRow, ctx);
       const currentVersion = readFieldVersion(currentRow.Draft);
       if (currentVersion !== expectedDraftVersion) fail("draft_conflict", { current: currentVersion });
       const prepared = prepareDraft(input, {
@@ -423,7 +430,7 @@ export function endEdit(ctx: SurveyStoreContext, surveyId: string): Promise<Stor
     await assertNotDeleting(ctx, surveyId);
     let released = false;
     await updateSurveyRow(ctx, surveyId, deadline, (currentRow) => {
-      if (!isSurveyLockOwnedBy(parseSurveyLock(currentRow.lock), ctx.userName)) return null;
+      if (!isSurveyLockOwnedBy(parseSurveyLock(currentRow.lock), lockUser(ctx))) return null;
       released = true;
       return { lock: EMPTY_SURVEY_LOCK };
     });

@@ -125,7 +125,7 @@ async function buildStatus(
   const tolerate = <T>(promise: Promise<T>, fallback: T, what: string): Promise<T> =>
     afterWrite
       ? promise.catch((err: any) => {
-          console.warn(`[mcp_admin] ${what} unavailable after write`, { tenantId, name: err?.name, message: err?.message });
+          console.warn(`[mcp_admin] ${what} unavailable after write`, { tenantId, name: err?.name, code: err?.code });
           return fallback;
         })
       : promise;
@@ -155,7 +155,7 @@ async function genesysGet(region: string, token: string, path: string, notFoundC
   try {
     res = await fetchWithTimeout(`https://api.${region}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   } catch (err: any) {
-    console.error("[mcp_admin] Genesys request failed", { path, error: String(err?.message ?? err) });
+    console.error("[mcp_admin] Genesys request failed", { path, name: err?.name, code: err?.code });
     return { ok: false, response: errorResponse(502, "genesys_error", "Genesys is not reachable") };
   }
   if (res.status === 404) return { ok: false, response: errorResponse(400, notFoundCode, "Not found in Genesys") };
@@ -319,7 +319,7 @@ export const handler = async (event: AnyApiGwEvent): Promise<AnyResult> => {
     return await enableMcp(event, { ...params, region }, parsed.request);
   } catch (err: any) {
     // Secret und Tokens stehen nie im Log
-    console.error("[mcp_admin] unhandled error", { tenantId, name: err?.name, message: err?.message });
+    console.error("[mcp_admin] unhandled error", { tenantId, name: err?.name, code: err?.code });
     return errorResponse(500, "internal_error", "Internal error");
   }
 };

@@ -80,7 +80,7 @@ Der Mandant steckt im `mcpTenantKey`, einem zufälligen Wert mit 128 bit, der Te
    - Bei Ablehnung wird das Genesys-Token sofort widerrufen.
    - Die Genesys-Tokens kommen KMS-verschlüsselt in die Anmeldeanfrage. Die Session entsteht erst mit der Zustimmung, damit abgebrochene Anmeldungen keine Sessions hinterlassen.
    - Schließt die Person die Zustimmungsseite ohne Entscheidung, wird das Genesys-Token nicht widerrufen (bewusst akzeptiert, Abschnitt 11.1).
-6. **Zustimmungsseite:** zeigt Client (Name wie selbst angegeben), Redirect-Host (bei Loopback „ein Programm auf diesem Rechner“), Installation (`tenantName`) und Person.
+6. **Zustimmungsseite:** zeigt Client (Name wie selbst angegeben), Redirect-Host (bei Loopback „ein Programm auf diesem Rechner“), Installation (`tenantName`) und Person, dazu den Hinweis, nur zuzulassen, wenn die Person die Verbindung selbst gestartet hat (gegen untergeschobene `/authorize`-Links).
    - Geschützt durch `X-Frame-Options: DENY`, CSP mit `frame-ancestors 'none'` und `form-action` (eigener Ursprung und Ursprung der Redirect-URI), CSRF-Nonce und das Browser-Cookie. Kein Skript.
    - Sprache Deutsch oder Englisch nach `Accept-Language`.
    - „Zulassen“ legt Session und Einmal-Code an. „Ablehnen“ widerruft das Genesys-Token und leitet mit `access_denied` zurück. Jede Anmeldeanfrage lässt sich nur einmal bestätigen.
@@ -234,11 +234,11 @@ Protokollfehler (Authentifizierung, unbekannter Key, MCP aus) sind keine Tool-Fe
 
 ## 5. Lock
 
-Es gilt das bestehende Umfrage-Lock im Feld `lock` der Zeile `survey_<id>` (TTL 60 min, Regeln in `domain/survey/surveyLock.ts`, siehe [datatablerow_survey_entry.md](datatablerow_survey_entry.md)). Der Server erzwingt es **vor jedem Schreiben**. Der Name der Person kommt aus dem Genesys-Profil, nie aus der Eingabe.
+Es gilt das bestehende Umfrage-Lock im Feld `lock` der Zeile `survey_<id>` (TTL 60 min, Regeln in `domain/survey/surveyLock.ts`, siehe [datatablerow_survey_entry.md](datatablerow_survey_entry.md)). Der Server erzwingt es **vor jedem Schreiben**. Name und User-ID der Person kommen aus dem Genesys-Profil, nie aus der Eingabe. Über den Besitz entscheidet die User-ID (`locked_by_id`), wenn Lock und Person sie kennen, sonst (ältere Locks) der Name.
 
 - **`begin_edit`:** frisch lesen und `checkSurveyLockConflict` mit dem Genesys-Namen prüfen.
   - Fremdes, gültiges Lock → `survey_locked`.
-  - Sonst `{ locked_by, locked_since: jetzt, via: "mcp" }` schreiben. Ein eigenes Lock wird verlängert.
+  - Sonst `{ locked_by, locked_since: jetzt, locked_by_id, via: "mcp" }` schreiben. Ein eigenes Lock wird verlängert.
 - **`save_draft`:** frisch lesen.
   - Lock fremd und gültig → `lock_lost`.
   - Version passt nicht → `draft_conflict { current }`.

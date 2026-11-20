@@ -964,7 +964,7 @@ await test("Bearbeiten: begin_edit → save_draft (Version +1, Namen unveränder
 		const { surveyId } = await createVia(deps);
 		const begin = success("begin_edit", await call("begin_edit", { surveyId }, context(), deps));
 		assert.deepEqual(begin, { surveyId, draftVersion: 1, expiresAt: iso(NOW + HOUR_MS) });
-		assert.deepEqual(JSON.parse(table.row(surveyId).lock), { locked_by: "Erika Muster", locked_since: iso(NOW), via: "mcp" });
+		assert.deepEqual(JSON.parse(table.row(surveyId).lock), { locked_by: "Erika Muster", locked_since: iso(NOW), locked_by_id: "user-1", via: "mcp" });
 
 		// Ausgabe von get_survey wieder als Eingabe: servergeführte Felder fallen weg, IDs bleiben
 		const current = success("get_survey", await call("get_survey", { surveyId }, context(), deps)).draft;

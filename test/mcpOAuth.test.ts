@@ -359,6 +359,16 @@ await test("Code einlösen: liefert Token-Paar, das Access-Token gilt für die S
 	}
 });
 
+await test("Access-Token gilt nicht, wenn die Session zu einem anderen Client gehört", async () => {
+	const store = new MemoryStore();
+	const { code, session: s } = await seedCode(store);
+	const result = await redeem(store, code);
+	assert.equal(result.ok, true);
+	if (!result.ok) return;
+	store.sessions.set(s.sessionId, { ...store.sessions.get(s.sessionId)!, clientId: "fremder-client" });
+	assert.deepEqual(await verifyAccessToken(store, TENANT, result.response.access_token, NOW + 1000), { ok: false, reason: "invalid" });
+});
+
 await test("Code: PKCE, client_id, redirect_uri, resource und Ablauf müssen passen", async () => {
 	const store = new MemoryStore();
 	const { code } = await seedCode(store);

@@ -125,11 +125,15 @@ export async function runFullDelete(
     // `setup` stammt vom Login: Hat eine andere Sitzung MCP später aktiviert, steht der Client nur frisch in `__meta`.
     // Ohne diesen Abgleich bliebe der Genesys-Client samt Secret verwaist zurück.
     if (!options.rollback && !setup.mcpClient?.id && setup.dataTable?.id) {
+      // Nur Beiwerk: Ist `__meta` nicht lesbar, läuft der Uninstall weiter (das Backend räumt MCP serverseitig ab)
       try {
         const mcpClient = await loadSetupMcpClient(setup.dataTable.id);
         if (mcpClient) setup.mcpClient = mcpClient;
       } catch (err) {
-        if (getErrorStatus(err) !== 404) throw err;
+        if (getErrorStatus(err) !== 404) {
+          console.warn("Could not read MCP client from __meta, continuing uninstall:", getErrorMessage(err));
+          onProgress("MCP client could not be read from __meta. Continuing...");
+        }
       }
     }
     // MCP vor dem Backend-Cleanup abschalten: danach ist der Mandant DELETED und /mcp-settings nicht mehr erreichbar

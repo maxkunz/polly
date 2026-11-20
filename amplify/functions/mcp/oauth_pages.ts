@@ -38,6 +38,7 @@ const TEXTS = {
   de: {
     title: "Polly mit KI-Client verbinden",
     intro: "Ein KI-Client möchte in Ihrem Namen auf Polly zugreifen.",
+    warning: "Nur zulassen, wenn Sie die Verbindung gerade selbst gestartet haben. Haben Sie einen Link von jemand anderem erhalten, wählen Sie „Ablehnen“.",
     client: "Client (selbst angegeben)",
     redirect: "Weiterleitung an",
     loopback: "ein Programm auf diesem Rechner",
@@ -53,6 +54,7 @@ const TEXTS = {
   en: {
     title: "Connect Polly to an AI client",
     intro: "An AI client wants to access Polly on your behalf.",
+    warning: "Only allow this if you started the connection yourself just now. If someone else sent you this link, choose “Deny”.",
     client: "Client (self-declared)",
     redirect: "Redirects to",
     loopback: "a program on this computer",
@@ -112,6 +114,7 @@ h1{font-size:1.25rem;margin:0 0 16px}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;margin:16px 0}
 dt{color:#52606d}dd{margin:0;word-break:break-word}
 p{line-height:1.5}
+.warning{padding:8px 12px;border-left:4px solid #d97706;background:#fffbeb}
 .actions{display:flex;gap:12px;justify-content:flex-end;margin-top:24px}
 button{font:inherit;padding:8px 20px;border-radius:6px;border:1px solid #9aa5b1;background:#fff;cursor:pointer}
 button.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
@@ -148,6 +151,7 @@ export function renderConsentPage(lang: PageLang, view: ConsentView): string {
 <p>${escapeHtml(texts.intro)}</p>
 <dl>${row(texts.client, view.clientName || texts.unnamed)}${row(texts.redirect, redirect)}${row(texts.installation, view.installation)}${row(texts.user, view.userName)}</dl>
 <p>${escapeHtml(texts.scope)}</p>
+<p class="warning">${escapeHtml(texts.warning)}</p>
 <form method="post" action="${escapeHtml(view.action)}">
 <input type="hidden" name="request" value="${escapeHtml(view.requestId)}">
 <input type="hidden" name="nonce" value="${escapeHtml(view.nonce)}">
