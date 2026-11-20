@@ -3,7 +3,7 @@ import { useConfirm } from "primevue/useconfirm";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/appStore";
 import { currentLocaleTag } from "@/i18n";
-import { parseSurveyLock, checkSurveyLockConflict } from "@/domain/survey/surveyLock";
+import { parseSurveyLock, checkSurveyLockConflict, type SurveyLockVia } from "@/domain/survey/surveyLock";
 import { acquireSurveyLock, releaseSurveyLock } from "@/services/surveyService";
 
 export interface UseSurveyLockOptions {
@@ -28,10 +28,13 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 	/** Nutzer hat im Konfliktdialog „Nur lesen“ gewählt: Editor gesperrt, kein Lock nehmen */
 	const isLockReadOnly = ref<boolean>(false);
 	const conflictLockedBy = ref<string>("");
+	/** Herkunft des fremden Locks im Konfliktfall (KI-Client über MCP oder App) */
+	const conflictVia = ref<SurveyLockVia>("ui");
 
-	async function getCurrentUsername(): Promise<string> {
+	/** Name (steht im Lock) und Genesys-User-ID (entscheidet über den Besitz, falls bekannt) */
+	async function getCurrentUser(): Promise<{ name: string; id?: string }> {
 		if (appStore.currentUser?.name) {
-			return appStore.currentUser.name;
+			return { name: appStore.currentUser.name, id: appStore.currentUser.id || undefined };
 		}
 		appStore.initGenesysClients();
 		if (appStore.genesys?.usersApi) {
@@ -44,13 +47,13 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 						name: String(me.name ?? me.username ?? t("surveyLock.unknownUser")),
 						email: me.email
 					};
-					return appStore.currentUser.name;
+					return { name: appStore.currentUser.name, id: appStore.currentUser.id || undefined };
 				}
 			} catch (err) {
 				console.warn("Could not fetch current user from Genesys API:", err);
 			}
 		}
-		return t("surveyLock.unknownUser");
+		return { name: t("surveyLock.unknownUser") };
 	}
 
 	function formatLockDate(dateStr?: string): string {
@@ -73,14 +76,17 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		try {
 			const lock = parseSurveyLock(options.existingRow.value?.lock);
 
-			const username = await getCurrentUsername();
-			const conflict = checkSurveyLockConflict(lock, username);
+			const user = await getCurrentUser();
+			const conflict = checkSurveyLockConflict(lock, user);
 
 			if (conflict.hasConflict && !isConflictDismissed.value) {
 				const formattedDate = formatLockDate(lock.locked_since);
 				confirm.require({
 					header: t("surveyLock.conflict.header"),
-					message: t("surveyLock.conflict.message", { date: formattedDate, user: lock.locked_by }),
+					message: t(lock.via === "mcp" ? "surveyLock.conflict.messageMcp" : "surveyLock.conflict.message", {
+						date: formattedDate,
+						user: lock.locked_by
+					}),
 					icon: "pi pi-exclamation-triangle",
 					acceptLabel: t("surveyLock.conflict.acceptLabel"),
 					rejectLabel: t("surveyLock.conflict.rejectLabel"),
@@ -91,6 +97,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 					},
 					reject: () => {
 						conflictLockedBy.value = lock.locked_by ?? "";
+						conflictVia.value = lock.via ?? "ui";
 						isLockReadOnly.value = true;
 					},
 					// Schließen per X/Escape (nicht bei accept/reject)
@@ -108,8 +115,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		if (options.isNew || options.readOnly?.value || isLockReadOnly.value || isLockedByMe.value) return;
 
 		try {
-			const username = await getCurrentUsername();
-			options.existingRow.value = await acquireSurveyLock(options.surveyId, username);
+			const user = await getCurrentUser();
+			options.existingRow.value = await acquireSurveyLock(options.surveyId, user);
 			isLockedByMe.value = true;
 		} catch (err) {
 			console.error("Failed to acquire survey lock:", err);
@@ -120,8 +127,8 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		if (options.isNew || !isLockedByMe.value) return;
 
 		try {
-			const username = await getCurrentUsername();
-			const updatedRow = await releaseSurveyLock(options.surveyId, username);
+			const user = await getCurrentUser();
+			const updatedRow = await releaseSurveyLock(options.surveyId, user);
 			if (updatedRow) {
 				options.existingRow.value = updatedRow;
 			}
@@ -186,6 +193,7 @@ export function useSurveyLock(options: UseSurveyLockOptions) {
 		markLockReleased,
 		isLockReadOnly,
 		conflictLockedBy,
+		conflictVia,
 		editAnyway
 	};
 }

@@ -22,10 +22,10 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
                           (ohne API_URL bricht das Skript ab)
   GENESYS_REGION          Default mypurecloud.de
   POLLY_FEATURES          optional: Feature Flags der Installation, getrennt durch Leerzeichen oder Komma,
-                          z. B. "web" (Kurzform für web_survey; auch der volle Name gilt).
+                          z. B. "web mcp" (Kurzform für web_survey und mcp; auch die vollen Namen gelten).
                           Gruppen eines nicht gewählten Features werden als übersprungen gewertet.
                           Nicht gesetzt oder leer = alle Gruppen laufen, "none" = keine Feature-Gruppen.
-                          web: [W1]–[W12], [I1]/[I2], [T1]–[T7], [P1]–[P6]
+                          web: [W1]–[W12], [I1]/[I2], [T1]–[T7], [P1]–[P6]; mcp: [M1]–[M17]
                           dazu in der Kunden-API [C8]–[C12], [C18] und [C28]–[C34]
   API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen fünf Scopes
                           (ohne themes.read/themes.write entfallen [C28]–[C34])
@@ -60,6 +60,7 @@ ACHTUNG: Schreibt echte Daten in die deployte API.
 
 import argparse
 import base64
+import http.client
 import json
 import os
 import ssl
@@ -197,6 +198,13 @@ def header_present(*names: str) -> BodyCheck:
     def check(res: Response) -> Optional[str]:
         missing = [n for n in names if n.lower() not in res.headers]
         return f"Header fehlen: {', '.join(missing)}" if missing else None
+    return check
+
+
+def header_text_contains(name: str, fragment: str) -> BodyCheck:
+    def check(res: Response) -> Optional[str]:
+        value = res.headers.get(name.lower(), "")
+        return None if fragment in value else f"Header {name} enthält '{fragment}' nicht (ist: {value!r})"
     return check
 
 
@@ -702,6 +710,105 @@ def tests_web_themes(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> No
         suite.skip("[T6]/[T7]", "WEB_THEME_WRITE nicht gesetzt")
 
 
+def tests_mcp_settings(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
+    """/mcp-settings (Lambda mcp_admin). Aktivieren und Deaktivieren sind nicht dabei: Sie legen einen Genesys-Client an."""
+    suite.section("MCP-Schalter: /mcp-settings")
+    path = "/mcp-settings"
+
+    suite.case("[M1] GET /mcp-settings ohne Token (401)", lambda: api.public("GET", path), 401)
+    suite.case("[M2] PUT /mcp-settings ohne Token (401)",
+               lambda: api.public("PUT", path, body={"allowComments": True}), 401)
+    suite.case("[M3] DELETE /mcp-settings ohne Token (401)", lambda: api.public("DELETE", path), 401)
+
+    if cfg.api_client_id and cfg.api_client_secret and cfg.api_token_url:
+        basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
+        try:
+            token_res = HttpClient(cfg.api_token_url, api.ssl_context).request(
+                "POST", "", body=urllib.parse.urlencode({"grant_type": "client_credentials"}),
+                headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"})
+        except (urllib.error.URLError, OSError) as exc:
+            # Netz- oder TLS-Fehler beim Token-Endpunkt darf den restlichen Lauf nicht beenden
+            suite.skip("[M4]", f"Token-Endpunkt nicht erreichbar ({exc})")
+            return
+        body = token_res.json() if token_res.status == 200 else None
+        cognito_token = body.get("access_token", "") if isinstance(body, dict) else ""
+        if cognito_token:
+            # Ein Cognito-Token gehört nie zu einem Genesys-User: 403 (M2M des Mandanten) oder 401 (unbekannter Client)
+            suite.case("[M4] GET /mcp-settings mit Cognito-Token (401 oder 403, nie 200)",
+                       lambda: api.request("GET", path, headers={"Authorization": f"Bearer {cognito_token}"}), (401, 403))
+        else:
+            suite.skip("[M4]", "kein Cognito-Token erhalten")
+    else:
+        suite.skip("[M4]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
+
+    if cfg.token_no_deploy:
+        suite.case("[M5] GET /mcp-settings ohne Rolle polly_deploy (403 missing_role)",
+                   lambda: api.genesys("GET", path, token=cfg.token_no_deploy), 403, text_contains("missing_role"))
+        suite.case("[M6] PUT /mcp-settings ohne Rolle polly_deploy (403 missing_role, nichts geändert)",
+                   lambda: api.genesys("PUT", path, token=cfg.token_no_deploy, body={"allowComments": False}),
+                   403, text_contains("missing_role"))
+        suite.case("[M7] DELETE /mcp-settings ohne Rolle polly_deploy (403 missing_role, MCP bleibt an)",
+                   lambda: api.genesys("DELETE", path, token=cfg.token_no_deploy), 403, text_contains("missing_role"))
+    else:
+        suite.skip("[M5]–[M7]", "GENESYS_TOKEN_NO_DEPLOY nicht gesetzt")
+
+    # Beide Fälle scheitern vor jeder Änderung an der Eingabe
+    suite.case("[M8] PUT /mcp-settings ohne Felder (400 invalid_request)",
+               lambda: api.genesys("PUT", path, body={}), 400, text_contains("invalid_request"))
+    suite.case("[M9] PUT /mcp-settings mit ungültiger Client-ID (400 invalid_request)",
+               lambda: api.genesys("PUT", path, body={"clientId": "kein-uuid", "clientSecret": "x"}),
+               400, text_contains("invalid_request"))
+    mcp_settings = suite.case("[M10] GET /mcp-settings mit polly_deploy (200, MCP-URL und Redirect-URI; erzeugt den URL-Schlüssel)",
+                              lambda: api.genesys("GET", path), 200, json_has("mcpUrl", "redirectUri"))
+    tests_mcp_endpoint(suite, api, mcp_settings)
+
+
+def tests_mcp_endpoint(suite: Suite, api: PollyApi, settings: Optional[Response]) -> None:
+    """Öffentliche MCP-Routen (Lambda mcp): Metadaten, 401-Header, falscher Schlüssel, DCR-Prüfung. Ohne Anmeldung, ohne Schreiben."""
+    body = settings.json() if settings is not None and settings.status == 200 else None
+    mcp_url = body.get("mcpUrl", "") if isinstance(body, dict) else ""
+    start = mcp_url.find("/mcp/")
+    if start < 0:
+        suite.skip("[M11]–[M17]", "keine MCP-URL aus /mcp-settings")
+        return
+    base = mcp_url[start:]  # /mcp/<schlüssel>; Host und Präfix kommen aus API_URL
+    key = base[len("/mcp/"):].split("/")[0]
+    prm_path = f"/.well-known/oauth-protected-resource{base}"
+    as_path = f"/.well-known/oauth-authorization-server{base}"
+    rpc = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+    try:
+        probe_status = api.public("GET", prm_path).status
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+        # Netzfehler bei der Vorprüfung dürfen den restlichen Lauf nicht beenden
+        suite.skip("[M11]–[M17]", f"MCP-Metadaten nicht erreichbar ({type(exc).__name__})")
+        return
+    if probe_status == 404:
+        suite.skip("[M11]–[M17]", "MCP ist in dieser Umgebung aus (MCP_ENABLED≠true oder Mandant nicht freigeschaltet): überall 404")
+        return
+
+    suite.case("[M11] Protected Resource Metadata (200, resource und authorization_servers)",
+               lambda: api.public("GET", prm_path), 200, json_has("resource", "authorization_servers"))
+    suite.case("[M12] Authorization Server Metadata (200, Endpunkte, PKCE S256)",
+               lambda: api.public("GET", as_path), 200,
+               json_has("issuer", "authorization_endpoint", "token_endpoint", "registration_endpoint",
+                        "code_challenge_methods_supported"))
+    suite.case("[M13] POST /mcp/<Schlüssel> ohne Token (401 mit WWW-Authenticate und resource_metadata)",
+               lambda: api.public("POST", base, body=rpc), 401, header_text_contains("www-authenticate", "resource_metadata"))
+    suite.case("[M14] GET /mcp/<Schlüssel> (405, nur POST erlaubt)", lambda: api.public("GET", base), 405,
+               header_present("allow"))
+    wrong = "A" * (len(key) or 22)
+    suite.case("[M15] POST /mcp/<falscher Schlüssel> (404, nicht von „MCP aus“ zu unterscheiden)",
+               lambda: api.public("POST", f"/mcp/{wrong}", body=rpc), 404)
+    suite.case("[M16] POST /mcp/<Schlüssel> mit ungültigem Token (401, error=invalid_token)",
+               lambda: api.request("POST", base, headers={"Authorization": "Bearer kein-gueltiges-token"}, body=rpc),
+               401, header_text_contains("www-authenticate", "invalid_token"))
+    suite.case("[M17] DCR mit fremder Redirect-URI (400 invalid_redirect_uri, nichts angelegt)",
+               lambda: api.public("POST", f"{base}/oauth/register",
+                                  body={"client_name": "api_tests", "redirect_uris": ["https://evil.example.com/cb"]}),
+               400, text_contains("invalid_redirect_uri"))
+
+
 def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     """Kunden-API /ext/v1 mit Client Credentials. Braucht die Session aus tests_survey_responses."""
     suite.section("Kunden-API: /ext/v1")
@@ -1150,6 +1257,7 @@ def main() -> int:
     tests_customer_api(suite, api, cfg, conversation_id)
     tests_delete(suite, api, cfg, conversation_id)
     run_for_feature(suite, cfg, "web_survey", "[T1]–[T7]", tests_web_themes, suite, api, cfg)
+    run_for_feature(suite, cfg, "mcp", "[M1]–[M17]", tests_mcp_settings, suite, api, cfg)
     run_for_feature(suite, cfg, "web_survey", "[P1]–[P6]", tests_preview, suite, api, cfg)
     run_for_feature(suite, cfg, "web_survey", "[W8]/[W9]", tests_web_expired, suite, api, cfg.expiring_token, cfg.expiring_exp)
     return suite.summary()

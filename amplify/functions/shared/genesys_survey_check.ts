@@ -1,6 +1,8 @@
 import type { FlowSurvey } from "../../../src/domain/survey/flowTypes";
-import { baseUrlError, pickBaseUrl } from "../../../src/domain/survey/invitationLinks";
+import { baseUrlError, pickBaseUrl, usableBaseUrl } from "../../../src/domain/survey/invitationLinks";
+import { forEachSurveyRow, getRow, type SurveyRowsOptions, type SurveyTableAccess } from "./genesys_datatable";
 import { fetchWithTimeout } from "./http";
+import { loadDefaultBaseUrl } from "./installation_meta";
 import { isValidSurveyId } from "./survey_id";
 import { findSurveysBeingDeleted, isSurveyBeingDeleted } from "./survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "./tenant_auth";
@@ -15,8 +17,8 @@ import { parseProdSurvey } from "./web_survey_format";
  * nachweislich nicht (mehr) existiert. Im Zweifel (Fehler, fehlender Zugriff,
  * unlesbare Antwort) wird NICHT gelöscht.
  *
- * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage (`listProdSurveys` alle), `loadProjectTag` den Projekt-Tag
- * der Installation aus der Zeile `__meta`.
+ * Web-Kanal: `loadProdSurvey` liest den Prod-Stand einer Umfrage (`listProdSurveys` alle). Projekt-Tag, Flags und
+ * Standard-Basis-URL aus der Zeile `__meta` liest `installation_meta.ts`.
  *
  * Antworten aus dem Flow: `checkSurveyExists` prüft (mit Cache), dass die Zeile `survey_<id>` in der
  * Data Table des Mandanten existiert, damit keine Antworten zu fremden oder erfundenen Umfragen gespeichert werden.
@@ -60,20 +62,6 @@ async function requestClientCredentialsToken(region: string, clientId: string, c
   if (!data?.access_token) throw new Error("Genesys token response without access_token");
 
   return { value: data.access_token, ttlMs: Number(data.expires_in ?? 300) * 1000 - TOKEN_REFRESH_MARGIN_MS };
-}
-
-export async function getRow(
-  region: string,
-  token: string,
-  dataTableId: string,
-  rowKey: string
-): Promise<{ status: number; body?: any }> {
-  const url =
-    `https://api.${region}/api/v2/flows/datatables/${encodeURIComponent(dataTableId)}` +
-    `/rows/${encodeURIComponent(rowKey)}?showbrief=false`;
-  const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status === 200) return { status: 200, body: await res.json() };
-  return { status: res.status };
 }
 
 async function getTableStatus(region: string, token: string, dataTableId: string): Promise<number> {
@@ -232,13 +220,6 @@ export function clearSurveyExistenceCache(): void {
 // Web-Kanal
 // ---------------------------------------------------------------------------
 
-/** Region, Client-Credentials-Token und Umfrage-Data-Table (`surveyDataTableId`) eines Mandanten. */
-export type SurveyTableAccess = {
-  region: string;
-  token: string;
-  dataTableId: string;
-};
-
 export type ProdSurveyResult =
   /** `baseUrl`: wirksame Basis-URL, nur mit `withBaseUrl` und wenn gesetzt: gültige `base_url` aus dem Draft (steht nicht im Flow-JSON), sonst Standard des Mandanten aus `__meta`. */
   | { status: "ok"; survey: FlowSurvey; baseUrl?: string }
@@ -274,19 +255,21 @@ function readDraftBaseUrl(raw: unknown, surveyId: string): string | undefined {
   }
   const baseUrl = (draft as { base_url?: unknown } | null)?.base_url;
   if (typeof baseUrl !== "string" || !baseUrl.trim()) return undefined;
-  const error = baseUrlError(baseUrl);
-  if (error) {
-    console.warn("[genesys_survey_check] Ignoring invalid base_url in Draft", { surveyId, error, length: baseUrl.length });
-    return undefined;
+  const usable = usableBaseUrl(baseUrl);
+  if (!usable) {
+    console.warn("[genesys_survey_check] Ignoring invalid base_url in Draft", { surveyId, error: baseUrlError(baseUrl.trim()), length: baseUrl.length });
   }
-  return baseUrl.trim();
+  return usable;
 }
 
 /** Spalte der Zeile `survey_<id>`, aus der ein Flow-Stand gelesen wird. */
 export type FlowSurveyColumn = "Prod" | "Stage";
 
-/** `withBaseUrl`: zusätzlich die wirksame Basis-URL ermitteln (`base_url` aus dem Draft, sonst Standard des Mandanten; nur für Links der Kunden-API). */
-export type FlowSurveyOptions = { withBaseUrl?: boolean };
+/**
+ * `withBaseUrl`: zusätzlich die wirksame Basis-URL ermitteln (`base_url` aus dem Draft, sonst Standard des Mandanten; nur für Links der Kunden-API).
+ * `freshBaseUrl`: den Standard ohne Cache aus `__meta` lesen (beim Signieren von Einladungen, deren Links sich nicht mehr ändern lassen).
+ */
+export type FlowSurveyOptions = { withBaseUrl?: boolean; freshBaseUrl?: boolean };
 
 /**
  * Lädt den Prod-Stand der Umfrage aus der Data Table des Mandanten. Liegt ein Lösch-Job vor
@@ -327,7 +310,7 @@ export async function loadFlowSurvey(
     // `__meta` nur lesen, wenn der Draft keine eigene Basis-URL hat
     const draftBaseUrl = options.withBaseUrl ? readDraftBaseUrl(row.body?.Draft, surveyId) : undefined;
     const baseUrl = options.withBaseUrl
-      ? pickBaseUrl(draftBaseUrl, draftBaseUrl ? undefined : await loadDefaultBaseUrl(tenantId, access))
+      ? pickBaseUrl(draftBaseUrl, draftBaseUrl ? undefined : await loadDefaultBaseUrl(tenantId, access, options.freshBaseUrl))
       : undefined;
     return { status: "ok", survey, ...(baseUrl ? { baseUrl } : {}) };
   } catch (err: any) {
@@ -335,28 +318,17 @@ export async function loadFlowSurvey(
   }
 }
 
-/** Zeilen pro Seite beim Lesen aller Umfragen: Eine Zeile hat bis zu vier Zellen mit je max. 32.000 Zeichen. */
-const SURVEY_ROWS_PAGE_SIZE = 25;
-/** Obergrenze gegen endlose Schleifen (25 × 80 = 2000 Zeilen). */
-const SURVEY_ROWS_MAX_PAGES = 80;
-
-const SURVEY_ROW_KEY_PREFIX = "survey_";
-
 export type ProdSurveyListResult =
   | { status: "ok"; surveys: FlowSurvey[] }
   | { status: "error"; reason: string; throttled?: boolean };
 
-export interface ProdSurveyListOptions {
-  /** Wird vor jeder Seite gefragt; `false` bricht mit Fehler ab (Zeitbudget der Lambda). */
-  canContinue?: () => boolean;
-}
+export type ProdSurveyListOptions = SurveyRowsOptions;
 
 /**
  * Alle Umfragen des Mandanten mit gültigem Prod-Stand, ohne Umfragen, deren Löschung läuft (`SurveyDeletionJobsTable`).
- * Liest die Zeilen der Data Table seitenweise; `__meta`, `__lock` und `survey_list` und Zeilen ohne gültige
- * Prod-Zelle werden übersprungen. `survey_list` genügt nicht, weil dort nur ID und Titel stehen.
- * Genesys blättert über den Offset: Ändert sich die Tabelle währenddessen, kann eine Zeile doppelt kommen
- * (wird nach ID entfernt) oder fehlen.
+ * Liest die Zeilen der Data Table seitenweise (`forEachSurveyRow`); Zeilen ohne gültige Prod-Zelle werden
+ * übersprungen. `survey_list` genügt nicht, weil dort nur ID und Titel stehen. Doppelt gelieferte Zeilen
+ * werden nach ID entfernt.
  */
 export async function listProdSurveys(
   tenantId: string,
@@ -369,86 +341,19 @@ export async function listProdSurveys(
   const surveys = new Map<string, FlowSurvey>();
   try {
     const access = await getSurveyTableAccess(tenantCredentials);
-    let pageNumber = 1;
-    let pageCount = 1;
-    do {
-      if (options.canContinue && !options.canContinue()) return { status: "error", reason: "Time budget exhausted" };
-      const url =
-        `https://api.${access.region}/api/v2/flows/datatables/${encodeURIComponent(access.dataTableId)}` +
-        `/rows?showbrief=false&pageSize=${SURVEY_ROWS_PAGE_SIZE}&pageNumber=${pageNumber}`;
-      const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${access.token}` } });
-      if (!res.ok) {
-        return { status: "error", reason: `Survey rows HTTP ${res.status}`, ...(res.status === 429 ? { throttled: true } : {}) };
-      }
-      const body: any = await res.json();
-      for (const row of Array.isArray(body?.entities) ? body.entities : []) {
-        const key = typeof row?.key === "string" ? row.key : "";
-        if (!key.startsWith(SURVEY_ROW_KEY_PREFIX) || key === "survey_list") continue;
-        const surveyId = key.slice(SURVEY_ROW_KEY_PREFIX.length);
-        if (!isValidSurveyId(surveyId)) continue;
+    const rows = await forEachSurveyRow(
+      access,
+      (surveyId, row) => {
         const survey = parseProdSurvey(row.Prod, surveyId);
         if (survey) surveys.set(survey.id, survey);
-      }
-      // Ohne Seitenzahl wäre unklar, ob weitere Seiten folgen: Fehler statt still gekürzter Liste
-      if (!Number.isInteger(body?.pageCount)) return { status: "error", reason: "Survey rows response without pageCount" };
-      pageCount = body.pageCount;
-      pageNumber += 1;
-    } while (pageNumber <= pageCount && pageNumber <= SURVEY_ROWS_MAX_PAGES);
-    if (pageNumber <= pageCount) return { status: "error", reason: "Too many rows in the survey data table" };
+      },
+      options
+    );
+    if (!rows.ok) return { status: "error", reason: rows.reason, ...(rows.status === 429 ? { throttled: true } : {}) };
 
     const deleting = await findSurveysBeingDeleted(tenantId, [...surveys.keys()]);
     return { status: "ok", surveys: [...surveys.values()].filter((survey) => !deleting.has(survey.id)) };
   } catch (err: any) {
     return { status: "error", reason: err?.message ?? "request failed", ...(err?.status === 429 ? { throttled: true } : {}) };
   }
-}
-
-/**
- * Inhalt der Zeile `__meta` (Feld `Draft`). `undefined`, wenn die Zeile fehlt oder unlesbar ist.
- * Wirft bei anderen HTTP-Fehlern.
- */
-async function readMetaDraft(access: SurveyTableAccess): Promise<any | undefined> {
-  const row = await getRow(access.region, access.token, access.dataTableId, "__meta");
-  if (row.status === 404) return undefined;
-  if (row.status !== 200) {
-    throw Object.assign(new Error(`__meta row HTTP ${row.status}`), { status: row.status });
-  }
-  try {
-    return typeof row.body?.Draft === "string" ? JSON.parse(row.body.Draft) : row.body?.Draft;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Projekt-Tag der Installation (`meta.setup.projectTag` in der Zeile `__meta`, Feld `Draft`).
- * `undefined`, wenn die Zeile oder der Tag fehlt (wie im Frontend: dann zählt nur die unpräfixierte Rolle).
- * Wirft bei anderen HTTP-Fehlern.
- */
-export async function loadProjectTag(access: SurveyTableAccess): Promise<string | undefined> {
-  const meta = await readMetaDraft(access);
-  const projectTag = meta?.setup?.projectTag;
-  return typeof projectTag === "string" && projectTag.trim() ? projectTag.trim() : undefined;
-}
-
-/** Standard-Basis-URL pro Mandant (`""` = keine); kurz gemerkt, damit nicht jeder Aufruf `__meta` liest. */
-const defaultBaseUrlCache = new TtlCache<string>({ ttlMs: 60 * 1000 });
-
-/**
- * Standard-Basis-URL des Mandanten (`meta.web.defaultBaseUrl` in `__meta`, in den Einstellungen gepflegt).
- * Ungültige Werte (`baseUrlError`) ergeben `undefined`, dann gilt die Polly-Umfrageseite.
- * Wirft bei Lesefehlern (Fehler mit `status`), damit keine Links auf die falsche Seite entstehen; Fehler werden nicht gemerkt.
- */
-export async function loadDefaultBaseUrl(tenantId: string, access: SurveyTableAccess): Promise<string | undefined> {
-  const value = await defaultBaseUrlCache.getOrLoad(tenantId, async () => {
-    const raw = (await readMetaDraft(access))?.web?.defaultBaseUrl;
-    const baseUrl = typeof raw === "string" ? raw.trim() : "";
-    const error = baseUrl ? baseUrlError(baseUrl) : null;
-    if (error) {
-      console.warn("[genesys_survey_check] Ignoring invalid default base URL in __meta", { tenantId, error, length: baseUrl.length });
-      return { value: "" };
-    }
-    return { value: baseUrl };
-  });
-  return value || undefined;
 }

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
+	collectDeployedTechnicalNames,
 	collectTechnicalNames,
+	findTechnicalNameCollisions,
 	createEmptyQuestion,
 	createEmptySurvey,
 	displayTechnicalName,
@@ -122,6 +124,26 @@ test("displayTechnicalName: Vorschau aus dem Titel nur für ungespeicherte Eleme
 	assert.equal(displayTechnicalName(survey, false, "umfrage"), `neuer_titel_${shortId(survey.id)}`);
 	// Gespeichert: Name bleibt, auch wenn er noch wie ein Platzhalter aussieht
 	assert.equal(displayTechnicalName(survey, true, "umfrage"), survey.name);
+});
+
+test("findTechnicalNameCollisions: nur neue Elemente, auch gegen deployte Namen", () => {
+	const survey = createEmptySurvey();
+	const a = { ...createEmptyQuestion(), id: "47cc5f41-3b76-47b2-bd77-17bc2d44cfba", name: "", title: "Gleich" };
+	const b = { ...createEmptyQuestion(), id: "47cc5f41-1111-4111-8111-111111111111", name: "", title: "Gleich" };
+	survey.questions.push(a, b);
+	ensureSurveyTechnicalNames(survey);
+	assert.deepEqual(findTechnicalNameCollisions(survey), [{ id: b.id, name: "gleich_47cc5f41" }]);
+
+	// Beide gespeichert (Altbestand): unveränderlich, keine Meldung
+	assert.deepEqual(findTechnicalNameCollisions(survey, collectTechnicalNames(survey)), []);
+
+	// Gegen deployte Fassung: fremde ID kollidiert, gleiche ID nicht; Groß-/Kleinschreibung zählt nicht
+	survey.questions = [b];
+	ensureSurveyTechnicalNames(survey);
+	const deployed = collectDeployedTechnicalNames([JSON.stringify({ questions: [{ id: a.id, name: "Gleich_47cc5f41" }] }), "{kaputt", null]);
+	assert.deepEqual(findTechnicalNameCollisions(survey, new Map(), deployed), [{ id: b.id, name: "gleich_47cc5f41" }]);
+	survey.questions = [a];
+	assert.deepEqual(findTechnicalNameCollisions(survey, new Map(), deployed), []);
 });
 
 console.log(`\n${passed} Tests bestanden`);

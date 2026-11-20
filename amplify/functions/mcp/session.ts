@@ -1,0 +1,220 @@
+import {
+  decryptClientSecret,
+  decryptGenesysTokens,
+  encryptGenesysTokens,
+  type GenesysSessionTokens,
+} from "../shared/mcp_secret";
+import { refreshGenesysToken, revokeGenesysToken, type GenesysTokenResult } from "../shared/mcp_genesys";
+import { SESSION_RATE_LIMIT_PER_MINUTE } from "./oauth";
+import type { OAuthStore, SessionRecord } from "./oauth_store";
+import type { McpTenant } from "./tenant";
+import { verifyAccessToken, type TokenTenant } from "./tokens";
+
+/**
+ * Prüfkette Schritte 4 bis 6 pro MCP-Aufruf (`documentation/polly_mcp.md`, Abschnitt 3): Access-Token, Session
+ * (bei Bedarf Genesys-Refresh), Rate-Limit pro Session. Schritte 1 bis 3 liegen in `tenant.ts`, die Rolle des Tools
+ * und das Audit-Log in `tool_handlers.ts`. Das Genesys-Token verlässt den Server nie.
+ */
+
+/** Genesys-Token wird so lange vor Ablauf erneuert. */
+const GENESYS_REFRESH_MARGIN_MS = 2 * 60 * 1000;
+/**
+ * Wartezeiten, bevor der Verlierer eines parallelen Refreshs die Session erneut liest: Der Gewinner braucht nach der
+ * Antwort von Genesys noch KMS und das Speichern. Erst wenn danach kein neuer Stand da ist, gilt die Session als tot.
+ */
+const WINNER_WAIT_MS = [250, 750];
+
+/** Abhängigkeiten nach außen (KMS, Genesys); Tests ersetzen sie. */
+export interface GenesysSessionDeps {
+  store: OAuthStore;
+  decryptTokens(session: { tenantId: string; sessionId: string; genesysTokensEnc: string }): Promise<GenesysSessionTokens>;
+  encryptTokens(tenantId: string, sessionId: string, tokens: GenesysSessionTokens): Promise<string>;
+  /** Secret des Genesys-Clients (entschlüsselt); `undefined`, wenn keins hinterlegt ist */
+  clientSecret(tenant: McpTenant): Promise<string | undefined>;
+  refresh(region: string, client: { clientId: string; clientSecret?: string }, refreshToken: string, now: number): Promise<GenesysTokenResult>;
+  /** Warten zwischen den Leseversuchen in `useWinner` (Tests: ohne Verzögerung). */
+  wait(ms: number): Promise<void>;
+}
+
+export const kmsGenesysDeps = (store: OAuthStore): GenesysSessionDeps => ({
+  store,
+  decryptTokens: (session) => decryptGenesysTokens(session.tenantId, session.sessionId, session.genesysTokensEnc),
+  encryptTokens: encryptGenesysTokens,
+  clientSecret: async (tenant) => (tenant.clientSecretEnc ? decryptClientSecret(tenant.tenantId, tenant.clientSecretEnc) : undefined),
+  refresh: refreshGenesysToken,
+  wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+});
+
+export type GenesysAccess =
+  | { ok: true; accessToken: string; session: SessionRecord }
+  /** `session_dead`: Genesys lehnt ab oder kein Refresh möglich, neue Anmeldung nötig; `upstream`: vorübergehend */
+  | { ok: false; reason: "session_dead" | "upstream" };
+
+/**
+ * Gültiges Genesys-Access-Token der Session, bei Bedarf per Refresh erneuert. Parallele Aufrufe: Genesys-Refresh-Tokens
+ * gelten nur einmal; wer das Rennen verliert, nimmt die gespeicherten neuen Tokens des Gewinners.
+ * `force`: Genesys hat das Token mit 401 abgelehnt, der gespeicherte Ablauf zählt nicht mehr (sofort erneuern, das alte
+ * Token nie weiter verwenden).
+ */
+export async function ensureGenesysAccess(
+  deps: GenesysSessionDeps,
+  tenant: McpTenant,
+  session: SessionRecord,
+  now: number,
+  options: { force?: boolean } = {}
+): Promise<GenesysAccess> {
+  const tokens = await deps.decryptTokens(session);
+  const force = options.force === true;
+  if (!force && session.genesysExpiresAt - GENESYS_REFRESH_MARGIN_MS > now) return { ok: true, accessToken: tokens.accessToken, session };
+  const stillValid = !force && session.genesysExpiresAt > now;
+  const secret = tokens.refreshToken ? await deps.clientSecret(tenant) : undefined;
+  if (!tokens.refreshToken || !secret) {
+    return stillValid ? { ok: true, accessToken: tokens.accessToken, session } : { ok: false, reason: "session_dead" };
+  }
+
+  const result = await deps.refresh(session.region, { clientId: tenant.genesysClientId, clientSecret: secret }, tokens.refreshToken, now);
+  if (result.ok) {
+    const genesysTokensEnc = await deps.encryptTokens(session.tenantId, session.sessionId, {
+      accessToken: result.tokens.accessToken,
+      // Ohne neuen Refresh-Token in der Antwort gilt der alte weiter
+      refreshToken: result.tokens.refreshToken ?? tokens.refreshToken,
+    });
+    const patch = { genesysTokensEnc, genesysExpiresAt: result.tokens.expiresAt };
+    if (await deps.store.updateSessionGenesys(session.sessionId, session.genesysVersion, patch)) {
+      return {
+        ok: true,
+        accessToken: result.tokens.accessToken,
+        session: { ...session, ...patch, genesysVersion: session.genesysVersion + 1 },
+      };
+    }
+    return useWinner(deps, session, now);
+  }
+  if (result.kind === "invalid_grant") return useWinner(deps, session, now);
+  return stillValid ? { ok: true, accessToken: tokens.accessToken, session } : { ok: false, reason: "upstream" };
+}
+
+/**
+ * Ein paralleler Aufruf hat schon erneuert: dessen Tokens verwenden. Hat der Gewinner noch nicht gespeichert, kurz
+ * warten und erneut lesen (`WINNER_WAIT_MS`); sonst löschte der Verlierer die Session, die der Gewinner gleich nutzt.
+ * Erst ohne neuen Stand nach allen Versuchen ist die Session tot.
+ */
+async function useWinner(deps: GenesysSessionDeps, session: SessionRecord, now: number): Promise<GenesysAccess> {
+  for (let attempt = 0; ; attempt++) {
+    const current = await deps.store.getSession(session.sessionId);
+    if (!current) return { ok: false, reason: "session_dead" };
+    if (current.genesysVersion !== session.genesysVersion) {
+      if (current.genesysExpiresAt <= now) return { ok: false, reason: "session_dead" };
+      const tokens = await deps.decryptTokens(current);
+      return { ok: true, accessToken: tokens.accessToken, session: current };
+    }
+    if (attempt >= WINNER_WAIT_MS.length) return { ok: false, reason: "session_dead" };
+    await deps.wait(WINNER_WAIT_MS[attempt]);
+  }
+}
+
+/**
+ * Widerruft ein verschlüsselt gespeichertes Genesys-Token (Session oder Anmeldeanfrage) nach Möglichkeit; Fehler
+ * werden nur geloggt.
+ */
+export async function revokeStoredGenesysTokens(stored: Pick<SessionRecord, "tenantId" | "sessionId" | "region" | "genesysTokensEnc">): Promise<void> {
+  try {
+    const tokens = await decryptGenesysTokens(stored.tenantId, stored.sessionId, stored.genesysTokensEnc);
+    const revoked = await revokeGenesysToken(stored.region, tokens.accessToken);
+    if (!revoked) console.warn("[mcp] Genesys token not revoked", { tenantId: stored.tenantId, sessionId: stored.sessionId });
+  } catch (err: any) {
+    console.warn("[mcp] Genesys token revocation failed", { tenantId: stored.tenantId, name: err?.name });
+  }
+}
+
+/** Widerruft das Genesys-Token einer gelöschten Session (nach Möglichkeit, Fehler werden nur geloggt). */
+export async function revokeSessionGenesys(session: SessionRecord | undefined): Promise<void> {
+  if (session) await revokeStoredGenesysTokens(session);
+}
+
+export type RateCheck = { ok: true } | { ok: false; retryAfterSeconds: number };
+
+/** Feste Fenster pro Minute und Session (vorläufiger Wert, M11 legt ihn fest). */
+export async function checkSessionRate(store: OAuthStore, session: SessionRecord, now: number): Promise<RateCheck> {
+  const minute = Math.floor(now / 60000);
+  const count = await store.incrementRate(session.tenantId, session.sessionId, String(minute), (minute + 2) * 60000);
+  if (count <= SESSION_RATE_LIMIT_PER_MINUTE) return { ok: true };
+  return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil(((minute + 1) * 60000 - now) / 1000)) };
+}
+
+/** Ergebnis von `McpCallContext.renewGenesysAccess`. */
+export type GenesysRenewal = "renewed" | "session_dead" | "upstream";
+
+/** Identität und Zugang eines geprüften MCP-Aufrufs, weitergereicht an die Tools (`tool_handlers.ts`). */
+export interface McpCallContext {
+  tenant: McpTenant;
+  session: SessionRecord;
+  userId: string;
+  userName: string;
+  genesysAccessToken: string;
+  /**
+   * Nach einem 401 von Genesys: Token einmal sofort erneuern (höchstens einmal pro Anfrage, weitere Aufrufe liefern
+   * dasselbe Ergebnis). `renewed` setzt `genesysAccessToken` und `session` neu; `session_dead` löscht die Session und
+   * setzt `sessionEnded`. Fehlt im Test.
+   */
+  renewGenesysAccess?(): Promise<GenesysRenewal>;
+  /** Die Genesys-Sitzung ist während des Aufrufs gestorben: Der Endpunkt antwortet mit 401 `invalid_token`. */
+  sessionEnded?: boolean;
+}
+
+export type McpAuthResult =
+  | { ok: true; context: McpCallContext }
+  | { ok: false; kind: "unauthorized"; error?: "invalid_token" }
+  | { ok: false; kind: "rate_limited"; retryAfterSeconds: number }
+  | { ok: false; kind: "upstream" };
+
+/** Schritte 4 bis 6 der Prüfkette für einen Aufruf mit Bearer-Token. */
+export async function authenticateMcpCall(
+  deps: GenesysSessionDeps,
+  tenant: McpTenant,
+  tokenTenant: TokenTenant,
+  bearer: string,
+  now: number
+): Promise<McpAuthResult> {
+  const check = await verifyAccessToken(deps.store, tokenTenant, bearer, now);
+  if (!check.ok) return check.reason === "missing" ? { ok: false, kind: "unauthorized" } : { ok: false, kind: "unauthorized", error: "invalid_token" };
+
+  // Vor dem Genesys-Zugang: Abgewiesene Aufrufe kosten so keinen KMS-Decrypt und keinen Genesys-Refresh
+  const rate = await checkSessionRate(deps.store, check.session, now);
+  if (!rate.ok) return { ok: false, kind: "rate_limited", retryAfterSeconds: rate.retryAfterSeconds };
+  const access = await ensureGenesysAccess(deps, tenant, check.session, now);
+  if (!access.ok) {
+    if (access.reason === "upstream") return { ok: false, kind: "upstream" };
+    // Genesys-Sitzung ist weg: die MCP-Session auch, der Client muss sich neu anmelden
+    await deps.store.deleteSession(check.session.sessionId);
+    return { ok: false, kind: "unauthorized", error: "invalid_token" };
+  }
+  const context: McpCallContext = {
+    tenant,
+    session: access.session,
+    userId: access.session.userId,
+    userName: access.session.userName,
+    genesysAccessToken: access.accessToken,
+  };
+  let renewal: Promise<GenesysRenewal> | undefined;
+  context.renewGenesysAccess = () => (renewal ??= renewRejectedGenesysAccess(deps, context, now));
+  return { ok: true, context };
+}
+
+/**
+ * Genesys hat das Token vor dem gespeicherten Ablauf ungültig gemacht (Abmeldung, Widerruf): sofort erneuern. Lehnt
+ * Genesys auch den Refresh ab, ist die Genesys-Sitzung tot; die MCP-Session wird gelöscht, damit der Client sich neu
+ * anmeldet, statt bis zum gespeicherten Ablauf vorübergehende Fehler zu sehen.
+ */
+async function renewRejectedGenesysAccess(deps: GenesysSessionDeps, context: McpCallContext, now: number): Promise<GenesysRenewal> {
+  const access = await ensureGenesysAccess(deps, context.tenant, context.session, now, { force: true });
+  if (access.ok) {
+    context.genesysAccessToken = access.accessToken;
+    context.session = access.session;
+    return "renewed";
+  }
+  if (access.reason === "upstream") return "upstream";
+  console.warn("[mcp] Genesys session ended", { tenantId: context.tenant.tenantId, userId: context.userId });
+  await deps.store.deleteSession(context.session.sessionId);
+  context.sessionEnded = true;
+  return "session_dead";
+}

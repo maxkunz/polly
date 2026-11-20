@@ -151,7 +151,8 @@ export const tlh: MessageSchema = {
 			successSummary: "Qapla'! pollu'pu'",
 			successDetail: "yu'ghItlh „{title}“ chu'moHlu'pu'.",
 			errorSummary: "pol Qagh",
-			errorFallback: "Data Table Daq yu'ghItlh pollu'DI' Qagh."
+			errorFallback: "Data Table Daq yu'ghItlh pollu'DI' Qagh.",
+			nameCollision: "pong \"{name}\" lo'lu'pu'. yu' chu' per yIchoH."
 		},
 		flowSize: {
 			warnTitle: "yu'ghItlh ghItlh veH Sum",
@@ -201,10 +202,12 @@ export const tlh: MessageSchema = {
 		conflict: {
 			header: "yu'ghItlh choHtaH latlh",
 			message: "{date} vo' „{user}“ yu'ghItlh vam choHtaH. DachoHneS'a' pagh DalaDneS'a' neH?",
+			messageMcp: "„{user}“ Hurgh QI' {date} vo' MCP vegh yu'ghItlh vam choHtaH. DachoHneS'a' pagh DalaDneS'a' neH? Hurgh QI' pol ghItlhlaHbe'.",
 			acceptLabel: "yIchoH, vaj",
 			rejectLabel: "laD neH"
 		},
-		readOnlyBanner: "laD neH: DaH yu'ghItlh vam choHtaH „{user}“. choHlu'laHbe'."
+		readOnlyBanner: "laD neH: DaH yu'ghItlh vam choHtaH „{user}“. choHlu'laHbe'.",
+		readOnlyBannerMcp: "laD neH: DaH MCP vegh „{user}“ (Hurgh QI' lo'wI') yu'ghItlh vam choHtaH. choHlu'laHbe'."
 	},
 
 	surveyQuestions: {
@@ -337,6 +340,7 @@ export const tlh: MessageSchema = {
 		ratingMinRange: "mI' mach {min} {max} je joj tu'lu'nIS.",
 		ratingMaxRange: "mI' tIn {min} {max} je joj tu'lu'nIS.",
 		ratingMinLessThanMax: "mI' mach mach law' mI' tIn mach puS 'e' poQlu'.",
+		ratingValueNotInteger: "mI' naQ neH chaw'lu'.",
 		choiceOptionsInvalid: "wIvmey lughbe'.",
 		choiceMinOptions: "wIv yu' {min} wIvmey rav ghajnIS.",
 		choiceMaxOptions: "wIv yu' {max} wIvmey law'qu' ghajlaH.",
@@ -484,6 +488,8 @@ export const tlh: MessageSchema = {
 			noProd: "Prod Sep tu'be'lu'. yIchu'qa'.",
 			throttled: "Genesys Qu' law'. tugh yInIDqa'.",
 			expiryInPast: "Qaw'meH jaj ret.",
+			baseUrlChanged: "URL wa' choHlu'pu'. ghoch chu' yI'ol 'ej yIchenmoHqa'.",
+			metaUnreadable: "__meta laDlaHbe'.",
 			generic: "rItlh mu'mey chenmoHmeH Qagh"
 		}
 	},
@@ -657,10 +663,78 @@ export const tlh: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "MCP Quch",
+		intro: "QI' lo'wI'pu' (Claude) vegh yu'ghItlhmey choH, ngeH, 'ej lI'. Genesys ghoSlu', Polly Dochmey ghot 'oH.",
+		loading: "Dotlh laD …",
+		status: {
+			active: "Qapla'",
+			inactive: "Qapla'be'",
+			serverOff: "Server Qapla'be'",
+			featureOff: "Quch Qapla'be'",
+			serverOffHint: "MCP Quch server Daq Qapla'be'. QI'qa'wI' chaw' neH.",
+			featureOffHint: "mcp Quch cha'be'. Data Table (__meta) Daq neH choH."
+		},
+		actions: {
+			enable: "MCP chu'",
+			disable: "MCP mej",
+			enableHint: "Genesys Daq OAuth lo'wI' chenmoH (Authorization Code). oauth:client:add/delete Dochmey Hutlh."
+		},
+		sessions: "Qapla' ghoSmeH: {count}",
+		url: {
+			label: "MCP URL",
+			copy: "paw",
+			copied: "MCP URL pawta'."
+		},
+		comments: {
+			label: "QI' Daq jIj Hol",
+			hint: "pagh tlhegh: QI' neH HaDtaH, jIj ra'be'. jIjmey ghot De' Dachep."
+		},
+		guide: {
+			title: "Claude jon",
+			step1: "Claude Desktop pagh claude.ai: Settings → Connectors → “Add custom connector”.",
+			step2: "“Polly” 'ej MCP URL yIchel. Client ID 'ej secret yIQeH.",
+			step3: "“Connect” yIwIv 'ej Genesys yIlI'.",
+			step4: "Polly Daq “Allow” yIwIv. Qapla'.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url}, /mcp, “Authenticate”.",
+			roles: "Dochmey Dachep: polly_write, polly_deploy, polly_reporting."
+		},
+		disable: {
+			header: "MCP mej?",
+			message: "QI' lo'wI'pu' wa'DIch mejlu' ({count}). Genesys OAuth lo'wI' Qaw'lu'. Qu' Data Table Daq Dellu'.",
+			accept: "mej",
+			reject: "mevQo'"
+		},
+		toast: {
+			enabled: "MCP chu'ta'.",
+			enableFailed: "MCP chu' Qagh",
+			disabled: "MCP mejta'.",
+			disableFailed: "MCP mej Qagh",
+			commentsSaved: "chel Dellu'.",
+			commentsFailed: "chel Del Qagh"
+		},
+		errors: {
+			missingToken: "'el'be'. ghun yIlI'.",
+			missingRole: "Hu'tegh – deploy DIch Hutlh.",
+			serverDisabled: "MCP Quch server Daq Qapla'be'.",
+			featureDisabled: "mcp Quch cha'be'.",
+			clientNotReadable: "OAuth lo'wI' laD Qagh. Genesys Daq Dochmey Hutlh.",
+			clientInvalid: "Genesys OAuth lo'wI' mIgh (Segh, URI pagh Dotlh). chu'qa'.",
+			clientRights: "Genesys OAuth lo'wI' Qotlh. oauth:client:add/delete yIlo'.",
+			metaUnreadable: "Data Table (__meta) laD Qagh.",
+			throttled: "Qu' law'. yInIDqa'.",
+			generic: "MCP Qagh"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Web QIn",
 			description: "Web QIn: rI'meH rarwI' 'ej Web HaSta mIw."
+		},
+		mcp: {
+			label: "MCP Quch",
+			description: "Hurgh QI' lo'wI' (Claude) vegh yu'ghItlhmey choH, ngeH, 'ej lI'. DuHbogh chenmoHlu'."
 		}
 	},
 	settings: {
@@ -670,7 +744,8 @@ export const tlh: MessageSchema = {
 			hint: "{placeholder} 'ej ?token=…. chIm = Polly QIn ra'ghom.",
 			save: "pol",
 			saved: "URL pol.",
-			saveFailed: "pol lonbe'"
+			saveFailed: "pol lonbe'",
+			metaUnreadable: "__meta laDlaHbe'."
 		},
 		features: {
 			title: "laH chu'lu'pu'bogh"

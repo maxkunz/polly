@@ -7,6 +7,7 @@ import {
 	countAllQuestions
 } from "@/domain/survey/surveyTypes";
 import { validateSurvey, type ValidationError } from "@/domain/survey/surveyValidator";
+import { defaultChoiceLabel } from "@/composables/useQuestionTypeOptions";
 import { SURVEY_MAX_QUESTIONS } from "@/constants/surveyConstants";
 import { useAppStore } from "@/stores/appStore";
 
@@ -90,7 +91,7 @@ export function useSurveyEditor(initialData?: Survey | null) {
 
 	function addQuestion(type: QuestionType = "yes_no"): SurveyQuestion | null {
 		if (!survey.value || !canAddQuestion.value) return null;
-		const newQuestion = createEmptyQuestion(type);
+		const newQuestion = createEmptyQuestion(type, defaultChoiceLabel);
 		if (!survey.value.questions) {
 			survey.value.questions = [];
 		}

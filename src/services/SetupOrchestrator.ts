@@ -37,6 +37,8 @@ type SetupMeta = {
   frontendRoles: Array<{ id: string; name: string }>;
   backendAuth: { clientId: string; tokenUrl: string };
   backendClient: { id: string; name: string };
+  /** Genesys-Client der MCP-Anmeldung, erst von `enableMcp` (Einstellungen) angelegt */
+  mcpClient?: { id: string; name: string };
   dataTable: { id: string; name: string };
   mappingDataTable: { id: string; name: string };
   dataActionIntegration: { id: string; name: string };
@@ -61,7 +63,7 @@ export function hasSetupResources(setup: any): boolean {
     || setup.backendAuth?.clientId
     || setup.original?.oauthUpdateAttempted
     || setup.original?.integrationUpdateAttempted
-    || ["backendGroup", "backendRole", "backendClient", "dataTable", "mappingDataTable",
+    || ["backendGroup", "backendRole", "backendClient", "mcpClient", "dataTable", "mappingDataTable",
       "dataActionIntegration", "dataActionCredential", "dataAction", "botFlow", "inboundFlow"]
       .some(key => setup[key]?.id || setup[key]?.uploadAttempted)
   );

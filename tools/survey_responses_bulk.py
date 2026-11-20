@@ -5,6 +5,8 @@ survey_responses API – universeller Massendaten-Generator
 Liest eine Umfrage-Definition (Draft-JSON, siehe documentation/survey_definition.md),
 spielt zufällige Sessions entlang des Fragenbaums durch und schickt die Antworten
 schrittweise an die deployte API, genau wie der Architect Flow es tun würde.
+Die Antworten folgen einer Stimmung pro Session und einem festen Profil pro Frage
+(Gauß-Verteilungen, unterschiedliche Ja-Anteile), siehe "Antwort-Generatoren".
 
 Verwendung:
   export GENESYS_TOKEN=<Bearer aus dem Genesys-Portal>
@@ -47,6 +49,7 @@ ACHTUNG: Schreibt echte Daten in die deployte API.
 
 import argparse
 import json
+import math
 import os
 import random
 import signal
@@ -59,6 +62,7 @@ import http.client
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 
 DEFAULT_API_URL = "https://main.d1a6p4nkkob4i7.amplifyapp.com/api"
@@ -105,32 +109,65 @@ def env_int(name, default):
 
 # ---------------------------------------------------------------- Antwort-Generatoren
 
-def rand_yes_no(_q):
-    return random.random() < 0.6
+# Damit die Auswertung nach echten Daten aussieht, hängen die Antworten an zwei Größen:
+# - Stimmung pro Session (0 = sehr unzufrieden, 1 = sehr zufrieden) aus zwei Gruppen
+#   (Mehrheit zufrieden, Minderheit unzufrieden): Antworten einer Session passen
+#   zueinander, NPS und Ratings werden zweigipflig.
+# - Profil pro Frage, fest aus der Frage-ID abgeleitet: Verschiebung (manche Fragen
+#   schneiden besser ab als andere), Streuung, Ja-Anteil, Schwerpunkt bei Auswahlfragen.
+#   Dieselbe Frage zeigt so auch über mehrere Läufe dasselbe Bild.
+
+def rand_mood():
+    if random.random() < 0.7:
+        return min(1.0, max(0.0, random.gauss(0.78, 0.12)))
+    return min(1.0, max(0.0, random.gauss(0.3, 0.15)))
 
 
-def rand_rating(q):
-    """Zufallswert min..max, leicht positiv verteilt (Modus im oberen Viertel)."""
+def question_profile(q):
+    rnd = random.Random(zlib.crc32((q.get("id") or q["name"]).encode("utf-8")))
+    return {
+        "bias": rnd.gauss(0, 0.12),
+        "spread": rnd.uniform(0.1, 0.22),
+        "yes": rnd.uniform(0.25, 0.85),
+        "center": rnd.random(),       # Schwerpunkt bei choice, relativ zur Optionsliste
+        "width": rnd.uniform(0.6, 1.6),  # Breite der Glocke bei choice in Optionen
+    }
+
+
+def rand_scale(q, mood, lo, hi):
+    """Gauß um Stimmung + Verschiebung der Frage, auf lo..hi in gleich breite Klassen
+    abgebildet (sonst wären die Randwerte beim Runden nur halb so breit)."""
+    p = question_profile(q)
+    x = random.gauss(mood + p["bias"], p["spread"])
+    return max(lo, min(hi, lo + math.floor(x * (hi - lo + 1))))
+
+
+def rand_yes_no(q, mood):
+    """Ja-Anteil pro Frage zwischen 25 % und 85 %, zufriedene Sessions sagen häufiger ja."""
+    p = question_profile(q)["yes"] + (mood - 0.6) * 0.5
+    return random.random() < min(0.97, max(0.03, p))
+
+
+def rand_rating(q, mood):
     opts = q.get("options") or {}
-    lo, hi = opts.get("min_value", 1), opts.get("max_value", 5)
-    return max(lo, min(hi, round(random.triangular(lo, hi, lo + (hi - lo) * 0.8))))
+    return rand_scale(q, mood, opts.get("min_value", 1), opts.get("max_value", 5))
 
 
-def rand_nps(_q):
-    """NPS 0-10: Promoter überwiegen, wenige Detraktoren."""
-    r = random.random()
-    if r < 0.2:
-        return random.randint(0, 6)
-    if r < 0.4:
-        return random.randint(7, 8)
-    return random.randint(9, 10)
+def rand_nps(q, mood):
+    return rand_scale(q, mood, 0, 10)
 
 
-def rand_choice(q):
-    """Liefert das ganze Options-Objekt (id + label): die id wird für die Pfadsuche
+def rand_choice(q, _mood):
+    """Glockenförmige Gewichte über die Optionen (Schwerpunkt und Breite je Frage).
+
+    Liefert das ganze Options-Objekt (id + label): die id wird für die Pfadsuche
     (Folgefrage-Bedingungen referenzieren Options-IDs) gebraucht, das label für die
     API, die wie der echte Flow nur Labels kennt (siehe survey_responses_api.md)."""
-    return random.choice(q["options"]["labels"])
+    labels = q["options"]["labels"]
+    p = question_profile(q)
+    center = p["center"] * (len(labels) - 1)
+    weights = [math.exp(-((i - center) / p["width"]) ** 2 / 2) + 0.03 for i in range(len(labels))]
+    return random.choices(labels, weights)[0]
 
 
 def make_answer_fn(comments):
@@ -139,14 +176,15 @@ def make_answer_fn(comments):
         "rating": rand_rating,
         "nps": rand_nps,
         "choice": rand_choice,
-        "comment": lambda _q: random.choice(comments),
+        "comment": lambda _q, _mood: random.choice(comments),
     }
 
-    def answer(q):
+    def answer(q, mood):
         try:
-            return generators[q["type"]](q)
+            gen = generators[q["type"]]
         except KeyError:
             raise SystemExit(f"Unbekannter Fragetyp '{q.get('type')}' in Frage '{q.get('name')}'")
+        return gen(q, mood)
 
     return answer
 
@@ -304,7 +342,8 @@ def post(conn, headers, payload, label, stats, stop, limiter):
 
 def build_requests(survey, conv, answer, args):
     path = []
-    walk(survey["questions"], answer, path)
+    mood = rand_mood()
+    walk(survey["questions"], lambda q: answer(q, mood), path)
 
     if random.random() * 100 < args.abort_pct and len(path) > 1:
         path = path[: random.randint(1, len(path) - 1)]
