@@ -7,12 +7,13 @@ import type { WebSurveySubmitStatus } from "../../../src/domain/survey/webSurvey
 import { loadFlowSurvey, type ProdSurveyResult } from "../shared/genesys_survey_check";
 import { loadInvitationKeys } from "../shared/invitation_keys";
 import { verifyInvitation, type InvitationClaims } from "../shared/invitation_token";
-import { updateSurveyAggregate } from "../shared/survey_results";
+import { isSurveyBeingDeleted, updateSurveyAggregate } from "../shared/survey_results";
 import { loadTenantCredentials, type TenantCredentials } from "../shared/tenant_auth";
 import { TtlCache } from "../shared/ttl_cache";
 import { buildStoredAnswers, surveyVersionOf, toWebSurvey } from "../shared/web_survey_format";
 import { pickTheme } from "../shared/web_themes";
 import { loadTenantThemesCached } from "../shared/web_themes_table";
+import { PROD_CACHE_TTL_MS, shouldReloadProd } from "./prod_cache";
 import { normalizeToken, parseSubmitRequest, readRequestBody } from "./request";
 
 /**
@@ -41,11 +42,13 @@ const SURVEY_AGGREGATES_TABLE_NAME = process.env.SURVEY_AGGREGATES_TABLE_NAME ??
 /** Aufbewahrung benutzter Einmal-Tokens (DynamoDB-TTL `ttl`). */
 const USED_TOKEN_RETENTION_SECONDS = 180 * 24 * 60 * 60;
 /**
- * Cache des Prod-Stands (bzw. Stage-Stands bei Webvorschau) für GET im Lambda-Container: Große Kampagnen
- * würden sonst bei jedem Seitenaufruf die Genesys-API des Mandanten belasten (Rate-Limit). Das Absenden
- * liest immer frisch und aktualisiert den Cache.
+ * Cache des Prod-Stands (bzw. Stage-Stands bei Webvorschau) im Lambda-Container: Große Kampagnen
+ * würden sonst bei jedem Seitenaufruf und jedem Absenden die Genesys-API des Mandanten belasten (Rate-Limit).
+ * Das Absenden liest nur frisch nach (und aktualisiert den Cache), wenn `surveyVersion` vom Cache abweicht
+ * und der Eintrag nicht gerade erst gelesen wurde (`shouldReloadProd`). Gemerkt werden nur gelesene Stände.
  */
-const prodCache = new TtlCache<ProdSurveyResult>({ ttlMs: 30 * 1000 });
+type ProdSurveyOk = Extract<ProdSurveyResult, { status: "ok" }>;
+const prodCache = new TtlCache<{ result: ProdSurveyOk; loadedAt: number }>({ ttlMs: PROD_CACHE_TTL_MS });
 
 /**
  * Cache der Mandanten-Credentials (Query auf die Tenants-Tabelle), damit nicht jeder Seitenaufruf DynamoDB abfragt.
@@ -142,19 +145,33 @@ function invitationErrorResponse(
 // Prod- bzw. Stage-Stand
 // ---------------------------------------------------------------------------
 
+function prodCacheKey(claims: InvitationClaims): string {
+  return `${claims.tenant_id}#${claims.survey_id}#${claims.stage ? "Stage" : "Prod"}`;
+}
+
+/** Geladener Stand; `cacheAgeMs` nur, wenn er aus dem Cache kam (sonst gerade frisch gelesen). */
+interface LoadedProd {
+  result: ProdSurveyResult;
+  cacheAgeMs?: number;
+}
+
+/** Wie `loadProd`, meldet aber zusätzlich, ob der Stand aus dem Cache kam und wie alt er ist. */
+async function loadProdWithAge(claims: InvitationClaims, credentials: TenantCredentials, fresh: boolean): Promise<LoadedProd> {
+  const cacheKey = prodCacheKey(claims);
+  const cached = fresh ? undefined : prodCache.get(cacheKey);
+  if (cached) return { result: cached.result, cacheAgeMs: Math.max(0, Date.now() - cached.loadedAt) };
+
+  const result = await loadFlowSurvey(claims.tenant_id, claims.survey_id, credentials, claims.stage ? "Stage" : "Prod");
+  // Nur gelesene Stände merken. Gibt es die Umfrage nicht mehr, wird ein alter Eintrag verworfen; bei einem
+  // Fehler (Genesys nicht erreichbar, 429) bleibt er bis zu seinem Ablauf, damit GETs weiter aus dem Cache kommen.
+  if (result.status === "ok") prodCache.set(cacheKey, { result, loadedAt: Date.now() });
+  else if (result.status === "unavailable") prodCache.delete(cacheKey);
+  return { result };
+}
+
 /** Prod-Stand, bei Webvorschau-Links (`stage`) der Stage-Stand. */
 async function loadProd(claims: InvitationClaims, credentials: TenantCredentials, fresh: boolean): Promise<ProdSurveyResult> {
-  const column = claims.stage ? "Stage" : "Prod";
-  const cacheKey = `${claims.tenant_id}#${claims.survey_id}#${column}`;
-  return prodCache.getOrLoad(
-    cacheKey,
-    async () => {
-      // Nur gelesene Stände merken; sonst wird ein alter Eintrag verworfen
-      const result = await loadFlowSurvey(claims.tenant_id, claims.survey_id, credentials, column);
-      return { value: result, ttlMs: result.status === "ok" ? undefined : 0 };
-    },
-    fresh
-  );
+  return (await loadProdWithAge(claims, credentials, fresh)).result;
 }
 
 function prodErrorResponse(
@@ -286,9 +303,27 @@ async function submitWebSurvey(event: AnyApiGwEvent): Promise<AnyResult> {
   if (check.status !== "ok") return invitationErrorResponse(check, true);
   const { claims } = check;
 
-  const prod = await loadProd(claims, check.credentials, true);
-  if (prod.status !== "ok") return prodErrorResponse(prod, claims, true);
-  const survey = prod.survey;
+  // Webvorschau liest frisch (wie beim GET), echte Links aus dem Cache
+  let loaded = await loadProdWithAge(claims, check.credentials, claims.stage === true);
+  if (loaded.result.status !== "ok") return prodErrorResponse(loaded.result, claims, true);
+  // Cache weicht vom Stand der Seite ab (neuer Deploy, Seite aus anderem Container): einmal frisch nachladen
+  if (
+    shouldReloadProd({
+      cacheAgeMs: loaded.cacheAgeMs,
+      cachedVersion: surveyVersionOf(loaded.result.survey),
+      requestedVersion: surveyVersion,
+    })
+  ) {
+    loaded = await loadProdWithAge(claims, check.credentials, true);
+    if (loaded.result.status !== "ok") return prodErrorResponse(loaded.result, claims, true);
+  }
+  // Stand aus dem Cache: Die Lösch-Sperre hat nur das frische Lesen geprüft (`loadFlowSurvey`). Ohne sie
+  // blieben Antworten nach einem Lösch-Job verwaist, siehe `isSurveyBeingDeleted`.
+  if (loaded.cacheAgeMs !== undefined && (await isSurveyBeingDeleted(claims.tenant_id, claims.survey_id))) {
+    prodCache.delete(prodCacheKey(claims));
+    return prodErrorResponse({ status: "unavailable", reason: "Survey is being deleted" }, claims, true);
+  }
+  const survey = loaded.result.survey;
   const currentVersion = surveyVersionOf(survey);
 
   // Prod hat sich seit dem Laden geändert: nichts speichern, Token bleibt unverbraucht.

@@ -11,6 +11,8 @@ import { deleteFlow, flowFetch } from "@/services/genesys/botFlow";
 import { deleteGroup, deleteRole } from "@/services/genesys/groups";
 import { inactiveOAuth, deleteBackend, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import { getErrorStatus, getErrorMessage, sleep } from "@/services/genesys/retry";
+import { disableMcp } from "@/services/SetupMcp";
+import { loadSetupMcpClient } from "@/services/metaSettingsService";
 
 export async function runFullDelete(
   setup: any,
@@ -119,6 +121,25 @@ export async function runFullDelete(
     await removeResource(setup.dataAction, "data action", deleteDataAction);
     await removeResource(setup.dataActionIntegration, "data action integration", deleteIntegration);
     await removeResource(setup.dataActionCredential, "integration credentials", id => apiIntegration.deleteIntegrationsCredential(id));
+
+    // `setup` stammt vom Login: Hat eine andere Sitzung MCP später aktiviert, steht der Client nur frisch in `__meta`.
+    // Ohne diesen Abgleich bliebe der Genesys-Client samt Secret verwaist zurück.
+    if (!options.rollback && !setup.mcpClient?.id && setup.dataTable?.id) {
+      // Nur Beiwerk: Ist `__meta` nicht lesbar, läuft der Uninstall weiter (das Backend räumt MCP serverseitig ab)
+      try {
+        const mcpClient = await loadSetupMcpClient(setup.dataTable.id);
+        if (mcpClient) setup.mcpClient = mcpClient;
+      } catch (err) {
+        if (getErrorStatus(err) !== 404) {
+          console.warn("Could not read MCP client from __meta, continuing uninstall:", getErrorMessage(err));
+          onProgress("MCP client could not be read from __meta. Continuing...");
+        }
+      }
+    }
+    // MCP vor dem Backend-Cleanup abschalten: danach ist der Mandant DELETED und /mcp-settings nicht mehr erreichbar
+    if (setup.mcpClient?.id) {
+      await disableMcp({ setup, onProgress, ignoreBackendErrors: true });
+    }
 
     if (setup.backendAuth?.clientId) {
       onProgress(`Marking backend tenant ${setup.backendAuth.clientId} as deleted...`);

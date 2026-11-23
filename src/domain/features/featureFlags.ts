@@ -15,7 +15,9 @@ export interface FeatureFlagDefinition {
 
 export const FEATURE_FLAGS = [
 	// Web-Umfragen: Einladungslinks, Web-Designs, Web-Felder im Editor
-	{ key: "web_survey", defaultOnSetup: true }
+	{ key: "web_survey", defaultOnSetup: true },
+	// MCP-Schnittstelle für KI-Clients; kann MCP nur abschalten, einschalten geht über die Einstellungen
+	{ key: "mcp", defaultOnSetup: false }
 ] as const satisfies readonly FeatureFlagDefinition[];
 
 export type FeatureKey = (typeof FEATURE_FLAGS)[number]["key"];

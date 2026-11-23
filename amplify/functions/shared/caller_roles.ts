@@ -1,6 +1,8 @@
+import { POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING, POLLY_ROLE_WRITE } from "../../../src/constants/permissionConstants";
 import { hasPollyRole } from "../../../src/domain/permissions/roleCheck";
-import { getSurveyTableAccess, loadProjectTag } from "./genesys_survey_check";
+import { getSurveyTableAccess } from "./genesys_survey_check";
 import { fetchWithTimeout } from "./http";
+import { loadProjectTag } from "./installation_meta";
 import type { TenantCredentials } from "./tenant_auth";
 
 /**
@@ -8,6 +10,17 @@ import type { TenantCredentials } from "./tenant_auth";
  * Aufrufers mit seinem eigenen Token, Projekt-Tag der Installation aus `__meta`, Namenslogik wie im
  * Frontend (`hasPollyRole`, `src/domain/permissions/roleCheck.ts`).
  */
+
+/** Alle Polly-Rollen (ohne Projekt-Präfix). */
+export const POLLY_ROLES = [POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING] as const;
+
+/**
+ * Polly-Rollen des Aufrufers (Namen ohne Projekt-Präfix), gleiche Namenslogik wie im Frontend. Gemeinsam für die
+ * MCP-Anmeldung und die Tool-Prüfung, damit beide dieselben Personen zulassen.
+ */
+export function pollyRolesOf(roleNames: readonly string[], projectTag: string | undefined): string[] {
+  return POLLY_ROLES.filter((role) => hasPollyRole(roleNames, role, projectTag));
+}
 
 export type CallerRoles =
   | { status: "ok"; roles: string[]; userId?: string; userName?: string }
@@ -41,10 +54,10 @@ export async function loadCallerRoles(region: string, token: string): Promise<Ca
 
 export type ProjectTagResult = { ok: true; projectTag: string | undefined } | { ok: false; httpStatus?: number; error: string };
 
-/** Projekt-Tag der Installation, damit die präfixierte Rolle wie im Frontend erkannt wird. */
-export async function loadInstallationProjectTag(credentials: TenantCredentials): Promise<ProjectTagResult> {
+/** Projekt-Tag der Installation (60 s gemerkt), damit die präfixierte Rolle wie im Frontend erkannt wird. */
+export async function loadInstallationProjectTag(tenantId: string, credentials: TenantCredentials): Promise<ProjectTagResult> {
   try {
-    return { ok: true, projectTag: await loadProjectTag(await getSurveyTableAccess(credentials)) };
+    return { ok: true, projectTag: await loadProjectTag(tenantId, await getSurveyTableAccess(credentials)) };
   } catch (err: any) {
     return { ok: false, httpStatus: err?.status, error: String(err?.message ?? err) };
   }
@@ -69,7 +82,7 @@ export async function requireCallerRole(params: {
   const { logPrefix, tenantId, region, token, credentials, role } = params;
   const [caller, projectTag] = await Promise.all([
     loadCallerRoles(region, token),
-    loadInstallationProjectTag(credentials),
+    loadInstallationProjectTag(tenantId, credentials),
   ]);
   if (caller.status === "unauthorized") {
     return { ok: false, httpStatus: 401, code: "unauthorized", message: "Genesys token invalid" };

@@ -150,7 +150,8 @@ export const fr: MessageSchema = {
 			successSummary: "Enregistrement réussi",
 			successDetail: "L'enquête « {title} » a été mise à jour.",
 			errorSummary: "Erreur d'enregistrement",
-			errorFallback: "Erreur lors de l'enregistrement de l'enquête dans la Data Table."
+			errorFallback: "Erreur lors de l'enregistrement de l'enquête dans la Data Table.",
+			nameCollision: "Le nom technique « {name} » est déjà utilisé dans cette enquête. Veuillez modifier le titre de la nouvelle question."
 		},
 		flowSize: {
 			warnTitle: "Le volume de texte de l'enquête approche de la limite",
@@ -200,10 +201,12 @@ export const fr: MessageSchema = {
 		conflict: {
 			header: "Enquête déjà en cours de modification",
 			message: "Cette enquête est en cours de modification par « {user} » depuis {date}. Voulez-vous la modifier quand même ou l'ouvrir en lecture seule ?",
+			messageMcp: "L'IA de « {user} » modifie cette enquête via MCP depuis {date}. Voulez-vous la modifier quand même ou l'ouvrir en lecture seule ? L'IA ne pourra plus enregistrer ensuite.",
 			acceptLabel: "Modifier quand même",
 			rejectLabel: "Lecture seule"
 		},
-		readOnlyBanner: "Lecture seule : cette enquête est en cours de modification par « {user} ». Les modifications sont désactivées."
+		readOnlyBanner: "Lecture seule : cette enquête est en cours de modification par « {user} ». Les modifications sont désactivées.",
+		readOnlyBannerMcp: "Lecture seule : cette enquête est en cours de modification via MCP par « {user} » (client IA). Les modifications sont désactivées."
 	},
 
 	surveyQuestions: {
@@ -336,6 +339,7 @@ export const fr: MessageSchema = {
 		ratingMinRange: "La valeur minimale doit être comprise entre {min} et {max}.",
 		ratingMaxRange: "La valeur maximale doit être comprise entre {min} et {max}.",
 		ratingMinLessThanMax: "La valeur minimale doit être inférieure à la valeur maximale.",
+		ratingValueNotInteger: "Seuls les nombres entiers sont autorisés.",
 		choiceOptionsInvalid: "Les options de réponse ne sont pas valides.",
 		choiceMinOptions: "Une question à choix nécessite au moins {min} options.",
 		choiceMaxOptions: "Une question à choix peut comporter au maximum {max} options.",
@@ -483,6 +487,8 @@ export const fr: MessageSchema = {
 			noProd: "L'enquête n'a pas (plus) de version Prod. Veuillez recharger la vue.",
 			throttled: "Genesys est actuellement surchargé. Veuillez réessayer dans un instant.",
 			expiryInPast: "La date d'expiration est dans le passé.",
+			baseUrlChanged: "L'URL de base par défaut a été modifiée entre-temps. Veuillez vérifier la nouvelle cible des liens et générer à nouveau.",
+			metaUnreadable: "Les paramètres de la data table (ligne __meta) n'ont pas pu être lus.",
 			generic: "Erreur lors de la création des liens d'invitation"
 		}
 	},
@@ -656,10 +662,78 @@ export const fr: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "Interface MCP",
+		intro: "Des clients IA (p. ex. Claude) modifient, déploient et analysent les enquêtes au nom d'une personne connectée. La connexion passe par Genesys, les rôles Polly de la personne s'appliquent.",
+		loading: "Chargement de l'état …",
+		status: {
+			active: "Actif",
+			inactive: "Désactivé",
+			serverOff: "Serveur éteint",
+			featureOff: "Fonction éteinte",
+			serverOffHint: "L'interface MCP est désactivée sur le serveur. Elle ne peut être activée qu'après autorisation de l'exploitation.",
+			featureOffHint: "La fonction mcp n'est pas activée pour cette installation. Elle ne se modifie que directement dans la Data Table (__meta)."
+		},
+		actions: {
+			enable: "Activer MCP",
+			disable: "Désactiver MCP",
+			enableHint: "Crée un client OAuth (Authorization Code) dans Genesys. Votre compte doit pouvoir créer et supprimer des clients OAuth (oauth:client:add/delete)."
+		},
+		sessions: "Sessions actives : {count}",
+		url: {
+			label: "URL MCP",
+			copy: "Copier",
+			copied: "URL MCP copiée."
+		},
+		comments: {
+			label: "Transmettre les commentaires libres à l'IA",
+			hint: "Sans coche, l'IA voit seulement qu'un commentaire existe, pas son texte. Les commentaires peuvent contenir des données personnelles."
+		},
+		guide: {
+			title: "Connecter Claude",
+			step1: "Claude Desktop ou claude.ai : Paramètres → Connecteurs → « Ajouter un connecteur personnalisé ».",
+			step2: "Saisir le nom « Polly » et l'URL MCP. Laisser l'ID client et le secret vides sous « Avancé ».",
+			step3: "Choisir « Connecter » et se connecter à Genesys.",
+			step4: "Choisir « Autoriser » sur la page Polly. Le connecteur peut ensuite être activé et désactivé dans le chat.",
+			claudeCode: "Claude Code : claude mcp add --transport http polly {url}, puis /mcp et « Authenticate ».",
+			roles: "Vos rôles déterminent ce que l'IA peut faire : polly_write (modifier), polly_deploy (déployer, restaurer), polly_reporting (résultats)."
+		},
+		disable: {
+			header: "Désactiver MCP ?",
+			message: "Tous les clients IA connectés ({count} sessions actives) sont déconnectés immédiatement et le client OAuth dans Genesys est supprimé. Un travail en cours reste dans la Data Table.",
+			accept: "Désactiver",
+			reject: "Annuler"
+		},
+		toast: {
+			enabled: "MCP activé.",
+			enableFailed: "MCP n'a pas pu être activé",
+			disabled: "MCP désactivé.",
+			disableFailed: "MCP n'a pas pu être désactivé",
+			commentsSaved: "Paramètre enregistré.",
+			commentsFailed: "Le paramètre n'a pas pu être enregistré"
+		},
+		errors: {
+			missingToken: "Non connecté. Veuillez recharger l'application.",
+			missingRole: "Pas d'autorisation – droits de déploiement manquants.",
+			serverDisabled: "L'interface MCP est désactivée sur le serveur.",
+			featureDisabled: "La fonction mcp n'est pas activée pour cette installation.",
+			clientNotReadable: "Le client OAuth créé n'est pas lisible par votre compte. Les droits sur les clients OAuth manquent dans Genesys.",
+			clientInvalid: "Le client OAuth dans Genesys ne convient pas (type, URI de redirection ou état). Veuillez réactiver.",
+			clientRights: "Genesys refuse l'accès aux clients OAuth. Pour les créer et les supprimer, votre compte doit avoir oauth:client:add/delete.",
+			metaUnreadable: "Les paramètres de la Data Table (ligne __meta) n'ont pas pu être lus.",
+			throttled: "Le service est occupé. Veuillez réessayer dans un instant.",
+			generic: "Erreur MCP"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Enquêtes web",
 			description: "Enquêtes via lien d'invitation dans le navigateur, y compris les designs web et les paramètres web dans l'éditeur."
+		},
+		mcp: {
+			label: "Interface MCP",
+			description: "Modifier, déployer et évaluer des enquêtes avec un client IA (p. ex. Claude). À activer dans les paramètres."
 		}
 	},
 	settings: {
@@ -669,7 +743,8 @@ export const fr: MessageSchema = {
 			hint: "S'applique à tous les sondages sans URL de base propre. URL https absolue ; {placeholder} indique où placer le jeton dans le lien, sinon ?token=… est ajouté. Vide = les liens pointent vers la page de sondage Polly.",
 			save: "Enregistrer",
 			saved: "URL de base par défaut enregistrée.",
-			saveFailed: "Échec de l'enregistrement"
+			saveFailed: "Échec de l'enregistrement",
+			metaUnreadable: "Les paramètres de la data table (ligne __meta) n'ont pas pu être lus."
 		},
 		features: {
 			title: "Fonctionnalités activées"

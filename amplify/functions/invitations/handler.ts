@@ -192,7 +192,8 @@ async function createExtInvitations(event: AnyApiGwEvent): Promise<AnyResult> {
   const credentials = await loadTenantCredentials(tenantId, auth.tenant);
   if (!credentials) return extError(502, "genesys_error", "No Genesys backend credentials for tenant");
 
-  const prod = await loadProdSurvey(tenantId, surveyId, credentials, { withBaseUrl: true });
+  // Standard-Basis-URL frisch: signierte Links lassen sich nachträglich nicht mehr umlenken
+  const prod = await loadProdSurvey(tenantId, surveyId, credentials, { withBaseUrl: true, freshBaseUrl: true });
   if (prod.status === "unavailable") {
     return extError(409, "no_prod", "Survey has no Prod version, does not exist or is being deleted");
   }

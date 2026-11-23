@@ -16,7 +16,7 @@ fi
 # shellcheck source=/dev/null
 . "$env_file"
 
-for name in GENESYS_TOKEN SURVEY_ID API_URL; do
+for name in GENESYS_TOKEN SURVEY_ID API_URL DATATABLE_ID; do
 	if [ -z "${!name}" ]; then
 		echo "Fehler: $name ist nicht gesetzt (in $env_file eintragen)." >&2
 		exit 1

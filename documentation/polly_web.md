@@ -6,6 +6,86 @@ Zielniveau der Umfrageseite: **WCAG 2.2 AA**.
 
 In der App ist der Web-Kanal nur sichtbar, wenn das Feature Flag `web_survey` aktiv ist (siehe [feature_flags.md](feature_flags.md)).
 
+## Architektur im Überblick
+
+```mermaid
+flowchart LR
+  subgraph Betreiber["Betreiber (Genesys-App, Rollen im Frontend)"]
+    Editor["Umfrage-Editor<br/>Draft → Stage → Prod<br/>(polly_write / polly_deploy)"]
+    Invite["Einladungslinks erzeugen<br/>(polly_deploy)"]
+    Themes["Web-Designs pflegen<br/>(Schreiben: polly_deploy)"]
+  end
+
+  subgraph Genesys["Genesys Cloud des Mandanten"]
+    DT[("Data Table<br/>survey_id: Draft / Stage / Prod / Backup<br/>__meta: Standard-Basis-URL")]
+    GAuth["OAuth Client Credentials<br/>(nur Lesen der Data Table)"]
+  end
+
+  subgraph AWS["AWS (Amplify Gen 2, HttpApi mit Drosselung pro Route)"]
+    LInv["Lambda invitations<br/>POST /invitations<br/>signiert JWT (HS256)"]
+    Secret[["Secrets Manager<br/>JWT-Schlüssel pro Umgebung"]]
+    LThemes["Lambda web_themes"]
+    LWeb["Lambda web_survey<br/>GET /web-survey<br/>POST /web-survey/submit<br/>(öffentlich, Cache Prod 30 s)"]
+    TThemes[("WebSurveyThemesTable")]
+    TInv[("InvitationTokens<br/>nur benutzte Einmal-Tokens, TTL 180 Tage")]
+    TRes[("Antworten + Aggregate<br/>channel: web, tokenId")]
+  end
+
+  subgraph Web["Öffentlich (Amplify Hosting)"]
+    Page["Umfrageseite survey.html<br/>/s/jwt oder ?token=jwt<br/>Vue, ohne Genesys-SDK, CSP"]
+  end
+
+  Besucher(["Teilnehmer<br/>kein Login, nur gültiger JWT"])
+  Host["Seite des Betreibers<br/>(optional, iframe)"]
+  Export["Reporting / CSV-Export<br/>(polly_reporting)"]
+
+  Editor -- "Deploy nach Prod" --> DT
+  Invite --> LInv
+  LInv -. "prüft Rolle polly_deploy<br/>und Prod-Stand" .-> DT
+  LInv -. "liest Schlüssel" .-> Secret
+  LInv -- "Links (CSV)" --> Invite
+  Themes --> LThemes --> TThemes
+
+  Invite -. "Link per Mail/CRM" .-> Besucher
+  Besucher --> Host -- "iframe src" --> Page
+  Besucher --> Page
+  Page -- "GET: Umfrage + Design" --> LWeb
+  Page -- "POST: Antworten" --> LWeb
+  LWeb -- "liest Prod" --> GAuth --> DT
+  LWeb -- "liest Designs" --> TThemes
+  LWeb -- "Transaktion: Token + Antwort" --> TInv
+  LWeb -- "Transaktion" --> TRes
+  LWeb -. "prüft Signatur, exp, kid" .-> Secret
+  TRes --> Export
+```
+
+**Was die Webseite erzeugt:** Aus dem Prod-Flow-JSON rendert `survey.html` ein einzelnes Formular (Folgefragen erscheinen unter ihrer Elternfrage). Beim Absenden entsteht genau ein Datensatz mit `status: "completed"`, `channel: "web"` und `tokenId` im Format der Architect-Sitzungen, dazu aktualisierte Aggregate. Bei Einmal-Links kommt ein Eintrag in `InvitationTokens` hinzu (gleiche Transaktion).
+
+**Kapazität:**
+
+| Grenze | Wert | Wirkung |
+| :--- | :--- | :--- |
+| `GET /web-survey` | 200/s, Burst 500 | Drosselung für alle Mandanten zusammen, nicht pro IP; dann `429` |
+| `POST /web-survey/submit` | 100/s, Burst 300 | wie oben |
+| `reservedConcurrentExecutions` | optional über `WEB_SURVEY_RESERVED_CONCURRENCY` | schützt die Data Action des Telefon-Flows vor einer Flut auf der Webseite; Default aus |
+| Prod-Cache | 30 s pro Lambda-Container | entlastet das Genesys-Rate-Limit des Mandanten bei Kampagnen, auch beim Absenden; frisch gelesen wird dort nur bei abweichender Version und einem Cache-Eintrag, der älter als 5 s ist |
+| Body beim Absenden | 64 KB, Kommentar 2000 Zeichen | sonst `413` bzw. `400` |
+| Einladungen | 1 bis 5000 pro Erzeugung | Tokens werden nicht gespeichert, nur benutzte Einmal-Tokens |
+| Designs | höchstens 50 pro Mandant | `409 limit_reached` |
+
+Die DynamoDB-Tabellen laufen mit `PAY_PER_REQUEST`; der Engpass ist damit die Drosselung der API und das Genesys-Rate-Limit beim Lesen von Prod, nicht der Speicher.
+
+**Berechtigungen zum Schreiben von Ergebnissen:**
+
+| Wer | Was | Berechtigung |
+| :--- | :--- | :--- |
+| Teilnehmer | Antworten absenden | keine Anmeldung; ein gültiger, signierter und nicht abgelaufener JWT (bei Einmal-Link zusätzlich noch nicht benutzt) |
+| Lambda `web_survey` | Antworten, Aggregate und `InvitationTokens` schreiben | IAM-Schreibrechte auf diese Tabellen, Lesezugriff auf den JWT-Schlüssel; Prod aus Genesys nur lesend über die Client Credentials des Mandanten (Mandant muss `APPROVED` sein) |
+| Betreiber | Einladungslinks erzeugen, Webvorschau | Rolle `polly_deploy`, serverseitig geprüft; Cognito-M2M-Tokens der Data Action sind ausgeschlossen |
+| Betreiber | Designs ändern | Rolle `polly_deploy`, serverseitig geprüft; Lesen darf jeder App-Nutzer |
+| Betreiber | Ergebnisse exportieren | Rolle `polly_reporting` (nur Lesen) |
+| Webvorschau (Stage-Token) | nichts | wird serverseitig nicht gespeichert |
+
 ## Entscheidungen im Überblick
 
 1. **Signatur im Backend:** `POST /api/invitations` signiert die Einladungen mit HS256. Der Schlüssel liegt in AWS Secrets Manager, der JWT-Header enthält `kid` (Rotation).
@@ -22,7 +102,7 @@ In der App ist der Web-Kanal nur sichtbar, wenn das Feature Flag `web_survey` ak
 
 * **Labels bei rating und nps:** Pro Frage gibt es ein optionales Label für den minimalen und den maximalen Wert (`min_label`, `max_label` in `options`, höchstens 100 Zeichen). Sie werden nicht vorgelesen und sind nur im Web (und in der Skalenvorschau des Editors) sichtbar.
 * **Basis-URL der Umfrage** (`base_url`): Die Umfrage wird oft in iframes eingebunden, die personalisierten Links müssen auf diese URL zeigen. Optional; wenn gesetzt eine absolute `https://`-URL mit höchstens einem Platzhalter `{token}` und höchstens 200 Zeichen (`BASE_URL_MAX_CHARS`, hält die Antwort der Kunden-API bei 5000 Links unter dem Lambda-Limit). Die Kunden-API prüft den Wert serverseitig mit derselben Funktion (`baseUrlError`) und nimmt bei einem ungültigen Wert den Fallback.
-* **Standard-Basis-URL des Mandanten**: Unter Einstellungen pflegbar (Karte „Web-Umfragen: Standard-Basis-URL“, ändern mit `polly_deploy`, nur mit Feature Flag `web_survey`), gespeichert in der Zeile `__meta` im Feld `Draft` unter `web.defaultBaseUrl` (gleiche Regeln wie `base_url`). Sie gilt für alle Umfragen ohne eigene `base_url`; Reihenfolge: `base_url` der Umfrage, Standard des Mandanten, Polly-Umfrageseite. Die Lambdas lesen sie bei der Kunden-API aus `__meta` (`loadDefaultBaseUrl`, 60 s gecacht, nur wenn die Umfrage keine eigene `base_url` hat; ungültig = Polly-Umfrageseite; nicht lesbar = Fehler 429/502 wie beim Lesen der Umfrage, damit keine Links auf die falsche Seite entstehen). Die App ignoriert einen ungültigen Standard ebenso und liest ihn vor dem Erzeugen der Einladungslinks frisch aus `__meta`.
+* **Standard-Basis-URL des Mandanten**: Unter Einstellungen pflegbar (Karte „Web-Umfragen: Standard-Basis-URL“, ändern mit `polly_deploy`, nur mit Feature Flag `web_survey`), gespeichert in der Zeile `__meta` im Feld `Draft` unter `web.defaultBaseUrl` (gleiche Regeln wie `base_url`). Sie gilt für alle Umfragen ohne eigene `base_url`; Reihenfolge: `base_url` der Umfrage, Standard des Mandanten, Polly-Umfrageseite. Die Lambdas lesen sie bei der Kunden-API aus `__meta` (`loadDefaultBaseUrl`, nur wenn die Umfrage keine gültige eigene `base_url` hat; ungültig = Polly-Umfrageseite; nicht lesbar = Fehler 429/502 wie beim Lesen der Umfrage, damit keine Links auf die falsche Seite entstehen). `POST /ext/v1/invitations` liest sie frisch (`freshBaseUrl`), weil signierte Links nicht mehr umzulenken sind; die Umfragedetails nutzen 60 s Cache. Die App ignoriert ungültige Werte ebenso (eigene `base_url` und Standard, `usableBaseUrl`) und liest den Standard vor dem Erzeugen der Einladungslinks frisch aus `__meta`, wenn die Umfrage keine eigene hat; hat er sich gegenüber der Anzeige geändert, bricht sie mit Hinweis ab, damit die CSV nicht auf ein anderes Ziel zeigt als angezeigt.
 * **Sprache der Umfrage** (`language`): siehe oben. Neue Umfragen starten mit `de`.
 * **Design der Umfrage** (`web_theme_id`, optional): Auswahl „Standard des Mandanten“ (Feld fehlt) oder eines der Designs aus `GET /web-themes`. Ein inzwischen gelöschtes Design bleibt mit Hinweis sichtbar; die Seite zeigt dann das Standard-Design.
 
@@ -154,13 +234,13 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
   * Zusätzlich optional `"theme": { … }` (bereinigte Tokens, siehe „Designs“): bei `ok` und `used` das Design der Umfrage (bei `used` aus dem gecachten Prod-Stand; ist er nicht ladbar, das Standard-Design), bei `unavailable` das Standard-Design des Mandanten. So erscheinen auch diese Meldungen im iframe im CI. `invalid`/`expired` haben kein Design. Fehlt ein passendes Design, fehlt das Feld.
 * Weitere Antworten: `429 { "status": "throttled" }` (Drosselung der API oder von Genesys), `502 { "status": "error" }` (Genesys nicht erreichbar).
 * **Webvorschau** (`stage` im Token): Statt Prod wird die Spalte `Stage` gelesen, die Antwort `ok` enthält zusätzlich `"preview": true`; `unavailable` bedeutet dann „kein Stage-Stand“. Das Design kommt aus dem Stage-Stand. Die Lambda liest Stage-Stand und Designs bei jedem GET ohne Cache (bei echten Links gilt der Cache von 30 s), damit ein neuer Stand sofort sichtbar ist.
-* Der Prod-Stand wird pro Lambda-Container **30 Sekunden** zwischengespeichert (Stage getrennt davon ebenso), damit große Kampagnen das Genesys-Rate-Limit des Mandanten nicht ausschöpfen. Ein neuer Prod-Deploy ist deshalb beim Laden der Seite spätestens nach 30 s sichtbar; beim Absenden wird immer frisch gelesen.
+* Der Prod-Stand wird pro Lambda-Container **30 Sekunden** zwischengespeichert (Stage getrennt davon ebenso), damit große Kampagnen das Genesys-Rate-Limit des Mandanten nicht ausschöpfen. Ein neuer Prod-Deploy ist deshalb beim Laden der Seite spätestens nach 30 s sichtbar. Auch das Absenden nutzt den Cache und liest nur frisch nach, wenn `surveyVersion` vom zwischengespeicherten Stand abweicht und dieser älter als 5 s ist (`shouldReloadProd` in `web_survey/prod_cache.ts`; so lesen nach einem Deploy nicht alle offenen Seiten mit alter Version Genesys erneut). Bis zu 30 s nach einem Deploy, Rollback oder Zurückziehen des Prod-Stands können deshalb noch Antworten zur bisherigen Fassung gespeichert werden (geprüft gegen genau diese Fassung). Für das Löschen gilt das nicht: Der Lösch-Job wird bei jedem Absenden geprüft (DynamoDB, ohne Cache), sonst blieben Antworten verwaist. Scheitert das Nachladen an Genesys (`429`/`502`), bleibt der zwischengespeicherte Stand bis zu seinem Ablauf erhalten.
 
 **`POST /api/web-survey/submit`** (öffentlich)
 
 * Request: `{ "token": "<jwt>", "surveyVersion": <int>, "answers": { "<questionId>": <wert> }, "submissionId": "<uuid>" }`
 * `submissionId` (optional, UUID): erzeugt die Seite einmal pro Seitenaufruf und schickt sie bei jeder Wiederholung mit. Sie wird zur `responseId`. Fehlt sie, vergibt die Lambda eine zufällige UUID. **Idempotenz:** Ist unter dieser ID schon eine Antwort mit derselben Einladung gespeichert (bei Einmal-Token: Der verbrauchte Eintrag in `InvitationTokens` verweist auf sie), antwortet die Lambda mit `200 ok`, ohne erneut zu speichern. Eine Absendung, deren Antwort verloren ging (Zeitüberschreitung, Netzabbruch), erzeugt beim erneuten Versuch also weder `409 used` noch eine doppelte Antwort. Geänderte Antworten einer solchen Wiederholung werden nicht übernommen: Gespeichert bleibt die erste Absendung.
-* Prüft den Token erneut und lädt Prod (ohne Cache). Weicht `surveyVersion` von `Prod.version` ab, antwortet es mit `409 { "status": "survey_changed", "survey": { … }, "theme": { … } }` und liefert die neue Fassung samt Design (optional) gleich mit; nichts wird gespeichert, der Token bleibt unverbraucht.
+* Prüft den Token erneut und lädt Prod aus dem Cache (Webvorschau: Stage ohne Cache). Weicht `surveyVersion` davon ab und ist der Cache-Eintrag älter als 5 s, wird Prod einmal ohne Cache nachgeladen. Kam der Stand aus dem Cache, wird zusätzlich der Lösch-Job geprüft (`404 unavailable`). Weicht `surveyVersion` dann immer noch vom geladenen Stand ab, antwortet es mit `409 { "status": "survey_changed", "survey": { … }, "theme": { … } }` und liefert die neue Fassung samt Design (optional) gleich mit; nichts wird gespeichert, der Token bleibt unverbraucht.
 * Die Antworten werden gegen das Flow-JSON geprüft (`flowNavigation`): erreichbare Fragen, Pflichtangaben, Wertebereiche (rating min..max, nps 0..10, choice = Label, yes_no = bool, comment höchstens 2000 Zeichen). Bei Verstoß `400`, nichts wird gespeichert.
 * Gespeichert werden nur beantwortete, gültige Antworten auf erreichbare Fragen (`pruneFlowAnswers`), im Format der Architect-Sitzungen: Schlüssel ist der technische Fragename, Wert `{ type, value, answeredAt }`.
 * Speichern in einer DynamoDB-Transaktion: bei Einmal-Token ein Put in `InvitationTokens` mit `attribute_not_exists`, dazu der Put der Antwort mit `status: "completed"`, `channel: "web"`, `tokenId`, `responseId` = `submissionId` bzw. zufällige UUID. Schlägt eine Bedingung fehl und ist es nicht die eigene, schon gespeicherte Absendung, antwortet es mit `409 used` – auch bei gleichzeitigem Absenden kann dieselbe Einladung nicht doppelt genutzt werden. Bei mehrfach nutzbaren Links bedeutet das eine schon fremd belegte `submissionId` (`400 invalid_request`). Danach werden die Aggregate aktualisiert (ein Fehler dort macht die gespeicherte Antwort nicht ungültig).
@@ -243,7 +323,7 @@ Die Seite liest den Token aus `/s/<jwt>` oder `?token=<jwt>` und durchläuft die
 | Prod hat sich zwischen Laden und Absenden geändert (`409 survey_changed`) | „Die Umfrage wurde zwischenzeitlich aktualisiert. Bitte prüfen Sie Ihre Antworten und senden Sie erneut ab.“ |
 | `429` | „Der Dienst ist gerade stark ausgelastet. Bitte versuchen Sie es in einem Moment erneut.“ |
 
-* **Prod ändert sich:** Die Seite lädt die neue Fassung und übernimmt Antworten auf weiterhin vorhandene Fragen (gleiche Frage-ID, Wert noch gültig). Der Token bleibt nutzbar. Ist kein Prod-Stand mehr vorhanden (Rollback ohne Backup, Löschung), erscheint „Umfrage nicht verfügbar“.
+* **Prod ändert sich:** Die Seite lädt die neue Fassung und übernimmt Antworten auf weiterhin vorhandene Fragen (gleiche Frage-ID, Wert noch gültig). Der Token bleibt nutzbar. Ist kein Prod-Stand mehr vorhanden (Rollback ohne Backup, Löschung), erscheint „Umfrage nicht verfügbar“. Deploy und Rollback wirken beim Absenden wegen des Prod-Caches mit bis zu 30 s Verzögerung pro Lambda-Container, eine Löschung sofort (siehe „Endpunkte“).
 * **429:** Die Seite versucht es einmal nach ca. 2 s automatisch erneut, danach erscheint die Meldung mit einem Button „Erneut versuchen“. Alle Antworten bleiben erhalten.
 * **Zeitüberschreitung:** Die Seite wartet 35 s auf eine Antwort, also länger als API Gateway (30 s) und Lambda (20 s). Sie bricht also nicht ab, solange das Backend noch antworten kann. Danach erscheint „Erneut versuchen“; dank `submissionId` speichert die Wiederholung nicht doppelt.
 * Meldungen werden per `role="alert"` angesagt.

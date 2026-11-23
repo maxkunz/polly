@@ -9,7 +9,7 @@ import { useToast } from "primevue/usetoast";
 import { useAppStore } from "@/stores/appStore";
 import { BASE_URL_TOKEN_PLACEHOLDER } from "@/constants/surveyConstants";
 import { BASE_URL_MAX_CHARS, baseUrlError } from "@/domain/survey/invitationLinks";
-import { saveWebDefaultBaseUrl } from "@/services/metaSettingsService";
+import { MetaUnreadableError, saveWebDefaultBaseUrl } from "@/services/metaSettingsService";
 import { getErrorMessage } from "@/services/genesys/retry";
 
 /**
@@ -49,7 +49,8 @@ async function save(): Promise<void> {
 		app.domain.meta.web = meta.web;
 		toast.add({ severity: "success", summary: t("settings.webDefaults.saved"), life: 3000 });
 	} catch (error) {
-		toast.add({ severity: "error", summary: t("settings.webDefaults.saveFailed"), detail: getErrorMessage(error), life: 6000 });
+		const detail = error instanceof MetaUnreadableError ? t("settings.webDefaults.metaUnreadable") : getErrorMessage(error);
+		toast.add({ severity: "error", summary: t("settings.webDefaults.saveFailed"), detail, life: 6000 });
 	} finally {
 		saving.value = false;
 	}

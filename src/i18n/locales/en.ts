@@ -150,7 +150,8 @@ export const en: MessageSchema = {
 			successSummary: "Saved successfully",
 			successDetail: "Survey „{title}“ was updated.",
 			errorSummary: "Save error",
-			errorFallback: "Failed to save the survey in the data table."
+			errorFallback: "Failed to save the survey in the data table.",
+			nameCollision: "The technical name \"{name}\" is already used in this survey. Please change the title of the new question."
 		},
 		flowSize: {
 			warnTitle: "Survey text volume is approaching the limit",
@@ -200,10 +201,12 @@ export const en: MessageSchema = {
 		conflict: {
 			header: "Survey is already being edited",
 			message: "This survey has been edited by „{user}“ since {date}. Do you want to edit it anyway or open it read-only?",
+			messageMcp: "The AI of „{user}“ has been editing this survey via MCP since {date}. Do you want to edit it anyway or open it read-only? The AI can no longer save afterwards.",
 			acceptLabel: "Edit anyway",
 			rejectLabel: "Read only"
 		},
-		readOnlyBanner: "Read-only: this survey is currently being edited by „{user}“. Editing is disabled."
+		readOnlyBanner: "Read-only: this survey is currently being edited by „{user}“. Editing is disabled.",
+		readOnlyBannerMcp: "Read-only: this survey is currently being edited via MCP by „{user}“ (AI client). Editing is disabled."
 	},
 
 	surveyQuestions: {
@@ -336,6 +339,7 @@ export const en: MessageSchema = {
 		ratingMinRange: "Minimum value must be between {min} and {max}.",
 		ratingMaxRange: "Maximum value must be between {min} and {max}.",
 		ratingMinLessThanMax: "Minimum value must be smaller than the maximum value.",
+		ratingValueNotInteger: "Only whole numbers are allowed.",
 		choiceOptionsInvalid: "Answer options are invalid.",
 		choiceMinOptions: "A choice question requires at least {min} options.",
 		choiceMaxOptions: "A choice question may have a maximum of {max} options.",
@@ -483,6 +487,8 @@ export const en: MessageSchema = {
 			noProd: "The survey has no Prod version (any more). Please reload the view.",
 			throttled: "Genesys is busy right now. Please try again in a moment.",
 			expiryInPast: "The expiry date is in the past.",
+			baseUrlChanged: "The default base URL has been changed in the meantime. Please check the new link target and generate again.",
+			metaUnreadable: "The settings in the data table (row __meta) could not be read.",
 			generic: "Error while creating the invitation links"
 		}
 	},
@@ -656,10 +662,78 @@ export const en: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "MCP interface",
+		intro: "AI clients (e.g. Claude) edit, deploy and analyse surveys on behalf of a signed-in person. Sign-in runs through Genesys and the person's Polly roles apply.",
+		loading: "Loading status …",
+		status: {
+			active: "Active",
+			inactive: "Off",
+			serverOff: "Server off",
+			featureOff: "Feature off",
+			serverOffHint: "The MCP interface is switched off on the server. It can only be activated once operations has released it.",
+			featureOffHint: "The mcp feature is not enabled for this installation. It can only be changed directly in the data table (__meta)."
+		},
+		actions: {
+			enable: "Enable MCP",
+			disable: "Disable MCP",
+			enableHint: "Creates an OAuth client (authorization code) in Genesys. Your account needs the right to create and delete OAuth clients (oauth:client:add/delete)."
+		},
+		sessions: "Active sessions: {count}",
+		url: {
+			label: "MCP URL",
+			copy: "Copy",
+			copied: "MCP URL copied."
+		},
+		comments: {
+			label: "Pass free-text comments to the AI",
+			hint: "Unchecked, the AI only sees that a comment exists, not its text. Comments may contain personal data."
+		},
+		guide: {
+			title: "How to connect Claude",
+			step1: "Claude Desktop or claude.ai: Settings → Connectors → “Add custom connector”.",
+			step2: "Enter the name “Polly” and the MCP URL. Leave client ID and secret empty under “Advanced”.",
+			step3: "Choose “Connect” and sign in to Genesys.",
+			step4: "Choose “Allow” on the Polly page. Afterwards the connector can be switched on and off in the chat.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url}, then /mcp and “Authenticate”.",
+			roles: "Your roles decide what the AI may do: polly_write (edit), polly_deploy (deploy, roll back), polly_reporting (results)."
+		},
+		disable: {
+			header: "Disable MCP?",
+			message: "All connected AI clients ({count} active sessions) are signed out immediately and the OAuth client in Genesys is deleted. Work in progress stays in the data table.",
+			accept: "Disable",
+			reject: "Cancel"
+		},
+		toast: {
+			enabled: "MCP enabled.",
+			enableFailed: "MCP could not be enabled",
+			disabled: "MCP disabled.",
+			disableFailed: "MCP could not be disabled",
+			commentsSaved: "Setting saved.",
+			commentsFailed: "The setting could not be saved"
+		},
+		errors: {
+			missingToken: "Not signed in. Please reload the application.",
+			missingRole: "No permission – deploy rights missing.",
+			serverDisabled: "The MCP interface is switched off on the server.",
+			featureDisabled: "The mcp feature is not enabled for this installation.",
+			clientNotReadable: "The OAuth client that was created cannot be read by your account. Rights for OAuth clients are missing in Genesys.",
+			clientInvalid: "The OAuth client in Genesys does not fit (type, redirect URI or state). Please enable again.",
+			clientRights: "Genesys denies access to OAuth clients. Creating and deleting them needs oauth:client:add/delete.",
+			metaUnreadable: "The settings in the data table (row __meta) could not be read.",
+			throttled: "The service is busy. Please try again shortly.",
+			generic: "MCP error"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Web surveys",
 			description: "Surveys via invitation link in the browser, including web designs and web settings in the editor."
+		},
+		mcp: {
+			label: "MCP interface",
+			description: "Edit, deploy and evaluate surveys with an AI client (e.g. Claude). Enable it in the settings."
 		}
 	},
 	settings: {
@@ -669,7 +743,8 @@ export const en: MessageSchema = {
 			hint: "Applies to all surveys without their own base URL. Absolute https URL; use {placeholder} to set where the token goes in the link, otherwise ?token=… is appended. Empty = links point to the Polly survey page.",
 			save: "Save",
 			saved: "Default base URL saved.",
-			saveFailed: "Saving failed"
+			saveFailed: "Saving failed",
+			metaUnreadable: "The settings in the data table (row __meta) could not be read."
 		},
 		features: {
 			title: "Enabled features"

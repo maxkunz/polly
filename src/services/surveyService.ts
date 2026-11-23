@@ -1,15 +1,25 @@
 import { OneRowDataTable, updateDataTableRow, addDataTableRow, deleteDataTableRow } from "@/services/genesys/dataTable";
 import type { Survey } from "@/domain/survey/surveyTypes";
-import { collectTechnicalNames, ensureSurveyTechnicalNames } from "@/domain/survey/surveyTypes";
+import {
+	collectDeployedTechnicalNames,
+	collectTechnicalNames,
+	ensureSurveyTechnicalNames,
+	findTechnicalNameCollisions
+} from "@/domain/survey/surveyTypes";
 import {
 	EMPTY_SURVEY_LOCK,
+	SURVEY_LIST_ROW_KEY,
+	buildSurveyListPayload,
 	buildSurveyRowPayload,
+	parseSurveyDraft,
 	readFieldVersion,
 	surveyRowKey,
+	withSurveyListItem,
+	type SurveyListItem,
 	type SurveyRowPatch
 } from "@/domain/survey/surveyRow";
 import { useAppStore } from "@/stores/appStore";
-import { isSurveyLockStale, parseSurveyLock, type SurveyLockData } from "@/domain/survey/surveyLock";
+import { isSurveyLockOwnedBy, isSurveyLockStale, parseSurveyLock, type SurveyLockData, type SurveyLockUser } from "@/domain/survey/surveyLock";
 import { translateSurveyForFlow } from "./surveyFlowTranslator";
 import { evaluateFlowPayloadSize } from "./flowPayloadBudget";
 import { getErrorStatus } from "./genesys/retry";
@@ -25,10 +35,7 @@ export interface LoadSurveyResult {
 	rawRow: Record<string, any>;
 }
 
-export interface SurveyListItem {
-	id: string;
-	title: string;
-}
+export type { SurveyListItem };
 
 export async function fetchSurveyDetail(surveyId: string): Promise<LoadSurveyResult> {
 	const resolvedTableId = await surveyTableId();
@@ -53,8 +60,6 @@ export async function fetchSurveyDetail(surveyId: string): Promise<LoadSurveyRes
 		rawRow: row
 	};
 }
-
-const SURVEY_LIST_ROW_KEY = "survey_list";
 
 /**
  * Liest den Umfrage-Index (Zeile survey_list, Liste im Feld Draft).
@@ -88,14 +93,7 @@ async function writeSurveyList(
 	items: SurveyListItem[],
 	listRow: Record<string, any> | null
 ): Promise<void> {
-	const rowPayload: Record<string, any> = {
-		key: SURVEY_LIST_ROW_KEY,
-		Draft: JSON.stringify(items),
-		Prod: listRow?.Prod ?? "{}",
-		Stage: listRow?.Stage ?? "{}",
-		Backup: listRow?.Backup ?? "{}",
-		lock: listRow?.lock ?? JSON.stringify({ locked_by: "", locked_since: "" })
-	};
+	const rowPayload = buildSurveyListPayload(items, listRow);
 
 	if (listRow) {
 		await updateDataTableRow(datatableId, SURVEY_LIST_ROW_KEY, rowPayload);
@@ -114,23 +112,10 @@ async function syncSurveyInList(datatableId: string, survey: Survey): Promise<Su
 	const { items: currentList, row: listRow } = await readSurveyList(datatableId);
 
 	const displayName = survey.title?.trim() || survey.name?.trim() || i18n.global.t("surveys.list.unnamedSurvey");
-	const existingIndex = currentList.findIndex(item => item.id === survey.id);
+	const updatedList = withSurveyListItem(currentList, { id: survey.id, title: displayName }) ?? currentList;
 
-	if (existingIndex !== -1) {
-		currentList[existingIndex] = {
-			...currentList[existingIndex],
-			id: survey.id,
-			title: displayName
-		};
-	} else {
-		currentList.push({
-			id: survey.id,
-			title: displayName,
-		});
-	}
-
-	await writeSurveyList(datatableId, currentList, listRow);
-	return currentList;
+	await writeSurveyList(datatableId, updatedList, listRow);
+	return updatedList;
 }
 
 /**
@@ -239,6 +224,21 @@ export class SurveyDraftConflictError extends Error {
 	}
 }
 
+/** Ein neuer technischer Name (Reporting-Schlüssel) gehört schon einer anderen Frage der Umfrage. */
+export class SurveyTechnicalNameCollisionError extends Error {
+	constructor(public readonly technicalName: string) {
+		super(`Technical name already in use: ${technicalName}`);
+		this.name = "SurveyTechnicalNameCollisionError";
+	}
+}
+
+/** Gleiche Regel wie im Backend (`findTechnicalNameCollisions`), auch gegen Stage/Prod/Backup der Zeile. */
+function assertUniqueTechnicalNames(survey: Survey, savedNames: Map<string, string>, row: Record<string, any> | null): void {
+	const deployed = row ? collectDeployedTechnicalNames([row.Stage, row.Prod, row.Backup]) : new Map<string, string>();
+	const [collision] = findTechnicalNameCollisions(survey, savedNames, deployed);
+	if (collision) throw new SurveyTechnicalNameCollisionError(collision.name);
+}
+
 /**
  * Speichert den Draft und gibt dabei das Umfrage-Lock frei. Stage/Prod/Backup bleiben auf dem
  * aktuellen Stand der Zeile.
@@ -259,6 +259,7 @@ export async function saveSurveyDetail(
 
 	if (isNew) {
 		ensureSurveyTechnicalNames(updatedSurvey);
+		assertUniqueTechnicalNames(updatedSurvey, new Map(), null);
 		updatedSurvey.version = (survey.version ?? 0) + 1;
 		const patch = { Draft: JSON.stringify(updatedSurvey), lock: EMPTY_SURVEY_LOCK };
 		await addDataTableRow(resolvedTableId, buildSurveyRowPayload(survey.id, null, patch));
@@ -268,10 +269,12 @@ export async function saveSurveyDetail(
 			if (expectedDraftVersion !== undefined && currentVersion !== expectedDraftVersion) {
 				throw new SurveyDraftConflictError(expectedDraftVersion, currentVersion);
 			}
-			const savedDraft = parseDraft(currentRow.Draft);
+			const savedDraft = parseSurveyDraft(currentRow.Draft);
 			// Bereits gespeicherte technische Namen sind Reporting-Schlüssel und werden unverändert
 			// übernommen; nur neu hinzugekommene Fragen erhalten einmalig einen Namen aus dem Titel.
-			ensureSurveyTechnicalNames(updatedSurvey, collectTechnicalNames(savedDraft));
+			const savedNames = collectTechnicalNames(savedDraft);
+			ensureSurveyTechnicalNames(updatedSurvey, savedNames);
+			assertUniqueTechnicalNames(updatedSurvey, savedNames, currentRow);
 			// Von der höheren Version aus zählen: Hat jemand zwischenzeitlich gespeichert, bekäme
 			// ein anderer Inhalt sonst dieselbe Versionsnummer (Deploy-Prüfungen vergleichen Versionen).
 			const latest = Math.max(survey.version ?? 0, currentVersion ?? 0);
@@ -282,16 +285,6 @@ export async function saveSurveyDetail(
 
 	await syncSurveyInList(resolvedTableId, updatedSurvey);
 	return updatedSurvey;
-}
-
-/** Draft-Zelle als Survey; null, wenn leer oder nicht lesbar. */
-function parseDraft(raw: unknown): Survey | null {
-	if (!raw || raw === "{}") return null;
-	try {
-		return typeof raw === "string" ? JSON.parse(raw) : (raw as Survey);
-	} catch {
-		return null;
-	}
 }
 
 export async function deleteSurvey(surveyId: string): Promise<void> {
@@ -307,23 +300,25 @@ export async function deleteSurvey(surveyId: string): Promise<void> {
 	await writeSurveyList(resolvedTableId, updatedList, listRow);
 }
 
-export async function acquireSurveyLock(surveyId: string, username: string): Promise<Record<string, any>> {
+export async function acquireSurveyLock(surveyId: string, user: { name: string; id?: string }): Promise<Record<string, any>> {
 	const newLock: SurveyLockData = {
-		locked_by: username,
-		locked_since: new Date().toISOString()
+		locked_by: user.name,
+		locked_since: new Date().toISOString(),
+		...(user.id ? { locked_by_id: user.id } : {}),
+		via: "ui"
 	};
 	return await updateSurveyRow(surveyId, () => ({ lock: JSON.stringify(newLock) }));
 }
 
 /** Gibt das Lock frei, sofern es nicht inzwischen von jemand anderem gehalten wird. */
-export async function releaseSurveyLock(surveyId: string, username?: string): Promise<Record<string, any> | null> {
+export async function releaseSurveyLock(surveyId: string, user?: SurveyLockUser): Promise<Record<string, any> | null> {
 	try {
 		return await updateSurveyRow(surveyId, currentRow => {
 			const currentLock = parseSurveyLock(currentRow.lock);
 			const isHeldByOther =
-				username &&
+				user &&
 				currentLock.locked_by &&
-				currentLock.locked_by.trim().toLowerCase() !== username.trim().toLowerCase() &&
+				!isSurveyLockOwnedBy(currentLock, user) &&
 				!isSurveyLockStale(currentLock);
 			return isHeldByOther ? null : { lock: EMPTY_SURVEY_LOCK };
 		});

@@ -15,12 +15,18 @@ Verwendung:
 
 Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
   GENESYS_TOKEN           Bearer-Token der Polly-App (Dev-Tools, Polly-iframe; nicht das des Portals).
-                          Mit --datatable-id prüft [G3], ob es vom Frontend-Client der App stammt.
+                          [G3] prüft anhand von --datatable-id, ob es vom Frontend-Client der App stammt.
                           Ohne Token laufen nur die öffentlichen /web-survey-Fälle, Exit-Code ist dann 1.
   GENESYS_TOKEN_NO_DEPLOY optional: Token eines Users OHNE Rolle polly_deploy (403-Fall)
   API_URL                 Pflicht: Basis-URL inkl. Präfix, z. B. https://<app>.amplifyapp.com/api
                           (ohne API_URL bricht das Skript ab)
   GENESYS_REGION          Default mypurecloud.de
+  POLLY_FEATURES          optional: Feature Flags der Installation, getrennt durch Leerzeichen oder Komma,
+                          z. B. "web mcp" (Kurzform für web_survey und mcp; auch die vollen Namen gelten).
+                          Gruppen eines nicht gewählten Features werden als übersprungen gewertet.
+                          Nicht gesetzt oder leer = alle Gruppen laufen, "none" = keine Feature-Gruppen.
+                          web: [W1]–[W12], [I1]/[I2], [T1]–[T7], [P1]–[P6]; mcp: [M1]–[M17]
+                          dazu in der Kunden-API [C8]–[C12], [C18] und [C28]–[C34]
   API_CLIENT_ID           optional: Client-ID eines API-Zugangs (Kunden-API /ext/v1) mit allen fünf Scopes
                           (ohne themes.read/themes.write entfallen [C28]–[C34])
   API_CLIENT_SECRET       dazu das Client-Secret
@@ -29,14 +35,17 @@ Konfiguration über Umgebungsvariablen (Token nur so, nie per Parameter):
 Optionen (jeweils auch per gleichnamiger Umgebungsvariable in Großbuchstaben):
   --survey-id             Umfrage für die Antworttests, muss in der Data Table DIESER Installation
                           existieren, sonst liefern [1]–[5] 404
-  --survey-name           Name der Umfrage (Default mini_1718e427; mit --datatable-id aus Prod gelesen)
-  --survey-version        Version der Umfrage (Default 5; mit --datatable-id aus Prod gelesen)
-  --datatable-id          Data Table der Umfragen: Name, Version und Fragen der Antworttests kommen aus der
-                          Spalte Prod von survey_<id> (Fehler [S2], wenn nicht deployt); ohne sie gelten die
-                          festen Fragen von mini_1718e427, und die Lösch-Tests [D1]–[D4] entfallen
+  --survey-name           Name der Umfrage (Default mini_1718e427; aus Prod gelesen)
+  --survey-version        Version der Umfrage (Default 5; aus Prod gelesen)
+  --datatable-id          Pflicht: Data Table der Umfragen (Name <projectTag>_polly_surveys, ID aus der
+                          Start-URL der App als datatable_id). [G3] prüft damit das Token gegen
+                          setup.oauthFrontend.id; Name, Version und Fragen der Antworttests kommen aus der
+                          Spalte Prod von survey_<id> (Fehler [S2], wenn nicht deployt); dazu die
+                          Lösch-Tests [D1]–[D4]
   --existing-survey-id    Umfrage, die in dieser Data Table existiert ([D1], erwartet 409)
   --preview-survey-id     Umfrage mit Stage-Stand für die Webvorschau (Default: --survey-id)
-  --web-token             vorhandene Einladung (JWT) für [W6]/[W7]; ohne sie wird über POST /invitations
+  --web-token             vorhandene Einladung (JWT) für [W6]/[W7] und [W10]–[W12] (speichert
+                          eine echte Web-Antwort, verbraucht ein Einmal-Token); ohne sie wird über POST /invitations
                           eine erzeugt (1 h gültig, braucht polly_deploy und Prod-Stand von --survey-id).
                           Für [W8]/[W9] wird immer eine Einladung mit 5 s Laufzeit erzeugt.
   --web-theme-write       legt ein Test-Design an und löscht es wieder ([T6]/[T7]; WEB_THEME_WRITE=1)
@@ -51,6 +60,7 @@ ACHTUNG: Schreibt echte Daten in die deployte API.
 
 import argparse
 import base64
+import http.client
 import json
 import os
 import ssl
@@ -191,6 +201,13 @@ def header_present(*names: str) -> BodyCheck:
     return check
 
 
+def header_text_contains(name: str, fragment: str) -> BodyCheck:
+    def check(res: Response) -> Optional[str]:
+        value = res.headers.get(name.lower(), "")
+        return None if fragment in value else f"Header {name} enthält '{fragment}' nicht (ist: {value!r})"
+    return check
+
+
 class Suite:
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
@@ -279,8 +296,7 @@ def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClien
     """Prüft, ob GENESYS_TOKEN vom Frontend-OAuth-Client der Polly-App stammt (nicht vom Genesys-Portal).
 
     Das Backend nimmt die Client-ID des Tokens als tenantId; ein Token aus dem Portal liefert sonst bei
-    fast allen Fällen 401 "Unknown tenantId". Vergleich gegen setup.oauthFrontend.id in __meta (braucht
-    --datatable-id), ohne sie wird nur der Client ausgegeben."""
+    fast allen Fällen 401 "Unknown tenantId". Vergleich gegen setup.oauthFrontend.id in __meta."""
     auth = {"Authorization": f"Bearer {cfg.token}"}
     res = suite.case("[G2] GET /api/v2/tokens/me (OAuth-Client des Tokens)",
                      lambda: genesys.request("GET", "/api/v2/tokens/me", headers=auth), 200)
@@ -290,10 +306,6 @@ def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClien
     if not client_id:
         return False
     print(f"Token von OAuth-Client {client.get('name', '?')!r} ({client_id})")
-
-    if not cfg.datatable_id:
-        suite.skip("[G3]", "DATATABLE_ID nicht gesetzt, Client des Tokens nicht geprüft")
-        return True
 
     expected = {"id": ""}
 
@@ -319,7 +331,10 @@ def check_token_client(suite: Suite, cfg: argparse.Namespace, genesys: HttpClien
                           200, matches_setup)
     if meta_res is not None and meta_res.status == 200 and expected["id"] and expected["id"] != client_id:
         print("\nHinweis: Das Token ist vermutlich aus dem Genesys-Portal statt aus der Polly-App kopiert.\n"
-              "In den Dev-Tools den Polly-iframe wählen und den Bearer eines Requests an api.<region> nehmen.")
+              "In den Dev-Tools (Network) in Polly auf `Umfragen` klicken und den Bearer des Requests an\n"
+              "`flows/datatables/<id>/rows` nehmen, zum Beispiel den `survey_list`-Request\n"
+              "(das Portal selbst ruft diese Route nicht auf).\n"
+              "Alternativ der Bearer eines Requests an das Polly-Backend (`<API_URL>/…`, Filter `/api/`).")
         return False
     return True
 
@@ -377,18 +392,96 @@ def prepare_invitations(suite: Suite, api: PollyApi, cfg: argparse.Namespace) ->
         cfg.survey_id, cfg.expiring_exp)
 
 
+def web_sample_answer(question: dict) -> Any:
+    """Gültiger Wert zu einer Frage aus dem bereinigten Flow-JSON von GET /web-survey."""
+    qtype = question.get("type")
+    if qtype == "rating":
+        return (question.get("options") or {}).get("max_value", 1)
+    if qtype == "choice":
+        labels = question.get("labels") or []
+        return labels[0] if labels else ""
+    return sample_answer(question)
+
+
+def web_next_question_id(question: dict, value: Any) -> Optional[str]:
+    """Folgefrage wie getNextQuestionId in flowNavigation.ts (für gültige Werte)."""
+    fallback = question.get("default_next_question_id")
+    qtype = question.get("type")
+    target = None
+    if qtype == "yes_no":
+        target = (question.get("options") or {}).get("yes_next_question_id" if value else "no_next_question_id")
+    elif qtype == "choice":
+        ids = question.get("next_question_ids") or []
+        index = (question.get("labels") or []).index(value)
+        target = ids[index] if index < len(ids) else None
+    elif qtype in ("rating", "nps"):
+        matches = {"equals": lambda c: value == c, "less_than": lambda c: value < c, "greater_than": lambda c: value > c}
+        conditions = question.get("conditional_next_question") or []
+        for operator in ("equals", "less_than", "greater_than"):
+            hit = next((c for c in conditions if c.get("operator") == operator and matches[operator](c.get("value"))), None)
+            if hit:
+                target = hit.get("next_question_id")
+                break
+    return fallback if target is None else target
+
+
+def web_answers(survey: dict) -> dict:
+    """Antworten auf alle erreichbaren Fragen (Frage-ID → Wert), dem Ablauf ab start_question_id folgend."""
+    by_id = {q.get("id"): q for q in survey.get("questions") or [] if isinstance(q, dict)}
+    answers: dict = {}
+    current = survey.get("start_question_id")
+    while current in by_id and current not in answers:
+        question = by_id[current]
+        answers[current] = web_sample_answer(question)
+        current = web_next_question_id(question, answers[current])
+    return answers
+
+
 def tests_web_invitation(suite: Suite, api: PollyApi, web_token: str) -> None:
     suite.section("Web-Kanal: gültige Einladung")
     if not web_token:
-        suite.skip("[W6]/[W7]", "keine Einladung vorhanden")
+        suite.skip("[W6]/[W7], [W10]–[W12]", "keine Einladung vorhanden")
         return
-    suite.case("[W6] GET /web-survey mit gültiger Einladung (status ok, bereinigtes Flow-JSON)",
-               lambda: api.public("GET", "/web-survey", params={"token": web_token}),
-               200, json_field("status", "ok"), json_has("survey"))
+    loaded = suite.case("[W6] GET /web-survey mit gültiger Einladung (status ok, bereinigtes Flow-JSON)",
+                        lambda: api.public("GET", "/web-survey", params={"token": web_token}),
+                        200, json_field("status", "ok"), json_has("survey"))
     suite.case("[W7] POST /web-survey/submit mit falscher surveyVersion (409 survey_changed)",
                lambda: api.public("POST", "/web-survey/submit",
                                   body={"token": web_token, "surveyVersion": -1, "answers": {}}),
                409, text_contains("survey_changed"))
+
+    body = loaded.json() if loaded is not None and loaded.status == 200 else None
+    survey = body.get("survey") if isinstance(body, dict) else None
+    if not isinstance(survey, dict):
+        suite.skip("[W10]–[W12]", "keine Umfrage aus [W6]")
+        return
+
+    # Echte Antwort speichern (Prod-Stand, gültige Antworten); die Wiederholung mit derselben
+    # submissionId darf nichts doppelt speichern ([W11]), gelesen wird über responseId = submissionId
+    answers = web_answers(survey)
+    submit = {"token": web_token, "surveyVersion": survey.get("version", 0), "answers": answers,
+              "submissionId": str(uuid.uuid4())}
+    suite.case(f"[W10] POST /web-survey/submit mit {len(answers)} gültigen Antworten (200 ok, gespeichert)",
+               lambda: api.public("POST", "/web-survey/submit", body=submit), 200, json_field("status", "ok"))
+    suite.case("[W11] POST /web-survey/submit wiederholt mit derselben submissionId (200 ok, idempotent)",
+               lambda: api.public("POST", "/web-survey/submit", body=submit), 200, json_field("status", "ok"))
+
+    def stored_web_response(res: Response) -> Optional[str]:
+        body = res.json()
+        item = body.get("item") if isinstance(body, dict) else None
+        if not isinstance(item, dict):
+            return "item fehlt"
+        expected = {"channel": "web", "status": "completed", "surveyVersion": submit["surveyVersion"]}
+        wrong = {k: item.get(k) for k, v in expected.items() if item.get(k) != v}
+        if wrong:
+            return f"erwartet {expected}, abweichend {wrong}"
+        stored = item.get("answers")
+        count = len(stored) if isinstance(stored, dict) else 0
+        return None if count == len(answers) else f"{count} gespeicherte Antworten, erwartet {len(answers)}"
+
+    suite.case("[W12] GET /survey-responses/session?conversationId=<submissionId> (Web-Antwort gespeichert)",
+               lambda: api.genesys("GET", "/survey-responses/session", params={"conversationId": submit["submissionId"]}),
+               200, stored_web_response)
 
 
 def tests_web_expired(suite: Suite, api: PollyApi, token: str, exp: int) -> None:
@@ -438,13 +531,10 @@ def sample_answer(question: dict) -> Any:
 def load_prod_questions(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
     """Liest Name, Version und Fragen aus der Spalte Prod der Umfragezeile (Genesys) in cfg.
 
-    Ohne --datatable-id bleiben die festen Vorgaben (mini_1718e427); mit ihr ist ein fehlender
-    Prod-Stand ein Fehler, und die Antworttests verwenden die echten Fragen der Umfrage."""
+    Ein fehlender Prod-Stand ist ein Fehler ([S2]); die Antworttests verwenden dann die festen Fragen
+    von mini_1718e427, sonst die echten Fragen der Umfrage."""
     cfg.questions = DEFAULT_QUESTIONS
     suite.section("Umfrage: Prod-Stand aus der Data Table")
-    if not cfg.datatable_id:
-        suite.skip("[S1]", "DATATABLE_ID nicht gesetzt, feste Fragen von --survey-name")
-        return
     genesys = HttpClient(f"https://api.{cfg.region}", api.ssl_context)
     res = suite.case("[S1] Zeile survey_<id> aus der Data Table lesen",
                      lambda: genesys.request("GET", f"/api/v2/flows/datatables/{cfg.datatable_id}/rows/"
@@ -565,10 +655,6 @@ def tests_survey_responses_errors(suite: Suite, api: PollyApi, cfg: argparse.Nam
 def tests_delete(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     """DELETE /survey-responses; braucht die Data Table der Umfragen."""
     suite.section("Ergebnisse löschen: DELETE /survey-responses")
-    if not cfg.datatable_id:
-        suite.skip("[D1]–[D4]", "DATATABLE_ID nicht gesetzt")
-        return
-
     if cfg.existing_survey_id:
         suite.case("[D1] existierende Umfrage (409, nichts wird gelöscht)",
                    lambda: api.genesys("DELETE", "/survey-responses", params={
@@ -624,6 +710,105 @@ def tests_web_themes(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> No
         suite.skip("[T6]/[T7]", "WEB_THEME_WRITE nicht gesetzt")
 
 
+def tests_mcp_settings(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
+    """/mcp-settings (Lambda mcp_admin). Aktivieren und Deaktivieren sind nicht dabei: Sie legen einen Genesys-Client an."""
+    suite.section("MCP-Schalter: /mcp-settings")
+    path = "/mcp-settings"
+
+    suite.case("[M1] GET /mcp-settings ohne Token (401)", lambda: api.public("GET", path), 401)
+    suite.case("[M2] PUT /mcp-settings ohne Token (401)",
+               lambda: api.public("PUT", path, body={"allowComments": True}), 401)
+    suite.case("[M3] DELETE /mcp-settings ohne Token (401)", lambda: api.public("DELETE", path), 401)
+
+    if cfg.api_client_id and cfg.api_client_secret and cfg.api_token_url:
+        basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
+        try:
+            token_res = HttpClient(cfg.api_token_url, api.ssl_context).request(
+                "POST", "", body=urllib.parse.urlencode({"grant_type": "client_credentials"}),
+                headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"})
+        except (urllib.error.URLError, OSError) as exc:
+            # Netz- oder TLS-Fehler beim Token-Endpunkt darf den restlichen Lauf nicht beenden
+            suite.skip("[M4]", f"Token-Endpunkt nicht erreichbar ({exc})")
+            return
+        body = token_res.json() if token_res.status == 200 else None
+        cognito_token = body.get("access_token", "") if isinstance(body, dict) else ""
+        if cognito_token:
+            # Ein Cognito-Token gehört nie zu einem Genesys-User: 403 (M2M des Mandanten) oder 401 (unbekannter Client)
+            suite.case("[M4] GET /mcp-settings mit Cognito-Token (401 oder 403, nie 200)",
+                       lambda: api.request("GET", path, headers={"Authorization": f"Bearer {cognito_token}"}), (401, 403))
+        else:
+            suite.skip("[M4]", "kein Cognito-Token erhalten")
+    else:
+        suite.skip("[M4]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
+
+    if cfg.token_no_deploy:
+        suite.case("[M5] GET /mcp-settings ohne Rolle polly_deploy (403 missing_role)",
+                   lambda: api.genesys("GET", path, token=cfg.token_no_deploy), 403, text_contains("missing_role"))
+        suite.case("[M6] PUT /mcp-settings ohne Rolle polly_deploy (403 missing_role, nichts geändert)",
+                   lambda: api.genesys("PUT", path, token=cfg.token_no_deploy, body={"allowComments": False}),
+                   403, text_contains("missing_role"))
+        suite.case("[M7] DELETE /mcp-settings ohne Rolle polly_deploy (403 missing_role, MCP bleibt an)",
+                   lambda: api.genesys("DELETE", path, token=cfg.token_no_deploy), 403, text_contains("missing_role"))
+    else:
+        suite.skip("[M5]–[M7]", "GENESYS_TOKEN_NO_DEPLOY nicht gesetzt")
+
+    # Beide Fälle scheitern vor jeder Änderung an der Eingabe
+    suite.case("[M8] PUT /mcp-settings ohne Felder (400 invalid_request)",
+               lambda: api.genesys("PUT", path, body={}), 400, text_contains("invalid_request"))
+    suite.case("[M9] PUT /mcp-settings mit ungültiger Client-ID (400 invalid_request)",
+               lambda: api.genesys("PUT", path, body={"clientId": "kein-uuid", "clientSecret": "x"}),
+               400, text_contains("invalid_request"))
+    mcp_settings = suite.case("[M10] GET /mcp-settings mit polly_deploy (200, MCP-URL und Redirect-URI; erzeugt den URL-Schlüssel)",
+                              lambda: api.genesys("GET", path), 200, json_has("mcpUrl", "redirectUri"))
+    tests_mcp_endpoint(suite, api, mcp_settings)
+
+
+def tests_mcp_endpoint(suite: Suite, api: PollyApi, settings: Optional[Response]) -> None:
+    """Öffentliche MCP-Routen (Lambda mcp): Metadaten, 401-Header, falscher Schlüssel, DCR-Prüfung. Ohne Anmeldung, ohne Schreiben."""
+    body = settings.json() if settings is not None and settings.status == 200 else None
+    mcp_url = body.get("mcpUrl", "") if isinstance(body, dict) else ""
+    start = mcp_url.find("/mcp/")
+    if start < 0:
+        suite.skip("[M11]–[M17]", "keine MCP-URL aus /mcp-settings")
+        return
+    base = mcp_url[start:]  # /mcp/<schlüssel>; Host und Präfix kommen aus API_URL
+    key = base[len("/mcp/"):].split("/")[0]
+    prm_path = f"/.well-known/oauth-protected-resource{base}"
+    as_path = f"/.well-known/oauth-authorization-server{base}"
+    rpc = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+    try:
+        probe_status = api.public("GET", prm_path).status
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+        # Netzfehler bei der Vorprüfung dürfen den restlichen Lauf nicht beenden
+        suite.skip("[M11]–[M17]", f"MCP-Metadaten nicht erreichbar ({type(exc).__name__})")
+        return
+    if probe_status == 404:
+        suite.skip("[M11]–[M17]", "MCP ist in dieser Umgebung aus (MCP_ENABLED≠true oder Mandant nicht freigeschaltet): überall 404")
+        return
+
+    suite.case("[M11] Protected Resource Metadata (200, resource und authorization_servers)",
+               lambda: api.public("GET", prm_path), 200, json_has("resource", "authorization_servers"))
+    suite.case("[M12] Authorization Server Metadata (200, Endpunkte, PKCE S256)",
+               lambda: api.public("GET", as_path), 200,
+               json_has("issuer", "authorization_endpoint", "token_endpoint", "registration_endpoint",
+                        "code_challenge_methods_supported"))
+    suite.case("[M13] POST /mcp/<Schlüssel> ohne Token (401 mit WWW-Authenticate und resource_metadata)",
+               lambda: api.public("POST", base, body=rpc), 401, header_text_contains("www-authenticate", "resource_metadata"))
+    suite.case("[M14] GET /mcp/<Schlüssel> (405, nur POST erlaubt)", lambda: api.public("GET", base), 405,
+               header_present("allow"))
+    wrong = "A" * (len(key) or 22)
+    suite.case("[M15] POST /mcp/<falscher Schlüssel> (404, nicht von „MCP aus“ zu unterscheiden)",
+               lambda: api.public("POST", f"/mcp/{wrong}", body=rpc), 404)
+    suite.case("[M16] POST /mcp/<Schlüssel> mit ungültigem Token (401, error=invalid_token)",
+               lambda: api.request("POST", base, headers={"Authorization": "Bearer kein-gueltiges-token"}, body=rpc),
+               401, header_text_contains("www-authenticate", "invalid_token"))
+    suite.case("[M17] DCR mit fremder Redirect-URI (400 invalid_redirect_uri, nichts angelegt)",
+               lambda: api.public("POST", f"{base}/oauth/register",
+                                  body={"client_name": "api_tests", "redirect_uris": ["https://evil.example.com/cb"]}),
+               400, text_contains("invalid_redirect_uri"))
+
+
 def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, conversation_id: str) -> None:
     """Kunden-API /ext/v1 mit Client Credentials. Braucht die Session aus tests_survey_responses."""
     suite.section("Kunden-API: /ext/v1")
@@ -631,6 +816,7 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
         suite.skip("[C1]–[C34]", "API_CLIENT_ID, API_CLIENT_SECRET oder API_TOKEN_URL nicht gesetzt")
         return
 
+    web = cfg.features is None or "web_survey" in cfg.features
     basic = base64.b64encode(f"{cfg.api_client_id}:{cfg.api_client_secret}".encode()).decode()
     token_endpoint = HttpClient(cfg.api_token_url, api.ssl_context)
 
@@ -706,41 +892,44 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
                ext("GET", "/reporting/data", full, params={**window, "page": 9999}), 200, lambda res: None
                if isinstance(res.json(), dict) and res.json().get("data") == [] else "data ist nicht leer")
 
-    expiration = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-    invites = suite.case("[C8] POST /invitations erzeugt amount Links (200, inviteUrls)",
-                         ext("POST", "/invitations", full, body={
-                             "survey_uuid": cfg.survey_id, "amount": 2, "is_multi": True,
-                             "expiration_date": expiration}),
-                         200, is_list("inviteUrls", 2),
-                         lambda res: None if len(items(res, "inviteUrls")) == 2 else "nicht genau 2 Einträge")
-    invite_token = ""
-    if invites is not None and invites.status == 200:
-        first = (items(invites, "inviteUrls") or [{}])[0]
-        invite_token = first.get("inviteToken", "") if isinstance(first, dict) else ""
-        first = first if isinstance(first, dict) else {}
-        if first.get("expiration_date") != expiration or first.get("is_multi") is not True:
-            print(f"      Hinweis: erster Eintrag hat expiration_date/is_multi {first.get('expiration_date')!r}/"
-                  f"{first.get('is_multi')!r}, erwartet {expiration!r}/True")
-        if invite_token and invite_token not in first.get("fullLink", ""):
-            print("      Hinweis: fullLink enthält den inviteToken nicht")
-    if invite_token:
-        suite.case("[C9] GET /web-survey akzeptiert einen erzeugten Token (status ok)",
-                   lambda: api.public("GET", "/web-survey", params={"token": invite_token}),
-                   200, json_field("status", "ok"))
-    else:
-        suite.skip("[C9]", "kein Einladungstoken erhalten")
+    if web:
+        expiration = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+        invites = suite.case("[C8] POST /invitations erzeugt amount Links (200, inviteUrls)",
+                             ext("POST", "/invitations", full, body={
+                                 "survey_uuid": cfg.survey_id, "amount": 2, "is_multi": True,
+                                 "expiration_date": expiration}),
+                             200, is_list("inviteUrls", 2),
+                             lambda res: None if len(items(res, "inviteUrls")) == 2 else "nicht genau 2 Einträge")
+        invite_token = ""
+        if invites is not None and invites.status == 200:
+            first = (items(invites, "inviteUrls") or [{}])[0]
+            invite_token = first.get("inviteToken", "") if isinstance(first, dict) else ""
+            first = first if isinstance(first, dict) else {}
+            if first.get("expiration_date") != expiration or first.get("is_multi") is not True:
+                print(f"      Hinweis: erster Eintrag hat expiration_date/is_multi {first.get('expiration_date')!r}/"
+                      f"{first.get('is_multi')!r}, erwartet {expiration!r}/True")
+            if invite_token and invite_token not in first.get("fullLink", ""):
+                print("      Hinweis: fullLink enthält den inviteToken nicht")
+        if invite_token:
+            suite.case("[C9] GET /web-survey akzeptiert einen erzeugten Token (status ok)",
+                       lambda: api.public("GET", "/web-survey", params={"token": invite_token}),
+                       200, json_field("status", "ok"))
+        else:
+            suite.skip("[C9]", "kein Einladungstoken erhalten")
 
-    suite.case("[C10] POST /invitations mit amount 0 (400 invalid_request)",
-               ext("POST", "/invitations", full, body={"survey_uuid": cfg.survey_id, "amount": 0, "is_multi": True}),
-               400, error_code("invalid_request"))
-    suite.case("[C11] POST /invitations mit vergangenem Ablaufdatum (400 invalid_request)",
-               ext("POST", "/invitations", full, body={
-                   "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True, "expiration_date": "2020-01-01"}),
-               400, error_code("invalid_request"))
-    suite.case("[C12] POST /invitations für unbekannte Umfrage (409 no_prod)",
-               ext("POST", "/invitations", full, body={
-                   "survey_uuid": str(uuid.uuid4()), "amount": 1, "is_multi": True}),
-               409, error_code("no_prod"))
+        suite.case("[C10] POST /invitations mit amount 0 (400 invalid_request)",
+                   ext("POST", "/invitations", full, body={"survey_uuid": cfg.survey_id, "amount": 0, "is_multi": True}),
+                   400, error_code("invalid_request"))
+        suite.case("[C11] POST /invitations mit vergangenem Ablaufdatum (400 invalid_request)",
+                   ext("POST", "/invitations", full, body={
+                       "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True, "expiration_date": "2020-01-01"}),
+                   400, error_code("invalid_request"))
+        suite.case("[C12] POST /invitations für unbekannte Umfrage (409 no_prod)",
+                   ext("POST", "/invitations", full, body={
+                       "survey_uuid": str(uuid.uuid4()), "amount": 1, "is_multi": True}),
+                   409, error_code("no_prod"))
+    else:
+        suite.skip("[C8]–[C12]", WEB_SKIP_REASON)
 
     suite.case("[C13] GET /surveys enthält die Testumfrage", ext("GET", "/surveys", full), 200,
                          is_list("surveys", 1),
@@ -774,10 +963,13 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
 
     suite.case("[C17] GET /reporting/data ohne Token (401 invalid_token)",
                lambda: api.public("GET", "/ext/v1/reporting/data", params=window), 401, error_code("invalid_token"))
-    suite.case("[C18] POST /invitations mit reporting.read-Token (403 insufficient_scope)",
-               ext("POST", "/invitations", reporting_only, body={
-                   "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True}),
-               403, error_code("insufficient_scope"))
+    if web:
+        suite.case("[C18] POST /invitations mit reporting.read-Token (403 insufficient_scope)",
+                   ext("POST", "/invitations", reporting_only, body={
+                       "survey_uuid": cfg.survey_id, "amount": 1, "is_multi": True}),
+                   403, error_code("insufficient_scope"))
+    else:
+        suite.skip("[C18]", WEB_SKIP_REASON)
     suite.case("[C19] GET /surveys mit reporting.read-Token (403 insufficient_scope)",
                ext("GET", "/surveys", reporting_only), 403, error_code("insufficient_scope"))
     suite.case("[C20] GET /reporting/data mit reporting.read-Token (200)",
@@ -851,6 +1043,10 @@ def tests_customer_api(suite: Suite, api: PollyApi, cfg: argparse.Namespace, con
             return str(claims.get("scope", "")).split()
         except (IndexError, ValueError):
             return []
+
+    if not web:
+        suite.skip("[C28]–[C34]", WEB_SKIP_REASON)
+        return
 
     granted = token_scopes(full)
     missing = [scope for scope in ("polly-api/themes.read", "polly-api/themes.write") if scope not in granted]
@@ -967,6 +1163,29 @@ def tests_preview(suite: Suite, api: PollyApi, cfg: argparse.Namespace) -> None:
 # main
 # -------------------------------------------------------------------
 
+WEB_SKIP_REASON = "Feature web_survey nicht in POLLY_FEATURES"
+
+# Kurzformen für POLLY_FEATURES → Schlüssel der Feature Flags (domain/features/featureFlags.ts)
+FEATURE_ALIASES = {"web": "web_survey"}
+
+
+def parse_features(raw: Optional[str]) -> Optional[set]:
+    """None = alle Features (POLLY_FEATURES nicht gesetzt oder leer), sonst die gewählten Flag-Schlüssel."""
+    names = (raw or "").replace(",", " ").split()
+    if not names:
+        return None
+    return {FEATURE_ALIASES.get(name.lower(), name.lower()) for name in names if name.lower() != "none"}
+
+
+def run_for_feature(suite: Suite, cfg: argparse.Namespace, feature: str, label: str,
+                    group: Callable[..., None], *args: Any) -> None:
+    """Führt eine Testgruppe nur aus, wenn ihr Feature gewählt ist; sonst zählt sie als übersprungen."""
+    if cfg.features is None or feature in cfg.features:
+        group(*args)
+    else:
+        suite.skip(label, f"Feature {feature} nicht in POLLY_FEATURES")
+
+
 def env_default(name: str, default: Any = None) -> Any:
     return os.environ.get(name, default)
 
@@ -989,6 +1208,7 @@ def parse_args() -> argparse.Namespace:
     cfg.region = env_default("GENESYS_REGION", DEFAULT_REGION)
     cfg.token = env_default("GENESYS_TOKEN", "")
     cfg.token_no_deploy = env_default("GENESYS_TOKEN_NO_DEPLOY", "")
+    cfg.features = parse_features(env_default("POLLY_FEATURES"))
     cfg.api_client_id = env_default("API_CLIENT_ID", "")
     cfg.api_client_secret = env_default("API_CLIENT_SECRET", "")
     cfg.api_token_url = env_default("API_TOKEN_URL", "")
@@ -1001,12 +1221,18 @@ def main() -> int:
         print("Fehler: API_URL ist nicht gesetzt.\n"
               "Bitte die Basis-URL inkl. Präfix setzen, z. B. export API_URL=https://<app>.amplifyapp.com/api")
         return 1
+    if not cfg.datatable_id:
+        print("Fehler: DATATABLE_ID ist nicht gesetzt.\n"
+              "Bitte die Data Table der Umfragen angeben (datatable_id aus der Start-URL der App), "
+              "z. B. export DATATABLE_ID=<id> oder --datatable-id <id>")
+        return 1
     ssl_context = ssl._create_unverified_context() if cfg.insecure else None  # noqa: SLF001
     api = PollyApi(cfg.api_url, cfg.region, cfg.token, ssl_context)
     suite = Suite(cfg.verbose)
     conversation_id = f"test-conv-{int(time.time())}"
 
     print(f"API: {api.base_url}\nRegion: {cfg.region}\nConversationId: {conversation_id}")
+    print("Features: " + ("alle" if cfg.features is None else ", ".join(sorted(cfg.features)) or "keine"))
 
     if cfg.token and not check_genesys_token(suite, cfg, ssl_context):
         print("\nAbbruch: Das Genesys-Token ist ungültig, abgelaufen oder nicht von der Polly-App "
@@ -1014,7 +1240,7 @@ def main() -> int:
         suite.summary()
         return 1
 
-    tests_web_public(suite, api)
+    run_for_feature(suite, cfg, "web_survey", "[W1]–[W5]", tests_web_public, suite, api)
 
     if not cfg.token:
         print("\nFehler: Kein Genesys-Token angegeben. Bitte GENESYS_TOKEN setzen,\n"
@@ -1023,15 +1249,17 @@ def main() -> int:
         return 1
 
     load_prod_questions(suite, api, cfg)
-    prepare_invitations(suite, api, cfg)
-    tests_web_invitation(suite, api, cfg.web_token)
+    cfg.expiring_token, cfg.expiring_exp = "", 0
+    run_for_feature(suite, cfg, "web_survey", "[I1]/[I2]", prepare_invitations, suite, api, cfg)
+    run_for_feature(suite, cfg, "web_survey", "[W6]/[W7], [W10]–[W12]", tests_web_invitation, suite, api, cfg.web_token)
     tests_survey_responses(suite, api, cfg, conversation_id)
     tests_survey_responses_errors(suite, api, cfg, conversation_id)
     tests_customer_api(suite, api, cfg, conversation_id)
     tests_delete(suite, api, cfg, conversation_id)
-    tests_web_themes(suite, api, cfg)
-    tests_preview(suite, api, cfg)
-    tests_web_expired(suite, api, cfg.expiring_token, cfg.expiring_exp)
+    run_for_feature(suite, cfg, "web_survey", "[T1]–[T7]", tests_web_themes, suite, api, cfg)
+    run_for_feature(suite, cfg, "mcp", "[M1]–[M17]", tests_mcp_settings, suite, api, cfg)
+    run_for_feature(suite, cfg, "web_survey", "[P1]–[P6]", tests_preview, suite, api, cfg)
+    run_for_feature(suite, cfg, "web_survey", "[W8]/[W9]", tests_web_expired, suite, api, cfg.expiring_token, cfg.expiring_exp)
     return suite.summary()
 
 

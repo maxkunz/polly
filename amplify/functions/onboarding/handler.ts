@@ -29,6 +29,7 @@ import {
 import { loadTenantByTenantId, resolveTenantContext } from "../shared/tenant_auth";
 import type { ApiClientItem } from "../shared/api_client_auth";
 import { parseRequestedScopes, scopeString, toFullScope } from "../shared/api_scopes";
+import { clearMcpEntries, disableTenantMcp, hasMcpState } from "../shared/mcp_tenant";
 
 import { isGenesysRegion, normalizeGenesysRegion } from "../shared/genesys_regions";
 
@@ -538,6 +539,21 @@ async function uninstallTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     ExpressionAttributeValues: { ":deleted": "DELETED", ":u": now },
   }));
 
+  // MCP sperren und abräumen (das Frontend ruft vorher /mcp-settings auf; hier die serverseitige Absicherung).
+  // Ein Fehler bricht nicht ab: Der Mandant ist DELETED, MCP lässt ihn ohnehin nicht mehr zu.
+  // Die Einträge hängen an der tenantId: Eine Neuinstallation mit derselben tenantId behält ihre (auch bei Wiederholung).
+  if (hasMcpState(existing.Item)) {
+    try {
+      await disableTenantMcp(backendClientId);
+      const tenantId = existing.Item.tenantId as string;
+      if (tenantId && !(await hasRemainingTenantItems(tenantId, new Set([backendClientId]), { ignoreDeleted: true }))) {
+        await clearMcpEntries(tenantId);
+      }
+    } catch (e: any) {
+      console.warn("Failed to clean up MCP of uninstalled tenant", { backendClientId, errorName: e?.name, message: e?.message });
+    }
+  }
+
   return json(200, {
     message: "Tenant marked as deleted",
     backendClientId,
@@ -650,6 +666,16 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     apiClientsError = e?.message ?? String(e);
   }
 
+  // MCP-Einträge (Sessions, Tokens, Clients) aus der McpOAuthTable, Fehler wie bei den API-Clients nicht abbrechend
+  let deletedMcpEntries = 0;
+  let mcpError: string | null = null;
+  try {
+    deletedMcpEntries = await clearMcpOfRemovedTenant(tenantId, new Set([backendClientId]));
+  } catch (e: any) {
+    console.warn("Failed to delete MCP entries of tenant", { tenantId, errorName: e?.name, message: e?.message });
+    mcpError = e?.message ?? String(e);
+  }
+
   return json(200, {
     message: "Tenant deleted",
     backendClientId,
@@ -658,6 +684,8 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     deletedApiClients,
     failedApiClientIds,
     apiClientsError,
+    deletedMcpEntries,
+    mcpError,
   });
 }
 
@@ -788,13 +816,23 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     }
   }
 
-  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds });
+  let deletedMcpEntries = 0;
+  for (const tenantId of wipedTenantIds) {
+    try {
+      deletedMcpEntries += await clearMcpOfRemovedTenant(tenantId, wipedBackendClientIds);
+    } catch (e: any) {
+      console.warn("Failed to delete MCP entries (continuing)", { tenantId, errorName: e?.name, message: e?.message });
+    }
+  }
+
+  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds, deletedMcpEntries });
 
   return json(200, {
     message: "All tenants wiped",
     deletedCount,
     deletedApiClients,
     failedApiClientIds,
+    deletedMcpEntries,
     forceDeleteSecrets,
   });
 }
@@ -1014,23 +1052,7 @@ async function deleteApiClientsOfRemovedTenant(
     return result;
   }
 
-  let lastEvaluatedKey: Record<string, any> | undefined;
-  do {
-    const page = await ddb.send(
-      new QueryCommand({
-        TableName: TENANTS_TABLE_NAME,
-        IndexName: "byTenantId",
-        KeyConditionExpression: "tenantId = :t",
-        ExpressionAttributeValues: { ":t": tenantId },
-        ProjectionExpression: "backendClientId",
-        ExclusiveStartKey: lastEvaluatedKey,
-      })
-    );
-    if ((page.Items ?? []).some((item) => !removedBackendClientIds.has(item.backendClientId))) {
-      return result;
-    }
-    lastEvaluatedKey = page.LastEvaluatedKey;
-  } while (lastEvaluatedKey);
+  if (await hasRemainingTenantItems(tenantId, removedBackendClientIds)) return result;
 
   const clients = await listApiClientsOfTenant(tenantId);
   for (const client of clients) {
@@ -1049,4 +1071,48 @@ async function deleteApiClientsOfRemovedTenant(
     }
   }
   return result;
+}
+
+/**
+ * Gibt es zu dieser tenantId noch einen Eintrag (gleich welcher Status) außer den gerade gelöschten?
+ * `ignoreDeleted`: Einträge mit Status DELETED zählen nicht (Uninstall, die Einträge bleiben dort stehen).
+ */
+async function hasRemainingTenantItems(
+  tenantId: string,
+  removedBackendClientIds: ReadonlySet<string>,
+  options: { ignoreDeleted?: boolean } = {}
+): Promise<boolean> {
+  let lastEvaluatedKey: Record<string, any> | undefined;
+  do {
+    const page = await ddb.send(
+      new QueryCommand({
+        TableName: TENANTS_TABLE_NAME,
+        IndexName: "byTenantId",
+        KeyConditionExpression: "tenantId = :t",
+        ExpressionAttributeValues: { ":t": tenantId },
+        ExpressionAttributeNames: { "#s": "status" },
+        ProjectionExpression: "backendClientId, #s",
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+    const remaining = (page.Items ?? []).filter((item) => !removedBackendClientIds.has(item.backendClientId));
+    if (remaining.some((item) => !options.ignoreDeleted || item.status !== "DELETED")) {
+      return true;
+    }
+    lastEvaluatedKey = page.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+  return false;
+}
+
+/**
+ * Löscht die MCP-Einträge einer tenantId, sofern kein weiterer Eintrag der Tenants-Tabelle mit dieser tenantId übrig
+ * ist (die Einträge hängen an der tenantId, nicht an der Installation). Gibt die Anzahl gelöschter Einträge zurück.
+ */
+async function clearMcpOfRemovedTenant(
+  tenantId: string,
+  removedBackendClientIds: ReadonlySet<string>
+): Promise<number> {
+  if (!tenantId) return 0;
+  if (await hasRemainingTenantItems(tenantId, removedBackendClientIds)) return 0;
+  return clearMcpEntries(tenantId);
 }

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import {
 	EMPTY_SURVEY_LOCK,
+	buildSurveyListPayload,
 	buildSurveyRowPayload,
+	parseSurveyDraft,
 	readFieldVersion,
-	surveyRowKey
+	surveyRowKey,
+	withSurveyListItem
 } from "../src/domain/survey/surveyRow";
 
 let passed = 0;
@@ -69,6 +72,32 @@ test("readFieldVersion liest die Version oder liefert null", () => {
 	assert.equal(readFieldVersion("{}"), null);
 	assert.equal(readFieldVersion(""), null);
 	assert.equal(readFieldVersion("kein json"), null);
+});
+
+test("parseSurveyDraft liest den Draft oder liefert null", () => {
+	assert.deepEqual(parseSurveyDraft('{"id":"a","version":2}'), { id: "a", version: 2 });
+	assert.equal(parseSurveyDraft("{}"), null);
+	assert.equal(parseSurveyDraft(""), null);
+	assert.equal(parseSurveyDraft("kein json"), null);
+	assert.equal(parseSurveyDraft("42"), null);
+});
+
+test("survey_list: Eintrag ersetzen oder anhängen, unverändert null; übrige Spalten bleiben", () => {
+	const items = [{ id: "a", title: "Alt" }, { id: "b", title: "B" }];
+	assert.deepEqual(withSurveyListItem(items, { id: "a", title: "Neu" }), [{ id: "a", title: "Neu" }, { id: "b", title: "B" }]);
+	assert.deepEqual(withSurveyListItem(items, { id: "c", title: "C" }), [...items, { id: "c", title: "C" }]);
+	assert.equal(withSurveyListItem(items, { id: "b", title: "B" }), null);
+	assert.equal(items[0].title, "Alt");
+
+	assert.deepEqual(buildSurveyListPayload(items, { Prod: "p", lock: "l" }), {
+		key: "survey_list",
+		Draft: JSON.stringify(items),
+		Prod: "p",
+		Stage: "{}",
+		Backup: "{}",
+		lock: "l"
+	});
+	assert.equal(buildSurveyListPayload([], null).lock, EMPTY_SURVEY_LOCK);
 });
 
 console.log(`\n${passed} Tests bestanden`);

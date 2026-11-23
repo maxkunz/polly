@@ -148,7 +148,8 @@ export const de = {
 			successSummary: "Erfolgreich gespeichert",
 			successDetail: "Umfrage „{title}“ wurde aktualisiert.",
 			errorSummary: "Speicherfehler",
-			errorFallback: "Fehler beim Speichern der Umfrage in der Data Table."
+			errorFallback: "Fehler beim Speichern der Umfrage in der Data Table.",
+			nameCollision: "Der technische Name „{name}“ ist in dieser Umfrage schon vergeben. Bitte den Titel der neuen Frage ändern."
 		},
 		flowSize: {
 			warnTitle: "Textmenge der Umfrage nähert sich dem Limit",
@@ -198,10 +199,12 @@ export const de = {
 		conflict: {
 			header: "Umfrage wird bereits bearbeitet",
 			message: "Diese Umfrage wird seit {date} von „{user}“ bearbeitet. Möchten Sie die Umfrage trotzdem bearbeiten oder nur ansehen?",
+			messageMcp: "Die KI „{user}“ bearbeitet diese Umfrage seit {date} über MCP. Möchten Sie die Umfrage trotzdem bearbeiten oder nur ansehen? Die KI kann danach nicht mehr speichern.",
 			acceptLabel: "Trotzdem bearbeiten",
 			rejectLabel: "Nur anschauen"
 		},
-		readOnlyBanner: "Schreibgeschützt: Diese Umfrage wird gerade von „{user}“ bearbeitet. Änderungen sind deaktiviert."
+		readOnlyBanner: "Schreibgeschützt: Diese Umfrage wird gerade von „{user}“ bearbeitet. Änderungen sind deaktiviert.",
+		readOnlyBannerMcp: "Schreibgeschützt: Diese Umfrage wird gerade über MCP von „{user}“ (KI-Client) bearbeitet. Änderungen sind deaktiviert."
 	},
 
 	surveyQuestions: {
@@ -334,6 +337,7 @@ export const de = {
 		ratingMinRange: "Minimalwert muss zwischen {min} und {max} liegen.",
 		ratingMaxRange: "Maximalwert muss zwischen {min} und {max} liegen.",
 		ratingMinLessThanMax: "Minimalwert muss kleiner als der Maximalwert sein.",
+		ratingValueNotInteger: "Nur ganze Zahlen erlaubt.",
 		choiceOptionsInvalid: "Auswahloptionen sind ungültig.",
 		choiceMinOptions: "Eine Auswahlabfrage benötigt mindestens {min} Optionen.",
 		choiceMaxOptions: "Eine Auswahlabfrage darf maximal {max} Optionen haben.",
@@ -481,6 +485,8 @@ export const de = {
 			noProd: "Die Umfrage hat keinen Prod-Stand (mehr). Bitte Ansicht neu laden.",
 			throttled: "Genesys ist gerade ausgelastet. Bitte in einem Moment erneut versuchen.",
 			expiryInPast: "Das Ablaufdatum liegt in der Vergangenheit.",
+			baseUrlChanged: "Die Standard-Basis-URL wurde inzwischen geändert. Bitte das neue Ziel der Links prüfen und erneut erzeugen.",
+			metaUnreadable: "Die Einstellungen in der Data Table (Zeile __meta) konnten nicht gelesen werden.",
 			generic: "Fehler beim Erzeugen der Einladungslinks"
 		}
 	},
@@ -654,10 +660,78 @@ export const de = {
 		}
 	},
 
+	mcp: {
+		title: "MCP-Schnittstelle",
+		intro: "KI-Clients (z. B. Claude) bearbeiten, deployen und werten Umfragen im Namen einer angemeldeten Person aus. Die Anmeldung läuft über Genesys, es gelten die Polly-Rollen der Person.",
+		loading: "Status wird geladen …",
+		status: {
+			active: "Aktiv",
+			inactive: "Aus",
+			serverOff: "Server aus",
+			featureOff: "Funktion aus",
+			serverOffHint: "Die MCP-Schnittstelle ist auf dem Server ausgeschaltet. Sie lässt sich erst nach Freigabe durch den Betrieb aktivieren.",
+			featureOffHint: "Das Feature mcp ist für diese Installation nicht aktiviert. Es lässt sich nur direkt in der Data Table (__meta) ändern."
+		},
+		actions: {
+			enable: "MCP aktivieren",
+			disable: "MCP deaktivieren",
+			enableHint: "Legt in Genesys einen OAuth-Client (Authorization Code) an. Dafür braucht Ihr Konto die Rechte „OAuth-Client anlegen und löschen“ (oauth:client:add/delete)."
+		},
+		sessions: "Aktive Sitzungen: {count}",
+		url: {
+			label: "MCP-URL",
+			copy: "Kopieren",
+			copied: "MCP-URL kopiert."
+		},
+		comments: {
+			label: "Freitext-Kommentare an die KI weitergeben",
+			hint: "Ohne Haken sieht die KI nur, dass ein Kommentar existiert, nicht dessen Text. Kommentare können personenbezogene Daten enthalten."
+		},
+		guide: {
+			title: "So verbinden Sie Claude",
+			step1: "Claude Desktop oder claude.ai: Einstellungen → Connectors → „Benutzerdefinierten Connector hinzufügen“.",
+			step2: "Name „Polly“ und die MCP-URL eintragen. Client-ID und Secret unter „Erweitert“ leer lassen.",
+			step3: "„Verbinden“ wählen und sich bei Genesys anmelden.",
+			step4: "Auf der Polly-Seite „Zulassen“ wählen. Danach lässt sich der Connector im Chat ein- und ausschalten.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url} danach /mcp und „Authenticate“.",
+			roles: "Was die KI darf, bestimmen Ihre Rollen: polly_write (bearbeiten), polly_deploy (deployen, zurückrollen), polly_reporting (Ergebnisse)."
+		},
+		disable: {
+			header: "MCP deaktivieren?",
+			message: "Alle verbundenen KI-Clients ({count} aktive Sitzungen) werden sofort abgemeldet und der OAuth-Client in Genesys wird gelöscht. Eine laufende Bearbeitung bleibt in der Data Table erhalten.",
+			accept: "Deaktivieren",
+			reject: "Abbrechen"
+		},
+		toast: {
+			enabled: "MCP aktiviert.",
+			enableFailed: "MCP konnte nicht aktiviert werden",
+			disabled: "MCP deaktiviert.",
+			disableFailed: "MCP konnte nicht deaktiviert werden",
+			commentsSaved: "Einstellung gespeichert.",
+			commentsFailed: "Einstellung konnte nicht gespeichert werden"
+		},
+		errors: {
+			missingToken: "Nicht angemeldet. Bitte die Anwendung neu laden.",
+			missingRole: "Keine Berechtigung – Deployrechte fehlen.",
+			serverDisabled: "Die MCP-Schnittstelle ist auf dem Server ausgeschaltet.",
+			featureDisabled: "Das Feature mcp ist für diese Installation nicht aktiviert.",
+			clientNotReadable: "Der angelegte OAuth-Client ist für Ihr Konto nicht lesbar. Es fehlen Rechte für OAuth-Clients in Genesys.",
+			clientInvalid: "Der OAuth-Client in Genesys passt nicht (Typ, Redirect-URI oder Status). Bitte erneut aktivieren.",
+			clientRights: "Genesys verweigert den Zugriff auf OAuth-Clients. Für das Anlegen und Löschen braucht Ihr Konto oauth:client:add/delete.",
+			metaUnreadable: "Die Einstellungen in der Data Table (Zeile __meta) konnten nicht gelesen werden.",
+			throttled: "Der Dienst ist ausgelastet. Bitte gleich erneut versuchen.",
+			generic: "MCP-Fehler"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Web-Umfragen",
 			description: "Umfragen per Einladungslink im Browser, inkl. Web-Designs und Web-Einstellungen im Editor."
+		},
+		mcp: {
+			label: "MCP-Schnittstelle",
+			description: "Umfragen per KI-Client (z. B. Claude) bearbeiten, deployen und auswerten. Einschalten in den Einstellungen."
 		}
 	},
 	settings: {
@@ -667,7 +741,8 @@ export const de = {
 			hint: "Gilt für alle Umfragen ohne eigene Basis-URL. Absolute https-URL; mit {placeholder} bestimmen Sie, wo der Token im Link steht, sonst wird ?token=… angehängt. Leer = Links zeigen auf die Polly-Umfrageseite.",
 			save: "Speichern",
 			saved: "Standard-Basis-URL gespeichert.",
-			saveFailed: "Speichern fehlgeschlagen"
+			saveFailed: "Speichern fehlgeschlagen",
+			metaUnreadable: "Die Einstellungen in der Data Table (Zeile __meta) konnten nicht gelesen werden."
 		},
 		features: {
 			title: "Aktivierte Funktionen"

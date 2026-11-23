@@ -151,7 +151,8 @@ export const la: MessageSchema = {
 			successSummary: "Feliciter servatum",
 			successDetail: "Percontatio „{title}“ renovata est.",
 			errorSummary: "Error servandi",
-			errorFallback: "Error in percontatione in Data Table servanda."
+			errorFallback: "Error in percontatione in Data Table servanda.",
+			nameCollision: "Nomen technicum \"{name}\" iam in hac percontatione adhibetur. Titulum novae quaestionis muta."
 		},
 		flowSize: {
 			warnTitle: "Copia textuum percontationis ad terminum appropinquat",
@@ -201,10 +202,12 @@ export const la: MessageSchema = {
 		conflict: {
 			header: "Percontatio iam mutatur",
 			message: "Haec percontatio inde a {date} a „{user}“ mutatur. Visne eam nihilominus mutare an tantum spectare?",
+			messageMcp: "AI „{user}“ hanc percontationem inde a {date} per MCP mutat. Visne eam nihilominus mutare an tantum spectare? AI postea servare non poterit.",
 			acceptLabel: "Nihilominus muta",
 			rejectLabel: "Tantum specta"
 		},
-		readOnlyBanner: "Contra scripturam tuta: haec percontatio nunc a „{user}“ mutatur. Mutationes sunt inactivae."
+		readOnlyBanner: "Contra scripturam tuta: haec percontatio nunc a „{user}“ mutatur. Mutationes sunt inactivae.",
+		readOnlyBannerMcp: "Contra scripturam tuta: haec percontatio nunc per MCP a „{user}“ (cliens AI) mutatur. Mutationes sunt inactivae."
 	},
 
 	surveyQuestions: {
@@ -337,6 +340,7 @@ export const la: MessageSchema = {
 		ratingMinRange: "Valor minimus inter {min} et {max} esse debet.",
 		ratingMaxRange: "Valor maximus inter {min} et {max} esse debet.",
 		ratingMinLessThanMax: "Valor minimus minor valore maximo esse debet.",
+		ratingValueNotInteger: "Numeri integri tantum admittuntur.",
 		choiceOptionsInvalid: "Optiones electionis invalidae sunt.",
 		choiceMinOptions: "Quaestio electionis saltem {min} optiones requirit.",
 		choiceMaxOptions: "Quaestio electionis maxime {max} optiones habere potest.",
@@ -484,6 +488,8 @@ export const la: MessageSchema = {
 			noProd: "Quaestionarium statum Prod (iam) non habet. Aspectum renova.",
 			throttled: "Genesys nunc occupatus est. Mox iterum tempta.",
 			expiryInPast: "Dies exitus praeteriit.",
+			baseUrlChanged: "URL fundamentalis interim mutata est. Novum finem nexuum inspice et iterum genera.",
+			metaUnreadable: "Optiones in tabula (linea __meta) legi non potuerunt.",
 			generic: "Error in nexibus invitationis creandis"
 		}
 	},
@@ -657,10 +663,78 @@ export const la: MessageSchema = {
 		}
 	},
 
+	mcp: {
+		title: "Interfacies MCP",
+		intro: "Clientes AI (e. g. Claude) percontationes nomine personae inscriptae mutant, publicant et aestimant. Aditus per Genesys fit, partes Polly personae valent.",
+		loading: "Status oneratur …",
+		status: {
+			active: "Activum",
+			inactive: "Inactivum",
+			serverOff: "Servitor clausus",
+			featureOff: "Functio clausa",
+			serverOffHint: "Interfacies MCP in servitore exstincta est. Post liberationem ab administratione tantum activari potest.",
+			featureOffHint: "Functio mcp huic institutioni non est activata. Solum directe in Data Table (__meta) mutari potest."
+		},
+		actions: {
+			enable: "MCP activare",
+			disable: "MCP deactivare",
+			enableHint: "In Genesys clientem OAuth (Authorization Code) creat. Ratio tua iura clientes OAuth creandi et delendi habere debet (oauth:client:add/delete)."
+		},
+		sessions: "Sessiones activae: {count}",
+		url: {
+			label: "URL MCP",
+			copy: "Exscribere",
+			copied: "URL MCP exscripta est."
+		},
+		comments: {
+			label: "Commentaria libera ad AI transmittere",
+			hint: "Sine signo AI solum videt commentarium exstare, non textum. Commentaria data personalia continere possunt."
+		},
+		guide: {
+			title: "Claude coniungere",
+			step1: "Claude Desktop vel claude.ai: Optiones → Connectors → “Add custom connector”.",
+			step2: "Nomen “Polly” et URL MCP inscribe. ID clientis et secretum sub “Advanced” vacua relinque.",
+			step3: "“Connect” elige et in Genesys inscribe.",
+			step4: "In pagina Polly “Allow” elige. Postea connector in colloquio accendi et exstingui potest.",
+			claudeCode: "Claude Code: claude mcp add --transport http polly {url}, deinde /mcp et “Authenticate”.",
+			roles: "Partes tuae definiunt quid AI liceat: polly_write (mutare), polly_deploy (publicare, revertere), polly_reporting (eventus)."
+		},
+		disable: {
+			header: "MCP deactivare?",
+			message: "Omnes clientes AI coniuncti ({count} sessiones activae) statim exeunt et cliens OAuth in Genesys deletur. Opus incohatum in Data Table manet.",
+			accept: "Deactivare",
+			reject: "Abrogare"
+		},
+		toast: {
+			enabled: "MCP activatum est.",
+			enableFailed: "MCP activari non potuit",
+			disabled: "MCP deactivatum est.",
+			disableFailed: "MCP deactivari non potuit",
+			commentsSaved: "Optio servata est.",
+			commentsFailed: "Optio servari non potuit"
+		},
+		errors: {
+			missingToken: "Non inscriptus. Applicationem renova.",
+			missingRole: "Sine iure – iura deploy desunt.",
+			serverDisabled: "Interfacies MCP in servitore exstincta est.",
+			featureDisabled: "Functio mcp huic institutioni non est activata.",
+			clientNotReadable: "Cliens OAuth creatus a ratione tua legi non potest. Iura pro clientibus OAuth in Genesys desunt.",
+			clientInvalid: "Cliens OAuth in Genesys non congruit (genus, URI redirectionis vel status). Iterum activa.",
+			clientRights: "Genesys aditum ad clientes OAuth negat. Ad creandum et delendum oauth:client:add/delete necesse est.",
+			metaUnreadable: "Optiones in Data Table (linea __meta) legi non potuerunt.",
+			throttled: "Ministerium occupatum est. Mox iterum tempta.",
+			generic: "Error MCP"
+		}
+	},
+
 	features: {
 		web_survey: {
 			label: "Quaestiones interretiales",
 			description: "Quaestiones per nexum invitationis in navigatro, cum formis interretialibus et optionibus in editore."
+		},
+		mcp: {
+			label: "Interfacies MCP",
+			description: "Percontationes cum cliente AI (e. g. Claude) mutare, publicare et aestimare. In optionibus activatur."
 		}
 	},
 	settings: {
@@ -670,7 +744,8 @@ export const la: MessageSchema = {
 			hint: "Valet omnibus quaestionibus sine URL propria. URL https absoluta; {placeholder} locum signi in nexu indicat, alioqui ?token=… additur. Vacua = nexus ad paginam Polly ducit.",
 			save: "Servare",
 			saved: "URL fundamentalis exempli servata.",
-			saveFailed: "Servare non successit"
+			saveFailed: "Servare non successit",
+			metaUnreadable: "Optiones in tabula (linea __meta) legi non potuerunt."
 		},
 		features: {
 			title: "Facultates activae"

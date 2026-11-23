@@ -3,15 +3,14 @@ botFlow:
   description: Bot Flow for Polly
   division: {{DIVISION_NAME}}
   startUpRef: "/botFlow/bots/bot[Default Bot_10]"
-  defaultLanguage: en-us
+  defaultLanguage: de-de
   supportedLanguages:
-    en-us:
+    de-de:
       defaultLanguageSkill:
         noValue: true
       speechToText:
         engine:
-          name: Genesys Native
-          defaultEngine: true
+          name: Amazon Transcribe
   variables:
     - stringVariable:
         name: Flow.data_table_value
@@ -1428,6 +1427,6 @@ botFlow:
           description: The description of the Entity Type "yes_no_type"
           mechanism:
             type: DynamicList
-      language: en-us
+      language: de-de
       languageVersions: {}
     mutedUtterances: []

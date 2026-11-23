@@ -1,3 +1,5 @@
+import type { Survey } from "./surveyTypes";
+
 /**
  * Aufbau der Data-Table-Zeile `survey_<id>` (siehe documentation/datatablerow_survey_entry.md).
  * Alle Zellen enthalten JSON als String.
@@ -46,4 +48,51 @@ export function readFieldVersion(raw: unknown): number | null {
 	} catch {
 		return null;
 	}
+}
+
+/** Draft-Zelle als Survey; null, wenn leer oder nicht lesbar. */
+export function parseSurveyDraft(raw: unknown): Survey | null {
+	if (!raw || raw === "{}") return null;
+	try {
+		const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+		return parsed && typeof parsed === "object" ? (parsed as Survey) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Umfrage-Index: Zeile `survey_list`, Liste im Feld `Draft`. */
+export const SURVEY_LIST_ROW_KEY = "survey_list";
+
+export interface SurveyListItem {
+	id: string;
+	title: string;
+}
+
+/**
+ * Index mit Eintrag `item` (vorhandener Eintrag gleicher ID wird ersetzt, sonst angehängt).
+ * null, wenn der Eintrag schon genau so in der Liste steht.
+ */
+export function withSurveyListItem(items: SurveyListItem[], item: SurveyListItem): SurveyListItem[] | null {
+	const index = items.findIndex(entry => entry?.id === item.id);
+	if (index === -1) return [...items, item];
+	if (items[index].title === item.title) return null;
+	const updated = [...items];
+	updated[index] = { ...items[index], ...item };
+	return updated;
+}
+
+/** Vollständiger Payload der Zeile `survey_list`; die übrigen Spalten bleiben, wie sie sind. */
+export function buildSurveyListPayload(
+	items: SurveyListItem[],
+	listRow: Record<string, any> | null
+): Record<string, string> {
+	return {
+		key: SURVEY_LIST_ROW_KEY,
+		Draft: JSON.stringify(items),
+		Prod: listRow?.Prod ?? "{}",
+		Stage: listRow?.Stage ?? "{}",
+		Backup: listRow?.Backup ?? "{}",
+		lock: listRow?.lock ?? EMPTY_SURVEY_LOCK
+	};
 }

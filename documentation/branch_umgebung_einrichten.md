@@ -22,6 +22,7 @@ Mandanten lassen sich **nicht** aus einer anderen Umgebung in die Tenants-Tabell
 4. Optionale Branch-Umgebungsvariablen (Hosting → Environment variables, als Override für den Branch):
    - `GENESYS_REGION`, falls die Test-Org nicht in `mypurecloud.de` liegt
    - `WEB_SURVEY_RESERVED_CONCURRENCY`, siehe [polly_web.md](polly_web.md)
+   - `MCP_ENABLED`, `MCP_PUBLIC_BASE_URL`, `MCP_ALLOWED_REDIRECT_URIS`, `MCP_RESERVED_CONCURRENCY` für die MCP-Schnittstelle, siehe [polly_mcp.md](polly_mcp.md). Ohne `MCP_ENABLED=true` antworten alle MCP-Routen mit 404; ohne `MCP_PUBLIC_BASE_URL` gilt die execute-api-URL der Branch-API (mit Custom Domain setzen, die `.well-known`-Routen müssen an der Wurzel der Domain liegen); `MCP_ALLOWED_REDIRECT_URIS` ist kommagetrennt, je Ursprung und Pfad (`https://host/pfad`), Default `https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback`
    - `WEB_SURVEY_ORIGIN`, falls die Umfrageseite unter einer eigenen Domain erreichbar ist (Links der Kunden-API ohne `base_url`); ohne sie `https://<branch>.<appId>.amplifyapp.com`, siehe [betrieb_api_zugaenge.md](betrieb_api_zugaenge.md#10-umgebungsvariable-web_survey_origin)
 
 Der Branchname wird für die Ressourcennamen bereinigt (Kleinbuchstaben, Sonderzeichen → `-`) und auf 20 Zeichen gekürzt. Aus `feature/websurveys` wird `feature-websurveys`.
@@ -147,6 +148,7 @@ curl -X POST "https://<branch>.<appId>.amplifyapp.com/api_websurveys/onboarding/
 | `Tenant not approved` bzw. 401/403 nach dem Setup | Mandant steht noch auf `PENDING` (Schritt 6) |
 | Antworten landen im Backend von `main` | Data Action wurde vor dem Präfix angelegt und zeigt noch auf `/api/survey-responses`. In Genesys anpassen oder Setup neu ausführen |
 | Mandant (`PENDING`) steht in der Tenants-Tabelle von `main` statt im Branch | Setup lief gegen `/api`: Build ohne `VITE_API_PREFIX`-Override oder Branch nach dem Setzen nicht neu gebaut. Eintrag und Secret in `main` von Hand löschen, Branch neu bauen, Setup wiederholen |
+| Einzelne Route liefert nach einem Deploy `404 {"message":"Not Found"}` (Text des API Gateway, nicht `{"error":…}` der Lambda), obwohl Route und Integration in der Konsole stehen; andere Routen derselben Lambda gehen | Die `$default`-Stage hat die Route nicht live geschaltet: Auto-Deploy verpasst bei vielen neuen Routen in einem CloudFormation-Update (z. B. Merge eines großen Features nach `main`) gelegentlich die letzte Änderung. Gegenprobe direkt an der execute-api-URL (ohne Amplify-Rewrite). Lösung: in der Konsole unter *Stages → `$default` → Edit* Auto-Deploy aus- und wieder einschalten (oder bei ausgeschaltetem Auto-Deploy einmal *Deploy* auf `$default`). Ein Rebuild ohne Codeänderung hilft nicht, weil CloudFormation dann nichts tut. Aufgetreten nach dem Merge von `feature/mcp` bei `ANY /mcp/{tenantKey}` |
 
 ## Lokal entwickeln
 
