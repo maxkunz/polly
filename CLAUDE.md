@@ -49,7 +49,7 @@ Nicht offensichtliche Regeln daraus (Auszug):
 - Frontend: `<script setup lang="ts">`, Alias `@/` → `src/`. Einrückung mit Tabs im Frontend, 2 Spaces in `amplify/`.
 - Formatierung: maßgeblich sind `.editorconfig` und `.vscode/settings.json` (Tabs, 4 Spaces in `*.py`, 2 Spaces in `amplify/`, JSON/YAML/Markdown; LF, Zeilenumbruch am Dateiende). Es gibt keinen Formatter und `formatOnSave` ist aus: Bestehenden Code nicht umformatieren, Änderungen nur an den betroffenen Zeilen (keine reinen Whitespace-Diffs, einzeilige CSS-Regeln nicht aufklappen).
 - Module/Sidebar werden in `src/app/modules.ts` registriert (`isActive` steuert Sichtbarkeit).
-- Neue Lambda: `defineFunction` in `amplify/functions/<name>/resource.ts`, dann in `backend.ts` Tabelle granten, Env-Vars setzen, ggf. `attachTenantAuth(fn)` und Route an `httpApi` hängen. Ressourcennamen hängen an `envSuffix` (App-ID + Branch).
+- Neue Lambda: `defineFunction` in `amplify/functions/<name>/resource.ts` mit `runtime: 24` (alle Lambdas auf derselben Node-Version, Handler nur `async`, keine Callback-Handler), dann in `backend.ts` Tabelle granten, Env-Vars setzen, ggf. `attachTenantAuth(fn)` und Route an `httpApi` hängen. Ressourcennamen hängen an `envSuffix` (App-ID + Branch).
 
 ## Stolperfallen
 
