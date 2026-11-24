@@ -1208,7 +1208,7 @@ function guideText(webSurvey: boolean): string {
       `- \`options.min_label\` / \`options.max_label\` (rating, nps): optional, at most ${SCALE_LABEL_MAX_CHARS} characters, shown on the web page only.`,
       "",
       "## Web designs",
-      `- A web design is a set of tokens only (font family, text styles per role, colors, transparent background), no CSS. At most ${WEB_THEME_MAX_PER_TENANT} designs per installation; changing designs needs the role polly_deploy.`,
+      `- A web design is a set of tokens only (font family, text styles per role, colors, transparent background), no CSS. Corner radius, spacing, layout, logo and images are fixed and cannot be changed, neither here nor in the Polly app; \`fontFamily: rounded\` is a font style, not rounded corners. Do not offer these choices to the user. At most ${WEB_THEME_MAX_PER_TENANT} designs per installation; changing designs needs the role polly_deploy.`,
       "- New design: `create_web_theme` with a name and the tokens you want to set; everything else comes from the built-in Polly design.",
       "- Change a design: `get_web_theme` → `update_web_theme` with `expectedUpdatedAt` (its `updatedAt`) and only the tokens to change. On `theme_conflict` reload it and apply your changes again; on `theme_busy` repeat the same call.",
       "- A design is used by every survey that names it in `web_theme_id`, the default design by every survey without one. Changes are live at once (there is no Stage for designs): `update_web_theme` and `isDefault: true` only with `confirm: true` after the user has explicitly agreed.",
@@ -1429,7 +1429,7 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
     name: "create_web_theme",
     title: "Create web theme (design)",
     description:
-      "Creates a new web theme (web design: colors, font, text styles) for the survey web page. The server assigns the ID; tokens you leave out come from the built-in Polly theme. Making it the installation default (isDefault: true) changes every survey without web_theme_id at once and needs confirm: true after the user explicitly agreed.",
+      "Creates a new web theme (web design: colors, font, text styles) for the survey web page. Corner radius, spacing, layout, logo and images are fixed. The server assigns the ID; tokens you leave out come from the built-in Polly theme. Making it the installation default (isDefault: true) changes every survey without web_theme_id at once and needs confirm: true after the user explicitly agreed.",
     role: "deploy",
     webSurveyOnly: true,
     input: () => createWebThemeInput,
