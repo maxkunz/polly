@@ -15,6 +15,7 @@ import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_su
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 import inboundFlowTemplate from "@/templates/genesys/inboundFlowStructure.yaml?raw";
 import { normalizeFeatures, type FeatureFlags } from "@/domain/features/featureFlags";
+import { replaceInstallationRedirectUris } from "@/domain/setup/redirectUris";
 
 type FlowSetupResource = {
   id: string;
@@ -332,11 +333,18 @@ export async function runFullProvisioning(
 
     onProgress("Updating frontend OAuth redirect URL...");
     setupState.original.oauthUpdateAttempted = true;
+    // Frisch lesen: Andere Installationen (z. B. Branches) können den Client inzwischen geändert haben.
+    // Nur die eigenen Einträge (Setup-Link dieser Domain) ersetzen, fremde Redirect-URIs bleiben erhalten.
+    const currentFrontendOAuth = await getOAuthClientWithID(oauthFrontendId);
+    const redirectUris = replaceInstallationRedirectUris(currentFrontendOAuth.registeredRedirectUri, launchUrl, {
+      appUrl: launchUrl,
+      datatableIds: [datatableId],
+    });
     await apiLinks.putOauthClient(oauthFrontendId, {
-      name: frontendOAuth.name,
-      registeredRedirectUri: [launchUrl],
+      name: currentFrontendOAuth.name ?? frontendOAuth.name,
+      registeredRedirectUri: redirectUris,
       authorizedGrantType: "CODE",
-      scope: frontendOAuth.scope ?? [
+      scope: currentFrontendOAuth.scope ?? frontendOAuth.scope ?? [
         "integrations",
         "dialog",
         "routing",

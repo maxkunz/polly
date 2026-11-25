@@ -13,6 +13,7 @@ import { inactiveOAuth, deleteBackend, getOAuthClientWithID } from "@/services/g
 import { getErrorStatus, getErrorMessage, sleep } from "@/services/genesys/retry";
 import { disableMcp } from "@/services/SetupMcp";
 import { loadSetupMcpClient } from "@/services/metaSettingsService";
+import { belongsToInstallation, installationDatatableIds, replaceInstallationRedirectUris } from "@/domain/setup/redirectUris";
 
 export async function runFullDelete(
   setup: any,
@@ -83,29 +84,38 @@ export async function runFullDelete(
       }
     } else {
       const setupModeLink = buildSetupModeLink(domainName, oauthFrontendId, setup.launchUrl);
+      // Nur Einträge dieser Installation anfassen: Frontend-OAuth-Client und Integration können
+      // von anderen Installationen (z. B. Branches) mitbenutzt werden.
+      const installation = { appUrl: setupModeLink, datatableIds: installationDatatableIds(setup) };
       if (oauthFrontendId) {
         onProgress("Restoring frontend OAuth redirect URL...");
         const frontendOAuth = await getOAuthClientWithID(oauthFrontendId);
         await apiLinks.putOauthClient(oauthFrontendId, {
           name: frontendOAuth.name,
-          registeredRedirectUri: [setupModeLink],
+          registeredRedirectUri: replaceInstallationRedirectUris(frontendOAuth.registeredRedirectUri, setupModeLink, installation),
           authorizedGrantType: "CODE",
           scope: frontendOAuth.scope ?? ["integrations", "dialog", "routing", "architect", "content-management"],
         } as any);
       }
       if (integrationAppId) {
-        onProgress("Restoring app integration URL...");
         const current = await apiIntegration.getIntegrationConfigCurrent(integrationAppId);
-        await apiIntegration.putIntegrationConfigCurrent(integrationAppId, {
-          body: {
-            name: current.name,
-            version: current.version,
-            properties: { ...current.properties, url: setupModeLink },
-            advanced: current.advanced ?? {},
-            credentials: current.credentials ?? {},
-            notes: "Reset by app uninstall",
-          },
-        } as any);
+        const currentUrl = (current.properties as Record<string, any> | undefined)?.url;
+        // Zeigt die Integration inzwischen auf eine andere Installation, bleibt sie unverändert.
+        if (typeof currentUrl === "string" && currentUrl && !belongsToInstallation(currentUrl, installation)) {
+          onProgress("App integration URL points to another installation. Leaving it unchanged.");
+        } else {
+          onProgress("Restoring app integration URL...");
+          await apiIntegration.putIntegrationConfigCurrent(integrationAppId, {
+            body: {
+              name: current.name,
+              version: current.version,
+              properties: { ...current.properties, url: setupModeLink },
+              advanced: current.advanced ?? {},
+              credentials: current.credentials ?? {},
+              notes: "Reset by app uninstall",
+            },
+          } as any);
+        }
       }
     }
 

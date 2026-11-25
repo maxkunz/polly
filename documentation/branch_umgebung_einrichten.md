@@ -108,7 +108,7 @@ In der Genesys-Org, in der getestet wird:
    - Onboarding gegen das neue Backend (Eintrag in der Tenants-Tabelle mit Status `PENDING`)
    - Bot- und Inbound-Flow in Architect
    - Rollen `<projectTag>_polly_write`, `_polly_deploy`, `_polly_reporting`
-   - Redirect-URL des Frontend-OAuth-Clients und URL der App-Integration, jetzt **mit** `datatable_id` und `mapping_datatable_id`. Diese Parameter muss man nicht selbst nachtragen.
+   - Redirect-URL des Frontend-OAuth-Clients und URL der App-Integration, jetzt **mit** `datatable_id` und `mapping_datatable_id`. Diese Parameter muss man nicht selbst nachtragen. Teilen sich mehrere Branches einen Frontend-OAuth-Client, bleiben deren Redirect-URLs erhalten: Setup und Uninstall tauschen nur die Einträge der eigenen Installation (gleiche Domain und Pfad, ohne `datatable_id` oder mit der eigenen). Der Uninstall setzt die URL der App-Integration nur zurück, wenn sie noch auf diese Installation zeigt; ein Rollback stellt dagegen den Stand vor dem Setup wieder her.
 
 Alle angelegten Ressourcen stehen danach in `meta.setup` der `__meta`-Zeile. Der Uninstall braucht sie.
 
