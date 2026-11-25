@@ -104,7 +104,7 @@ In der Genesys-Org, in der getestet wird:
 3. Das Setup legt an bzw. trägt ein:
    - Division (oder übernimmt eine bestehende)
    - Data Tables `<projectTag>_polly_surveys` und `<projectTag>_polly_mapping`
-   - OAuth-Client für das Backend, Data-Action-Integration und Data Action (URL `<domain><präfix>/survey-responses`)
+   - OAuth-Client für das Backend, Data-Action-Integration und Data Action (URL `<domain><präfix>/survey-responses`). Genesys erlaubt einem Client nur Rollen, die die anlegende Person selbst hat (`bad.client.role`). Das Setup weist die neue Backend-Rolle deshalb kurz der eigenen Person zu und entfernt die Zuweisung danach wieder. Dafür braucht die Person das Recht, Rollen zuzuweisen (`authorization:grant:add`).
    - Onboarding gegen das neue Backend (Eintrag in der Tenants-Tabelle mit Status `PENDING`)
    - Bot- und Inbound-Flow in Architect
    - Rollen `<projectTag>_polly_write`, `_polly_deploy`, `_polly_reporting`

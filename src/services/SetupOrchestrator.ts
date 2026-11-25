@@ -2,14 +2,14 @@ import platformClient from "purecloud-platform-client-v2";
 import { createDivision } from "@/services/genesys/division";
 import { createDataTable, addDataTableRow, updateDataTableRow } from "@/services/genesys/dataTable";
 import { createIntegrationOfType, createDataAction, enableIntegration, getIntegrationWithID, applyDomainDatActPlaceholder } from "@/services/genesys/dataAction";
-import { applyRolePlaceholder, createGroup, createRole, GroupWithRole } from "@/services/genesys/groups";
+import { applyRolePlaceholder, createGroup, createRole, GroupWithRole, grantRoleToUser, revokeRoleFromUser } from "@/services/genesys/groups";
 import { updateIntegrationProperties } from "@/services/genesys/auth";
 import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
 import { makeJobForFlow, flowFetch } from "@/services/genesys/botFlow";
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
 import { API_PREFIX } from "@/constants/apiConstants";
-import { getErrorMessage } from "@/services/genesys/retry";
+import { getErrorMessage, isRateLimitError, runWithRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING } from "@/constants/permissionConstants";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
@@ -233,13 +233,15 @@ export async function runFullProvisioning(
     await GroupWithRole(backendGroup.id, targetDivision.id, backendRole.id);
 
     onProgress(`Creating backend OAuth client ${names.backendClient}...`);
-    const backendClient = await createBackendClient(
-      names.backendClient,
-      "CLIENT-CREDENTIALS",
-      86400,
-      [backendRole.id],
-      targetDivision.id,
-      `Backend client for ${projectTag}`
+    const backendClient = await withTemporaryRole(backendRole.id, targetDivision.id, onProgress, () =>
+      createBackendClient(
+        names.backendClient,
+        "CLIENT-CREDENTIALS",
+        86400,
+        [backendRole.id],
+        targetDivision.id,
+        `Backend client for ${projectTag}`
+      )
     );
     setupState.backendClient.id = backendClient.id;
     onProgress(`Backend OAuth client created (${backendClient.id})`);
@@ -525,6 +527,40 @@ function buildMetaRow(meta: Record<string, unknown>) {
     ...buildEmptySurveyRow("__meta"),
     Draft: JSON.stringify(meta),
   };
+}
+
+// Genesys lässt einem OAuth-Client nur Rollen zuweisen, die die anlegende Person selbst hat (`bad.client.role`).
+// Die Backend-Rolle ist gerade erst entstanden: kurz der Person zuweisen, Client anlegen, Zuweisung wieder entfernen.
+// Die Zuweisung wirkt in Genesys verzögert, deshalb wird `bad.client.role` einige Male wiederholt.
+async function withTemporaryRole<T>(
+  roleId: string,
+  divisionId: string,
+  onProgress: (msg: string) => void,
+  action: () => Promise<T>
+): Promise<T> {
+  const app = useAppStore();
+  const userId = app.currentUser?.id || String((await app.genesys.usersApi.getUsersMe())?.id ?? "");
+  if (!userId) throw new Error("Current Genesys user could not be determined for the temporary role assignment.");
+
+  onProgress("Temporarily assigning backend role to current user...");
+  await grantRoleToUser(userId, divisionId, roleId);
+  try {
+    return await runWithRetry({
+      action,
+      isRetryable: err => err?.body?.code === "bad.client.role" || isRateLimitError(err),
+      maxAttempts: 8,
+      retryDelayMs: 3000,
+      onRetry: ({ attempt }) => onProgress(`Role assignment not yet effective, retrying (${attempt})...`),
+    });
+  } finally {
+    try {
+      await revokeRoleFromUser(userId, divisionId, roleId);
+      onProgress("Temporary backend role assignment removed.");
+    } catch (err) {
+      // Kein Abbruch: Die Rolle wird spätestens beim Uninstall bzw. Rollback mit gelöscht.
+      onProgress(`Could not remove temporary backend role assignment: ${getErrorMessage(err)}`);
+    }
+  }
 }
 
 function resolveAppUrl(rawUrl?: string) {
