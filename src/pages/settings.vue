@@ -190,7 +190,7 @@ function startUninstall() {
 
 			<McpSettingsCard v-if="setup && app.hasFeature('mcp')" />
 
-			<Card>
+			<Card v-if="app.devView">
 				<template #title>{{ t("settings.setup.title") }}</template>
 				<template #content>
 					<div v-if="!setup" class="text-sm text-[var(--p-text-muted-color)]">
@@ -230,7 +230,7 @@ function startUninstall() {
 							</ul>
 						</div>
 
-						<div v-if="app.devView" class="flex flex-wrap items-center justify-between gap-4">
+						<div class="flex flex-wrap items-center justify-between gap-4">
 							<div class="space-y-1 text-sm text-[var(--p-text-muted-color)]">
 								<p>{{ t("settings.setup.updateHint") }}</p>
 								<p>{{ t("settings.setup.uninstallHint") }}</p>
