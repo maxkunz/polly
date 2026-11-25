@@ -147,5 +147,5 @@ export const routes: Record<string, ExtRoute<AnyLambdaContext>> = {
   "GET /ext/v1/reporting/aggregates": aggregates,
 };
 
-export const handler = (event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> =>
+export const handler = async (event: AnyApiGwEvent, context?: AnyLambdaContext): Promise<AnyResult> =>
   dispatchExtRoute(routes, event, context, headers, "[reporting_api]");

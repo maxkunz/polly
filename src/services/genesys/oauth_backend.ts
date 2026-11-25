@@ -81,19 +81,47 @@ export async function getAllClients() {
 }
 
 
- // inactivate Authorization-Code-Client: Genesys verlangt beim PUT Redirect-URIs und Scopes, deshalb vorher lesen
+ // PUT-Body eines Authorization-Code-Clients aus dem frisch gelesenen Stand: Der PUT ersetzt den ganzen Client,
+ // fehlende Felder (z. B. Beschreibung, Token-Laufzeit) setzt Genesys sonst auf den Standard zurück.
 
-export async function inactivateCodeGrantClient(clientId: string) {
-  const { oAuthApi } = useAppStore().genesys;
-  const client: any = await oAuthApi.getOauthClient(clientId);
-  return oAuthApi.putOauthClient(clientId, {
+function codeGrantClientBody(client: any) {
+  return {
     name: client.name,
     description: client.description,
     authorizedGrantType: 'CODE',
     accessTokenValiditySeconds: client.accessTokenValiditySeconds,
     registeredRedirectUri: client.registeredRedirectUri,
     scope: client.scope,
-    state: 'inactive'
+    state: client.state
+  };
+}
+
+
+ // inactivate Authorization-Code-Client: Genesys verlangt beim PUT Redirect-URIs und Scopes, deshalb vorher lesen
+
+export async function inactivateCodeGrantClient(clientId: string) {
+  const { oAuthApi } = useAppStore().genesys;
+  const client: any = await oAuthApi.getOauthClient(clientId);
+  return oAuthApi.putOauthClient(clientId, { ...codeGrantClientBody(client), state: 'inactive' } as any);
+}
+
+
+ // Scopes des Frontend-Clients, falls Genesys keine liefert (Rückfall beim PUT)
+
+export const DEFAULT_FRONTEND_SCOPES = ["integrations", "dialog", "routing", "architect", "content-management"];
+
+
+ // Redirect-URIs eines Authorization-Code-Clients ändern (z. B. des Frontend-Clients, den sich Branches teilen):
+ // frisch lesen, nur die Redirect-URIs über `update` ersetzen, alle übrigen Felder unverändert mitschicken.
+
+export async function updateCodeGrantRedirectUris(clientId: string, update: (current: string[]) => string[], fallbackScope: string[] = []) {
+  const { oAuthApi } = useAppStore().genesys;
+  const client: any = await oAuthApi.getOauthClient(clientId);
+  const body = codeGrantClientBody(client);
+  return oAuthApi.putOauthClient(clientId, {
+    ...body,
+    registeredRedirectUri: update(client.registeredRedirectUri ?? []),
+    scope: body.scope?.length ? body.scope : fallbackScope
   } as any);
 }
 

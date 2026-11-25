@@ -735,6 +735,10 @@ export const de = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Developer-Modus aktiviert",
+			disabled: "Developer-Modus deaktiviert"
+		},
 		webDefaults: {
 			title: "Web-Umfragen: Standard-Basis-URL",
 			label: "Standard-Basis-URL für Einladungslinks",
@@ -822,8 +826,8 @@ export const de = {
 			projectTagPlaceholder: "z. B. survey_app",
 			integration: "Integration",
 			integrationPlaceholder: "Integration auswählen",
-			oauthClient: "OAuth-Client",
-			oauthClientPlaceholder: "OAuth-Client auswählen",
+			oauthClient: "Frontend-OAuth-Client",
+			oauthClientPlaceholder: "Frontend-OAuth-Client auswählen",
 			division: "Division",
 			useExistingDivision: "Bestehende Division verwenden",
 			createNewDivision: "Neue Division erzeugen",

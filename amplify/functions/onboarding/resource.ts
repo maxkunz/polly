@@ -1,7 +1,7 @@
 import { defineFunction } from "@aws-amplify/backend";
 
 export const onboarding = defineFunction({
-  runtime: 20,
+  runtime: 24,
   timeoutSeconds: 30,
   resourceGroupName: "AppInfrastructure",
   environment: {

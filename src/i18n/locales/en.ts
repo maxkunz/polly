@@ -737,6 +737,10 @@ export const en: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Developer mode enabled",
+			disabled: "Developer mode disabled"
+		},
 		webDefaults: {
 			title: "Web surveys: default base URL",
 			label: "Default base URL for invitation links",
@@ -824,8 +828,8 @@ export const en: MessageSchema = {
 			projectTagPlaceholder: "e.g. survey_app",
 			integration: "Integration",
 			integrationPlaceholder: "Select an integration",
-			oauthClient: "OAuth Client",
-			oauthClientPlaceholder: "Select an OAuth client",
+			oauthClient: "Frontend OAuth client",
+			oauthClientPlaceholder: "Select a frontend OAuth client",
 			division: "Division",
 			useExistingDivision: "Use existing division",
 			createNewDivision: "Create new division",

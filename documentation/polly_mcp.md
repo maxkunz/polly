@@ -434,5 +434,5 @@ Gemessen mit `@modelcontextprotocol/sdk` 1.32.2, gebündelt wie Amplify (esbuild
 - **Eingabefehler:** Bei Schemafehlern liefert das SDK selbst ein `isError`-Ergebnis mit eigenem Text (`MCP error -32602: Input validation error …`), nicht `{ code: "invalid_input" }`. Für das Format aus Abschnitt 4.2 muss M8 die Eingabe selbst prüfen (lockeres `inputSchema`, eigenes `safeParse`) oder das SDK-Format übernehmen.
 - **Bundle:** 0,45 bis 0,73 MB minifiziert (gzip 120 bis 170 KB), je nach zod-Version. Den größten Anteil haben zod (bis 500 KB mit zod 4) und ajv (100 KB). Express, Hono und die OAuth-Teile des SDK landen nicht im Bundle, solange nur `server/mcp.js` und `server/webStandardStreamableHttp.js` importiert werden.
 - **zod:** Im Repo ist zod 3.25.17 (über Amplify). Das SDK zieht dann zusätzlich zod 4 als eigene Kopie. Beides funktioniert nebeneinander. In M8 `zod` (4.x) und das SDK als direkte Abhängigkeiten eintragen und nur `zod` 4 importieren.
-- **Kaltstart (lokal, Node 26):** Import ca. 25 ms, erster Request ca. 22 ms, RSS ca. 40 MB. Die Init-Zeit von Node 20 in Lambda kommt dazu. Auf AWS gemessen wird in M5/M8.
+- **Kaltstart (lokal, Node 26):** Import ca. 25 ms, erster Request ca. 22 ms, RSS ca. 40 MB. Die Init-Zeit von Node 24 in Lambda kommt dazu. Auf AWS gemessen wird in M5/M8.
 - **Spike-Code** wird nicht übernommen.

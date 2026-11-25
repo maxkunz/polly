@@ -1208,7 +1208,7 @@ function guideText(webSurvey: boolean): string {
       `- \`options.min_label\` / \`options.max_label\` (rating, nps): optional, at most ${SCALE_LABEL_MAX_CHARS} characters, shown on the web page only.`,
       "",
       "## Web designs",
-      `- A web design is a set of tokens only (font family, text styles per role, colors, transparent background), no CSS. At most ${WEB_THEME_MAX_PER_TENANT} designs per installation; changing designs needs the role polly_deploy.`,
+      `- A web design is a set of tokens only (font family, text styles per role, colors, transparent background), no CSS. Corner radius, spacing, layout, logo and images are fixed and cannot be changed, neither here nor in the Polly app; \`fontFamily: rounded\` is a font style, not rounded corners. Do not offer these choices to the user. At most ${WEB_THEME_MAX_PER_TENANT} designs per installation; changing designs needs the role polly_deploy.`,
       "- New design: `create_web_theme` with a name and the tokens you want to set; everything else comes from the built-in Polly design.",
       "- Change a design: `get_web_theme` → `update_web_theme` with `expectedUpdatedAt` (its `updatedAt`) and only the tokens to change. On `theme_conflict` reload it and apply your changes again; on `theme_busy` repeat the same call.",
       "- A design is used by every survey that names it in `web_theme_id`, the default design by every survey without one. Changes are live at once (there is no Stage for designs): `update_web_theme` and `isDefault: true` only with `confirm: true` after the user has explicitly agreed.",
@@ -1314,8 +1314,8 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   },
   {
     name: "list_web_themes",
-    title: "List web designs",
-    description: "Web designs of this installation, for the survey field web_theme_id.",
+    title: "List web themes (designs)",
+    description: "Web themes (web designs) of this installation, for the survey field web_theme_id.",
     role: "any",
     webSurveyOnly: true,
     input: () => emptyInput,
@@ -1324,8 +1324,8 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   },
   {
     name: "get_web_theme",
-    title: "Get web design",
-    description: "One web design with all tokens, updatedAt (needed for update_web_theme) and color contrast warnings.",
+    title: "Get web theme (design)",
+    description: "One web theme (web design) with all tokens, updatedAt (needed for update_web_theme) and color contrast warnings.",
     role: "any",
     webSurveyOnly: true,
     input: () => getWebThemeInput,
@@ -1427,9 +1427,9 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   },
   {
     name: "create_web_theme",
-    title: "Create web design",
+    title: "Create web theme (design)",
     description:
-      "Creates a new web design for the survey web page. The server assigns the ID; tokens you leave out come from the built-in Polly design. Making it the installation default (isDefault: true) changes every survey without web_theme_id at once and needs confirm: true after the user explicitly agreed.",
+      "Creates a new web theme (web design: colors, font, text styles) for the survey web page. Corner radius, spacing, layout, logo and images are fixed. The server assigns the ID; tokens you leave out come from the built-in Polly theme. Making it the installation default (isDefault: true) changes every survey without web_theme_id at once and needs confirm: true after the user explicitly agreed.",
     role: "deploy",
     webSurveyOnly: true,
     input: () => createWebThemeInput,
@@ -1439,9 +1439,9 @@ export const TOOLS_V1: readonly ToolDefinitionV1[] = [
   },
   {
     name: "update_web_theme",
-    title: "Change web design",
+    title: "Update web theme (design)",
     description:
-      "Changes name, tokens (as a patch) or default mark of a web design. The change is live at once for every survey using the design, including Prod and invitation links: only with confirm: true after the user explicitly agreed. expectedUpdatedAt must match the stored design (get_web_theme).",
+      "Changes name, tokens (as a patch) or default mark of a web theme (web design). The change is live at once for every survey using the theme, including Prod and invitation links: only with confirm: true after the user explicitly agreed. expectedUpdatedAt must match the stored design (get_web_theme).",
     role: "deploy",
     webSurveyOnly: true,
     input: () => updateWebThemeInput,

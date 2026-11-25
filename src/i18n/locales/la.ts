@@ -738,6 +738,10 @@ export const la: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Modus developeri activatus",
+			disabled: "Modus developeri deactivatus"
+		},
 		webDefaults: {
 			title: "Quaestiones interretiales: URL fundamentalis exempli",
 			label: "URL fundamentalis exempli pro nexibus invitationis",
@@ -825,8 +829,8 @@ export const la: MessageSchema = {
 			projectTagPlaceholder: "e. g. survey_app",
 			integration: "Integratio",
 			integrationPlaceholder: "Integrationem elige",
-			oauthClient: "Client OAuth",
-			oauthClientPlaceholder: "Clientem OAuth elige",
+			oauthClient: "Client OAuth frontend",
+			oauthClientPlaceholder: "Clientem OAuth frontend elige",
 			division: "Divisio",
 			useExistingDivision: "Divisione exstanti utere",
 			createNewDivision: "Novam divisionem crea",
