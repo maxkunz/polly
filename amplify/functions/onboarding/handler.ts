@@ -841,15 +841,19 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
   }
 
   let deletedWebThemes = 0;
+  const failedWebThemeTenantIds: string[] = [];
+  let webThemesError: string | null = null;
   for (const tenantId of wipedTenantIds) {
     try {
       deletedWebThemes += await clearWebThemesOfRemovedTenant(tenantId, wipedBackendClientIds);
     } catch (e: any) {
       console.warn("Failed to delete web themes (continuing)", { tenantId, errorName: e?.name, message: e?.message });
+      failedWebThemeTenantIds.push(tenantId);
+      webThemesError ??= e?.message ?? String(e);
     }
   }
 
-  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds, deletedMcpEntries, deletedWebThemes });
+  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds, deletedMcpEntries, deletedWebThemes, failedWebThemeTenantIds });
 
   return json(200, {
     message: "All tenants wiped",
@@ -858,6 +862,8 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     failedApiClientIds,
     deletedMcpEntries,
     deletedWebThemes,
+    failedWebThemeTenantIds,
+    webThemesError,
     forceDeleteSecrets,
   });
 }

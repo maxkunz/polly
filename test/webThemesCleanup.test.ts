@@ -57,7 +57,7 @@ function fakeClient(themeCount: number, unprocessedRounds = 0) {
 await test("löscht alle Designs und den Verwaltungseintrag #revision, in Stapeln zu höchstens 25", async () => {
 	const client = fakeClient(50);
 	const count = await deleteAllWebThemesOfTenant(TABLE, "t1", client);
-	assert.equal(count, 51);
+	assert.equal(count, 50, "Zähler ohne #revision");
 	assert.equal(new Set(client.deleted).size, 51);
 	assert.ok(client.deleted.includes("#revision"));
 	assert.deepEqual(client.batchSizes, [25, 25, 1]);
@@ -65,7 +65,7 @@ await test("löscht alle Designs und den Verwaltungseintrag #revision, in Stapel
 
 await test("unverarbeitete Einträge werden wiederholt", async () => {
 	const client = fakeClient(3, 2);
-	assert.equal(await deleteAllWebThemesOfTenant(TABLE, "t1", client, 0), 4);
+	assert.equal(await deleteAllWebThemesOfTenant(TABLE, "t1", client, 0), 3);
 	assert.equal(new Set(client.deleted).size, 4);
 });
 

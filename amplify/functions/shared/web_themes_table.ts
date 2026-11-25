@@ -259,7 +259,7 @@ export async function saveWebThemes(
  * Löscht alle Einträge eines Mandanten aus `WebSurveyThemesTable`, einschließlich des Verwaltungseintrags
  * `#revision` (deshalb eine eigene Query nur auf die Schlüssel statt `queryWebThemeItems`). Löschen per BatchWrite
  * in Stapeln zu 25; unverarbeitete Einträge werden mit wachsender Wartezeit wiederholt, bleiben nach
- * `BATCH_WRITE_MAX_ATTEMPTS` Versuchen welche übrig, wird geworfen. Gibt die Anzahl gelöschter Einträge zurück.
+ * `BATCH_WRITE_MAX_ATTEMPTS` Versuchen welche übrig, wird geworfen. Gibt die Anzahl gelöschter Designs zurück (ohne `#revision`).
  * Andere Lambdas liefern höchstens noch so lange alte Designs, wie `themeCache` hält (30 s); `surveys_api` cacht
  * zusätzlich ganze Antworten 60 s, dort sind es bis zu 90 s.
  */
@@ -283,5 +283,5 @@ export async function deleteAllWebThemesOfTenant(
       requests = (result.UnprocessedItems?.[tableName] ?? []) as Record<string, unknown>[];
     }
   }
-  return items.length;
+  return items.filter((item) => item.themeId !== REVISION_ITEM_ID).length;
 }
