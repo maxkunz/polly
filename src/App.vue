@@ -7,6 +7,7 @@ import ConfirmDialog from "primevue/confirmdialog";
 import Button from "primevue/button";
 import Card from "primevue/card";
 import Toast from "primevue/toast";
+import { useToast } from "primevue/usetoast";
 import { RouterView, useRoute, useRouter } from "vue-router";
 
 import AppSidebar from "@/components/layout/AppSidebar.vue";
@@ -21,6 +22,7 @@ const router = useRouter();
 const controlBar = useControlBarStore();
 const { t, locale } = useI18n();
 const primevue = usePrimeVue();
+const toast = useToast();
 
 type InitializationErrorType = "invalid-parameters" | "invalid-session" | "initialization-failed";
 
@@ -61,6 +63,11 @@ watch(
 watch(
 	() => app.devView,
 	devView => {
+		toast.add({
+			severity: "info",
+			summary: t(devView ? "settings.devMode.enabled" : "settings.devMode.disabled"),
+			life: 2500
+		});
 		if (!devView && isDevOnlyLocale(locale.value)) restoreStoredLocale();
 	}
 );

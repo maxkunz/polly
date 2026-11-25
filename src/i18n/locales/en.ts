@@ -37,6 +37,10 @@ export const en: MessageSchema = {
 			unnamedSurvey: "Survey {index}"
 		},
 		settings: {
+		devMode: {
+			enabled: "Developer mode enabled",
+			disabled: "Developer mode disabled"
+		},
 			title: "Settings",
 			description: "Global settings and setup metadata."
 		}

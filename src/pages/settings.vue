@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 
@@ -26,6 +26,18 @@ const router = useRouter();
 const toast = useToast();
 const { t, locale } = useI18n();
 const { selectModules } = moduleRegistry();
+
+const setupCard = ref<{ $el?: HTMLElement } | null>(null);
+
+// Hotkey schaltet die Dev-Ansicht ein: zur Setup-Karte springen, damit die Änderung sofort sichtbar ist
+watch(
+	() => app.devView,
+	async devView => {
+		if (!devView) return;
+		await nextTick();
+		setupCard.value?.$el?.scrollIntoView({ behavior: "smooth", block: "start" });
+	}
+);
 
 const moduleMeta = computed(() => selectModules({ keys: ["settings"] })[0]);
 
@@ -190,7 +202,7 @@ function startUninstall() {
 
 			<McpSettingsCard v-if="setup && app.hasFeature('mcp')" />
 
-			<Card v-if="app.devView">
+			<Card v-if="app.devView" ref="setupCard">
 				<template #title>{{ t("settings.setup.title") }}</template>
 				<template #content>
 					<div v-if="!setup" class="text-sm text-[var(--p-text-muted-color)]">

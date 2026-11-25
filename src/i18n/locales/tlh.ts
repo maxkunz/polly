@@ -38,6 +38,10 @@ export const tlh: MessageSchema = {
 			unnamedSurvey: "yu'ghItlh {index}"
 		},
 		settings: {
+		devMode: {
+			enabled: "Developer mode enabled",
+			disabled: "Developer mode disabled"
+		},
 			title: "SeHmey",
 			description: "Hoch SeHmey 'ej jommeH De'."
 		}
