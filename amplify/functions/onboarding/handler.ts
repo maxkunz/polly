@@ -30,6 +30,7 @@ import { loadTenantByTenantId, resolveTenantContext } from "../shared/tenant_aut
 import type { ApiClientItem } from "../shared/api_client_auth";
 import { parseRequestedScopes, scopeString, toFullScope } from "../shared/api_scopes";
 import { clearMcpEntries, disableTenantMcp, hasMcpState } from "../shared/mcp_tenant";
+import { deleteAllWebThemesOfTenant } from "../shared/web_themes_table";
 
 import { isGenesysRegion, normalizeGenesysRegion } from "../shared/genesys_regions";
 
@@ -41,6 +42,8 @@ const SECRETS_PREFIX = process.env.SECRETS_PREFIX ?? "gc-clients"; // name prefi
 const TOKEN_URL = process.env.TOKEN_URL ?? "";
 // API-Clients der Kunden-API (/ext/v1); fehlt die Variable, antworten nur die api-clients-Routen mit 500
 const API_CLIENTS_TABLE_NAME = process.env.API_CLIENTS_TABLE_NAME ?? "";
+// Web-Designs (WebSurveyThemesTable); fehlt die Variable, wird beim Löschen eines Mandanten nichts aufgeräumt
+const WEB_THEMES_TABLE_NAME = process.env.WEB_THEMES_TABLE_NAME ?? "";
 const API_CLIENT_TOKEN_VALIDITY_MINUTES = 60;
 const API_CLIENT_LABEL_MAX_CHARS = 100;
 const COGNITO_CLIENT_NAME_MAX_CHARS = 128;
@@ -676,6 +679,16 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     mcpError = e?.message ?? String(e);
   }
 
+  // Web-Designs, Fehler ebenfalls nicht abbrechend
+  let deletedWebThemes = 0;
+  let webThemesError: string | null = null;
+  try {
+    deletedWebThemes = await clearWebThemesOfRemovedTenant(tenantId, new Set([backendClientId]));
+  } catch (e: any) {
+    console.warn("Failed to delete web themes of tenant", { tenantId, errorName: e?.name, message: e?.message });
+    webThemesError = e?.message ?? String(e);
+  }
+
   return json(200, {
     message: "Tenant deleted",
     backendClientId,
@@ -686,6 +699,8 @@ async function deleteTenantRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     apiClientsError,
     deletedMcpEntries,
     mcpError,
+    deletedWebThemes,
+    webThemesError,
   });
 }
 
@@ -825,7 +840,16 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     }
   }
 
-  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds, deletedMcpEntries });
+  let deletedWebThemes = 0;
+  for (const tenantId of wipedTenantIds) {
+    try {
+      deletedWebThemes += await clearWebThemesOfRemovedTenant(tenantId, wipedBackendClientIds);
+    } catch (e: any) {
+      console.warn("Failed to delete web themes (continuing)", { tenantId, errorName: e?.name, message: e?.message });
+    }
+  }
+
+  console.warn("WIPING ALL TENANTS - DONE", { deletedCount, deletedApiClients, failedApiClientIds, deletedMcpEntries, deletedWebThemes });
 
   return json(200, {
     message: "All tenants wiped",
@@ -833,6 +857,7 @@ async function wipeAllRoute(event: AnyApiGwEvent): Promise<AnyResult> {
     deletedApiClients,
     failedApiClientIds,
     deletedMcpEntries,
+    deletedWebThemes,
     forceDeleteSecrets,
   });
 }
@@ -1115,4 +1140,23 @@ async function clearMcpOfRemovedTenant(
   if (!tenantId) return 0;
   if (await hasRemainingTenantItems(tenantId, removedBackendClientIds)) return 0;
   return clearMcpEntries(tenantId);
+}
+
+/**
+ * Löscht die Web-Designs einer tenantId (einschließlich Verwaltungseintrag), sofern kein weiterer Eintrag der
+ * Tenants-Tabelle mit dieser tenantId übrig ist. Beim Uninstall bleiben sie bewusst erhalten (Neuinstallation
+ * mit derselben tenantId). Gibt die Anzahl gelöschter Einträge zurück.
+ */
+async function clearWebThemesOfRemovedTenant(
+  tenantId: string,
+  removedBackendClientIds: ReadonlySet<string>
+): Promise<number> {
+  if (!tenantId) return 0;
+  if (!WEB_THEMES_TABLE_NAME) {
+    // Nicht still überspringen: Die Aufrufer melden den Fehler (`webThemesError` bzw. Log), sonst gälten die Designs als gelöscht.
+    console.warn("WEB_THEMES_TABLE_NAME not configured; skipping web theme cleanup", { tenantId });
+    throw new Error("WEB_THEMES_TABLE_NAME not configured");
+  }
+  if (await hasRemainingTenantItems(tenantId, removedBackendClientIds)) return 0;
+  return deleteAllWebThemesOfTenant(WEB_THEMES_TABLE_NAME, tenantId);
 }

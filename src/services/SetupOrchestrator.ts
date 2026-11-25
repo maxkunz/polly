@@ -4,18 +4,18 @@ import { createDataTable, addDataTableRow, updateDataTableRow } from "@/services
 import { createIntegrationOfType, createDataAction, enableIntegration, getIntegrationWithID, applyDomainDatActPlaceholder } from "@/services/genesys/dataAction";
 import { applyRolePlaceholder, createGroup, createRole, GroupWithRole, grantRoleToUser, revokeRoleFromUser } from "@/services/genesys/groups";
 import { updateIntegrationProperties } from "@/services/genesys/auth";
-import { createBackendClient, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
+import { createBackendClient, DEFAULT_FRONTEND_SCOPES, getOAuthClientWithID, updateCodeGrantRedirectUris } from "@/services/genesys/oauth_backend";
 import { makeJobForFlow, flowFetch } from "@/services/genesys/botFlow";
 import { useAppStore } from "@/stores/appStore";
 import { getGenesysRegion } from "@/services/genesysRegion";
 import { API_PREFIX } from "@/constants/apiConstants";
-import { getErrorMessage, isRateLimitError, runWithRetry } from "@/services/genesys/retry";
+import { getErrorMessage, getErrorStatus, isRateLimitError, runWithRetry } from "@/services/genesys/retry";
 import { POLLY_ROLE_WRITE, POLLY_ROLE_DEPLOY, POLLY_ROLE_REPORTING } from "@/constants/permissionConstants";
 import surveyResponseActionJson from "@/templates/genesys/dataActionStructure_survey_responses.json";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 import inboundFlowTemplate from "@/templates/genesys/inboundFlowStructure.yaml?raw";
 import { normalizeFeatures, type FeatureFlags } from "@/domain/features/featureFlags";
-import { replaceInstallationRedirectUris } from "@/domain/setup/redirectUris";
+import { otherInstallationRedirectUris, replaceInstallationRedirectUris } from "@/domain/setup/redirectUris";
 
 type FlowSetupResource = {
   id: string;
@@ -86,7 +86,6 @@ export async function runFullProvisioning(
     mappingDataTableId: string;
   };
 }> {
-  const apiLinks = new platformClient.OAuthApi();
   const apiIntegration = new platformClient.IntegrationsApi();
   const app = useAppStore();
   if (app.domain.meta.setup?.status !== "installed" && hasSetupResources(app.domain.meta.setup)) {
@@ -336,24 +335,18 @@ export async function runFullProvisioning(
     onProgress("Updating frontend OAuth redirect URL...");
     setupState.original.oauthUpdateAttempted = true;
     // Frisch lesen: Andere Installationen (z. B. Branches) können den Client inzwischen geändert haben.
-    // Nur die eigenen Einträge (Setup-Link dieser Domain) ersetzen, fremde Redirect-URIs bleiben erhalten.
-    const currentFrontendOAuth = await getOAuthClientWithID(oauthFrontendId);
-    const redirectUris = replaceInstallationRedirectUris(currentFrontendOAuth.registeredRedirectUri, launchUrl, {
-      appUrl: launchUrl,
-      datatableIds: [datatableId],
-    });
-    await apiLinks.putOauthClient(oauthFrontendId, {
-      name: currentFrontendOAuth.name ?? frontendOAuth.name,
-      registeredRedirectUri: redirectUris,
-      authorizedGrantType: "CODE",
-      scope: currentFrontendOAuth.scope ?? frontendOAuth.scope ?? [
-        "integrations",
-        "dialog",
-        "routing",
-        "architect",
-        "content-management",
-      ],
-    } as any);
+    // Nur die eigenen Einträge (Setup-Link dieser Domain) ersetzen, fremde Redirect-URIs und übrige Felder bleiben erhalten.
+    const installation = { appUrl: launchUrl, datatableIds: [datatableId] };
+    let staleRedirectUris: string[] = [];
+    await updateCodeGrantRedirectUris(oauthFrontendId, current => {
+      staleRedirectUris = otherInstallationRedirectUris(current, installation);
+      return replaceInstallationRedirectUris(current, launchUrl, installation);
+    }, frontendOAuth.scope?.length ? frontendOAuth.scope : DEFAULT_FRONTEND_SCOPES);
+    if (staleRedirectUris.length) {
+      // Nur melden: Kann eine andere Installation derselben Domain sein oder ein Rest früherer Installationen.
+      onProgress(`Note: frontend OAuth client has ${staleRedirectUris.length} redirect URI(s) of other installations on this domain `
+        + `(other data tables or leftovers of earlier installations). Remove unused ones manually: ${staleRedirectUris.join(", ")}`);
+    }
 
     onProgress("Updating app integration URL...");
     const currentIntegrationConfig = await apiIntegration.getIntegrationConfigCurrent(integrationAppId);
@@ -554,11 +547,19 @@ async function withTemporaryRole<T>(
     });
   } finally {
     try {
-      await revokeRoleFromUser(userId, divisionId, roleId);
+      await runWithRetry({
+        action: () => revokeRoleFromUser(userId, divisionId, roleId),
+        isRetryable: err => isRateLimitError(err) || (getErrorStatus(err) ?? 0) >= 500,
+        maxAttempts: 4,
+        retryDelayMs: 3000,
+        onRetry: ({ attempt }) => onProgress(`Removing temporary backend role assignment failed, retrying (${attempt})...`),
+      });
       onProgress("Temporary backend role assignment removed.");
     } catch (err) {
-      // Kein Abbruch: Die Rolle wird spätestens beim Uninstall bzw. Rollback mit gelöscht.
-      onProgress(`Could not remove temporary backend role assignment: ${getErrorMessage(err)}`);
+      // Kein Abbruch, aber deutlich melden: Nach einem erfolgreichen Setup kommt evtl. nie ein Uninstall,
+      // der die Rolle (und damit die Zuweisung) löscht.
+      onProgress(`--ERROR-- Could not remove temporary backend role assignment: ${getErrorMessage(err)}. `
+        + `Remove the role "${roleId}" from your user in the Polly division manually (Admin → People → Roles).`);
     }
   }
 }

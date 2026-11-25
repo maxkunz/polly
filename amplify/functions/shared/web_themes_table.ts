@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { BatchWriteCommand, DynamoDBDocumentClient, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { WEB_THEME_MAX_PER_TENANT, type WebTheme, type WebThemeTokens } from "../../../src/domain/webTheme/webTheme";
 import { TtlCache } from "./ttl_cache";
 import { toWebTheme } from "./web_themes";
@@ -18,6 +18,16 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
  */
 const REVISION_ITEM_ID = "#revision";
 
+/** Nur `send` des Document Clients, damit Tests einen nachgebauten Client übergeben können. */
+export interface DynamoSender {
+  send(command: any): Promise<any>;
+}
+
+/** BatchWrite nimmt höchstens 25 Einträge pro Aufruf. */
+const BATCH_WRITE_MAX_ITEMS = 25;
+/** Versuche je Stapel, wenn DynamoDB Einträge unverarbeitet zurückgibt (Drosselung). */
+const BATCH_WRITE_MAX_ATTEMPTS = 6;
+
 /**
  * Alle Designs eines Mandanten mit einer Query auf PK `tenantId` (höchstens 50 Designs, wenige KB;
  * trotzdem paginiert), ohne den Verwaltungseintrag. `projection` z. B. `"themeId, isDefault"`.
@@ -34,12 +44,13 @@ export async function queryWebThemeItems(
 async function queryTenantItems(
   tableName: string,
   tenantId: string,
-  projection?: string
+  projection?: string,
+  client: DynamoSender = ddb
 ): Promise<Record<string, unknown>[]> {
   const items: Record<string, unknown>[] = [];
   let startKey: Record<string, unknown> | undefined;
   do {
-    const result = await ddb.send(
+    const result = await client.send(
       new QueryCommand({
         TableName: tableName,
         KeyConditionExpression: "tenantId = :tenantId",
@@ -242,4 +253,35 @@ export async function saveWebThemes(
     updated: themes.length - created,
     clearedDefaults: previousDefaults.length,
   };
+}
+
+/**
+ * Löscht alle Einträge eines Mandanten aus `WebSurveyThemesTable`, einschließlich des Verwaltungseintrags
+ * `#revision` (deshalb eine eigene Query nur auf die Schlüssel statt `queryWebThemeItems`). Löschen per BatchWrite
+ * in Stapeln zu 25; unverarbeitete Einträge werden mit wachsender Wartezeit wiederholt, bleiben nach
+ * `BATCH_WRITE_MAX_ATTEMPTS` Versuchen welche übrig, wird geworfen. Gibt die Anzahl gelöschter Einträge zurück.
+ * Andere Lambdas liefern höchstens noch so lange alte Designs, wie `themeCache` hält (30 s); `surveys_api` cacht
+ * zusätzlich ganze Antworten 60 s, dort sind es bis zu 90 s.
+ */
+export async function deleteAllWebThemesOfTenant(
+  tableName: string,
+  tenantId: string,
+  client: DynamoSender = ddb,
+  retryDelayMs = 100
+): Promise<number> {
+  const items = await queryTenantItems(tableName, tenantId, "tenantId, themeId", client);
+  for (let i = 0; i < items.length; i += BATCH_WRITE_MAX_ITEMS) {
+    let requests: Record<string, unknown>[] = items
+      .slice(i, i + BATCH_WRITE_MAX_ITEMS)
+      .map((item) => ({ DeleteRequest: { Key: { tenantId: item.tenantId, themeId: item.themeId } } }));
+    for (let attempt = 1; requests.length > 0; attempt++) {
+      if (attempt > BATCH_WRITE_MAX_ATTEMPTS) {
+        throw new Error(`Could not delete ${requests.length} web theme items of tenant ${tenantId}`);
+      }
+      if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, retryDelayMs * 2 ** (attempt - 2)));
+      const result = await client.send(new BatchWriteCommand({ RequestItems: { [tableName]: requests } }));
+      requests = (result.UnprocessedItems?.[tableName] ?? []) as Record<string, unknown>[];
+    }
+  }
+  return items.length;
 }

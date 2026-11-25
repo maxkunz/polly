@@ -282,6 +282,8 @@ Umsetzung: `components/survey/SurveyInvitationView.vue`, Logik in `composables/u
 
 `PAY_PER_REQUEST`, `RETAIN`. Höchstens 50 Designs pro Mandant (prüft die Lambda). `web_survey` liest, `web_themes` liest und schreibt.
 
+**Aufräumen:** `/onboarding/delete` und `wipeAllRoute` (Lambda `onboarding`) löschen alle Einträge des Mandanten einschließlich des Verwaltungseintrags `#revision` (`deleteAllWebThemesOfTenant` in `shared/web_themes_table.ts`, BatchWrite in Stapeln zu 25 mit Wiederholung unverarbeiteter Einträge), sofern kein weiterer Eintrag der Tenants-Tabelle mit derselben `tenantId` übrig ist. Ein Fehler bricht das Löschen nicht ab (Antwort: `deletedWebThemes`, `webThemesError`; auch eine fehlende Variable `WEB_THEMES_TABLE_NAME` wird dort gemeldet). Der Uninstall lässt die Designs stehen: Eine Neuinstallation mit derselben `tenantId` findet sie wieder. Andere Lambdas liefern nach dem Löschen höchstens noch so lange alte Designs, wie ihr Cache hält (30 s); `surveys_api` cacht zusätzlich ganze Antworten 60 s, dort sind es bis zu 90 s.
+
 ### Tabelle `InvitationTokens`
 
 | Attribut | Bedeutung |

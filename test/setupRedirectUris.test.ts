@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import {
 	belongsToInstallation,
 	installationDatatableIds,
-	replaceInstallationRedirectUris
+	otherInstallationRedirectUris,
+	replaceInstallationRedirectUris,
+	restoreInstallationRedirectUris
 } from "../src/domain/setup/redirectUris";
 
 let passed = 0;
@@ -72,6 +74,27 @@ test("Datatable-IDs kommen aus meta.setup und der Launch-URL", () => {
 	assert.deepEqual(installationDatatableIds({ dataTable: { id: "dt-web" }, launchUrl: webLaunch("dt-web") }), ["dt-web"]);
 	assert.deepEqual(installationDatatableIds({ dataTable: { id: "" }, launchUrl: webLaunch("dt-web") }), ["dt-web"]);
 	assert.deepEqual(installationDatatableIds(undefined), []);
+});
+
+test("Rollback holt nur die eigenen Einträge zurück und behält Einträge, die andere Branches inzwischen ergänzt haben", () => {
+	// Gesichert vor dem Setup: [mainSetup, webSetup]; während des Setups hat main seinen Launch-Link gesetzt
+	const mainSetup = `${MAIN}/?${CTX}`;
+	const original = [mainSetup, webSetup];
+	const current = [mainLaunch, webLaunch("dt-web")];
+	const result = restoreInstallationRedirectUris(current, original, { appUrl: webLaunch("dt-web"), datatableIds: ["dt-web"] });
+	assert.deepEqual(result, [mainLaunch, webSetup]);
+});
+
+test("Rollback ohne gesicherten Stand entfernt nur die eigenen Einträge", () => {
+	const result = restoreInstallationRedirectUris([mainLaunch, webLaunch("dt-web")], undefined, { appUrl: webSetup, datatableIds: ["dt-web"] });
+	assert.deepEqual(result, [mainLaunch]);
+});
+
+test("Fremde Einträge derselben App werden erkannt, andere Domains und eigene nicht", () => {
+	const scope = { appUrl: webLaunch("dt-neu"), datatableIds: ["dt-neu"] };
+	const current = [mainLaunch, webSetup, webLaunch("dt-alt"), webLaunch("dt-neu"), `${WEB}/other/?${CTX}&datatable_id=x`];
+	assert.deepEqual(otherInstallationRedirectUris(current, scope), [webLaunch("dt-alt")]);
+	assert.deepEqual(otherInstallationRedirectUris(undefined, scope), []);
 });
 
 console.log(`\n${passed} Tests bestanden`);

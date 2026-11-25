@@ -9,11 +9,11 @@ import { deleteIntegration } from "@/services/genesys/integration";
 import { deleteDataAction } from "@/services/genesys/dataAction";
 import { deleteFlow, flowFetch } from "@/services/genesys/botFlow";
 import { deleteGroup, deleteRole } from "@/services/genesys/groups";
-import { inactiveOAuth, deleteBackend, getOAuthClientWithID } from "@/services/genesys/oauth_backend";
+import { inactiveOAuth, deleteBackend, DEFAULT_FRONTEND_SCOPES, updateCodeGrantRedirectUris } from "@/services/genesys/oauth_backend";
 import { getErrorStatus, getErrorMessage, sleep } from "@/services/genesys/retry";
 import { disableMcp } from "@/services/SetupMcp";
 import { loadSetupMcpClient } from "@/services/metaSettingsService";
-import { belongsToInstallation, installationDatatableIds, replaceInstallationRedirectUris } from "@/domain/setup/redirectUris";
+import { belongsToInstallation, installationDatatableIds, replaceInstallationRedirectUris, restoreInstallationRedirectUris } from "@/domain/setup/redirectUris";
 
 export async function runFullDelete(
   setup: any,
@@ -24,7 +24,6 @@ export async function runFullDelete(
   if (!setup) return;
   const app = useAppStore();
   app.initGenesysClients();
-  const apiLinks = new platformClient.OAuthApi();
   const apiIntegration = new platformClient.IntegrationsApi();
   const domainName = setup.domainName || window.location.origin;
   const oauthFrontendId = setup.oauthFrontend?.id || setup.oauthFrontendId;
@@ -71,7 +70,17 @@ export async function runFullDelete(
     if (options.rollback) {
       if (setup.original?.oauthUpdateAttempted && oauthFrontendId) {
         onProgress("Restoring original frontend OAuth configuration...");
-        await apiLinks.putOauthClient(oauthFrontendId, setup.original.oauthFrontend);
+        // Nicht die ganze gesicherte Liste zurückschreiben: Andere Installationen (Branches) können während des
+        // Setups eigene Einträge ergänzt haben. Nur die Einträge dieser Installation auf den gesicherten Stand setzen.
+        const installation = {
+          appUrl: setup.launchUrl || buildSetupModeLink(domainName, oauthFrontendId, setup.launchUrl),
+          datatableIds: installationDatatableIds(setup),
+        };
+        await updateCodeGrantRedirectUris(
+          oauthFrontendId,
+          current => restoreInstallationRedirectUris(current, setup.original.oauthFrontend?.registeredRedirectUri, installation),
+          setup.original.oauthFrontend?.scope?.length ? setup.original.oauthFrontend.scope : DEFAULT_FRONTEND_SCOPES
+        );
         setup.original.oauthUpdateAttempted = false;
       }
       if (setup.original?.integrationUpdateAttempted && integrationAppId) {
@@ -89,13 +98,11 @@ export async function runFullDelete(
       const installation = { appUrl: setupModeLink, datatableIds: installationDatatableIds(setup) };
       if (oauthFrontendId) {
         onProgress("Restoring frontend OAuth redirect URL...");
-        const frontendOAuth = await getOAuthClientWithID(oauthFrontendId);
-        await apiLinks.putOauthClient(oauthFrontendId, {
-          name: frontendOAuth.name,
-          registeredRedirectUri: replaceInstallationRedirectUris(frontendOAuth.registeredRedirectUri, setupModeLink, installation),
-          authorizedGrantType: "CODE",
-          scope: frontendOAuth.scope ?? ["integrations", "dialog", "routing", "architect", "content-management"],
-        } as any);
+        await updateCodeGrantRedirectUris(
+          oauthFrontendId,
+          current => replaceInstallationRedirectUris(current, setupModeLink, installation),
+          DEFAULT_FRONTEND_SCOPES
+        );
       }
       if (integrationAppId) {
         const current = await apiIntegration.getIntegrationConfigCurrent(integrationAppId);

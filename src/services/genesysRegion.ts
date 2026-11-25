@@ -1,7 +1,7 @@
 import platformClient from "purecloud-platform-client-v2";
 import { BUILD_GENESYS_REGION, DEFAULT_GENESYS_REGION } from "@/constants/genesysConstants";
 
-// Merkt sich die Region über den Login-Redirect (Implicit Grant) hinweg
+// Merkt sich die Region über den Login-Redirect (PKCE) hinweg
 const REGION_STORAGE_KEY = "gc_region";
 
 const KNOWN_REGIONS = new Set<string>(

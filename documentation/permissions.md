@@ -42,7 +42,7 @@ Der MCP-Zugang für KI-Clients ([polly_mcp.md](polly_mcp.md)) handelt im Namen e
 
 1. Das Setup legt die Rollen mit dem Projekt-Tag als Prefix an: `<projectTag>_polly_write`, `<projectTag>_polly_deploy` und `<projectTag>_polly_reporting` (in `meta.setup.frontendRoles`, Uninstall löscht sie wieder). Sie benötigen keine Permissions, entscheidend ist nur der Name. Groß-/Kleinschreibung wird ignoriert. Geprüft wird die Rolle mit dem Prefix der eigenen Installation **oder** die unpräfixierte Rolle (`polly_write`, `polly_deploy`, `polly_reporting`, Legacy-Check). Die präfixierten Rollen berechtigen nur in der eigenen Installation, sodass mehrere Installationen in einer Org getrennt berechtigt werden können. Die unpräfixierte Rolle gilt dagegen in allen Installationen und eignet sich daher für Kunden mit mehreren Mandanten/Installationen als Rolle für „Meta-Admins“, die überall berechtigt sein sollen.
 2. Die Rollen den gewünschten Usern zuweisen.
-3. Der Implicit-Grant-OAuth-Client des Frontends braucht ggf. den Scope `authorization:readonly`, damit `GET /api/v2/users/me?expand=authorization` die Rollen liefert. Schlägt der Abruf fehl, arbeitet der User read-only (Warnung in der Browser-Konsole).
+3. Der OAuth-Client des Frontends (Authorization Code mit PKCE) braucht ggf. den Scope `authorization:readonly`, damit `GET /api/v2/users/me?expand=authorization` die Rollen liefert. Schlägt der Abruf fehl, arbeitet der User read-only (Warnung in der Browser-Konsole).
 
 ## Technik
 

@@ -46,6 +46,27 @@ export function replaceInstallationRedirectUris(current: readonly string[] | und
 	return [...new Set([...kept, entry])];
 }
 
+// Rollback: Einträge dieser Installation entfernen und nur ihre Einträge aus dem gesicherten Stand `original`
+// zurückholen. Einträge, die andere Installationen inzwischen ergänzt haben, bleiben erhalten (kein Zurückschreiben
+// der ganzen gesicherten Liste).
+export function restoreInstallationRedirectUris(current: readonly string[] | undefined, original: readonly string[] | undefined, scope: InstallationScope): string[] {
+	const kept = (current ?? []).filter(uri => typeof uri === "string" && uri && !belongsToInstallation(uri, scope));
+	const ownOriginal = (original ?? []).filter(uri => typeof uri === "string" && uri && belongsToInstallation(uri, scope));
+	return [...new Set([...kept, ...ownOriginal])];
+}
+
+// Einträge derselben App (Ursprung + Pfad) mit einer fremden `datatable_id`: entweder eine andere Installation
+// derselben Domain oder Reste früherer Installationen (abgebrochener Uninstall, von Hand gelöschte Data Table).
+// Nicht unterscheidbar, deshalb nur melden, nie automatisch entfernen.
+export function otherInstallationRedirectUris(current: readonly string[] | undefined, scope: InstallationScope): string[] {
+	const appUrl = parse(scope.appUrl);
+	if (!appUrl) return [];
+	return (current ?? []).filter(uri => {
+		const url = typeof uri === "string" && uri ? parse(uri) : null;
+		return Boolean(url && sameApp(url, appUrl) && !belongsToInstallation(uri, scope));
+	});
+}
+
 // Datatable-IDs einer Installation aus `meta.setup` (Tabelle selbst und Launch-URL als Rückfall,
 // falls die ID bei einem abgebrochenen Uninstall schon geleert wurde).
 export function installationDatatableIds(setup: { dataTable?: { id?: string }; launchUrl?: string } | undefined): string[] {
