@@ -37,10 +37,6 @@ export const fr: MessageSchema = {
 			unnamedSurvey: "Enquête {index}"
 		},
 		settings: {
-		devMode: {
-			enabled: "Mode développeur activé",
-			disabled: "Mode développeur désactivé"
-		},
 			title: "Paramètres",
 			description: "Paramètres globaux et métadonnées d'installation."
 		}
@@ -741,6 +737,10 @@ export const fr: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Mode développeur activé",
+			disabled: "Mode développeur désactivé"
+		},
 		webDefaults: {
 			title: "Sondages web : URL de base par défaut",
 			label: "URL de base par défaut pour les liens d'invitation",

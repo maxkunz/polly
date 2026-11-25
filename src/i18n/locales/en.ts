@@ -37,10 +37,6 @@ export const en: MessageSchema = {
 			unnamedSurvey: "Survey {index}"
 		},
 		settings: {
-		devMode: {
-			enabled: "Developer mode enabled",
-			disabled: "Developer mode disabled"
-		},
 			title: "Settings",
 			description: "Global settings and setup metadata."
 		}
@@ -741,6 +737,10 @@ export const en: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Developer mode enabled",
+			disabled: "Developer mode disabled"
+		},
 		webDefaults: {
 			title: "Web surveys: default base URL",
 			label: "Default base URL for invitation links",

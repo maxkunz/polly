@@ -38,10 +38,6 @@ export const la: MessageSchema = {
 			unnamedSurvey: "Percontatio {index}"
 		},
 		settings: {
-		devMode: {
-			enabled: "Modus developeri activatus",
-			disabled: "Modus developeri deactivatus"
-		},
 			title: "Optiones",
 			description: "Optiones universales et metadata institutionis."
 		}
@@ -742,6 +738,10 @@ export const la: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Modus developeri activatus",
+			disabled: "Modus developeri deactivatus"
+		},
 		webDefaults: {
 			title: "Quaestiones interretiales: URL fundamentalis exempli",
 			label: "URL fundamentalis exempli pro nexibus invitationis",

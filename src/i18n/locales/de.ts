@@ -35,10 +35,6 @@ export const de = {
 			unnamedSurvey: "Umfrage {index}"
 		},
 		settings: {
-		devMode: {
-			enabled: "Developer-Modus aktiviert",
-			disabled: "Developer-Modus deaktiviert"
-		},
 			title: "Einstellungen",
 			description: "Globale Einstellungen und Setup-Metadaten."
 		}
@@ -739,6 +735,10 @@ export const de = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Developer-Modus aktiviert",
+			disabled: "Developer-Modus deaktiviert"
+		},
 		webDefaults: {
 			title: "Web-Umfragen: Standard-Basis-URL",
 			label: "Standard-Basis-URL für Einladungslinks",

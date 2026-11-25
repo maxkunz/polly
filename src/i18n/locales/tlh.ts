@@ -38,10 +38,6 @@ export const tlh: MessageSchema = {
 			unnamedSurvey: "yu'ghItlh {index}"
 		},
 		settings: {
-		devMode: {
-			enabled: "Developer mode enabled",
-			disabled: "Developer mode disabled"
-		},
 			title: "SeHmey",
 			description: "Hoch SeHmey 'ej jommeH De'."
 		}
@@ -742,6 +738,10 @@ export const tlh: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Developer mode enabled",
+			disabled: "Developer mode disabled"
+		},
 		webDefaults: {
 			title: "Web QIn: URL wa'",
 			label: "URL wa' Dunmey",
