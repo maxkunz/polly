@@ -739,8 +739,8 @@ export const tlh: MessageSchema = {
 	},
 	settings: {
 		devMode: {
-			enabled: "Developer mode enabled",
-			disabled: "Developer mode disabled"
+			enabled: "chenmoHwI' mIw Qap",
+			disabled: "chenmoHwI' mIw Qapbe'"
 		},
 		webDefaults: {
 			title: "Web QIn: URL wa'",
