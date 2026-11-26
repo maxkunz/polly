@@ -738,6 +738,10 @@ export const tlh: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "chenmoHwI' mIw Qap",
+			disabled: "chenmoHwI' mIw Qapbe'"
+		},
 		webDefaults: {
 			title: "Web QIn: URL wa'",
 			label: "URL wa' Dunmey",
@@ -825,8 +829,8 @@ export const tlh: MessageSchema = {
 			projectTagPlaceholder: "mu'mey: survey_app",
 			integration: "muvmoHwI'",
 			integrationPlaceholder: "muvmoHwI' yIwIv",
-			oauthClient: "OAuth De'wI'",
-			oauthClientPlaceholder: "OAuth De'wI' yIwIv",
+			oauthClient: "Frontend OAuth De'wI'",
+			oauthClientPlaceholder: "Frontend OAuth De'wI' yIwIv",
 			division: "Sep",
 			useExistingDivision: "Sep ngo' yIlo'",
 			createNewDivision: "Sep chu' yIchenmoH",

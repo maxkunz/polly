@@ -22,7 +22,7 @@ Die Flags stehen in der Zeile `__meta` der Umfrage-Data-Table (`<projectTag>_pol
 - **Onboarding:** Im Setup-Assistenten (Schritt „Installation“, Abschnitt „Funktionen“) wählt man die Flags aus. Die Vorauswahl kommt aus der Registry (`defaultOnSetup`). Das Setup schreibt die Auswahl nach `__meta`.
 - **Nach der Installation** ändert man Flags nur direkt in der Data Table. Die App hat dafür bewusst keine Oberfläche. Die Änderung wirkt nach dem Neuladen der App.
 - **Bestehende Installationen** (vor Einführung der Flags) haben keinen Block `features`, dort sind alle Flags aus. Zum Freischalten ergänzt man im JSON des Felds `Draft` der Zeile `__meta` z. B. `"features": {"web_survey": true}`. Die übrigen Felder bleiben unverändert.
-- **Einstellungen → Setup** zeigt unter „Aktivierte Funktionen“ nur die aktiven Flags.
+- **Einstellungen → Setup** zeigt unter „Aktivierte Funktionen“ nur die aktiven Flags. Die Setup-Karte ist nur in der Dev-Ansicht sichtbar.
 
 ## Flags
 

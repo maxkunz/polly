@@ -737,6 +737,10 @@ export const fr: MessageSchema = {
 		}
 	},
 	settings: {
+		devMode: {
+			enabled: "Mode développeur activé",
+			disabled: "Mode développeur désactivé"
+		},
 		webDefaults: {
 			title: "Sondages web : URL de base par défaut",
 			label: "URL de base par défaut pour les liens d'invitation",
@@ -824,8 +828,8 @@ export const fr: MessageSchema = {
 			projectTagPlaceholder: "p. ex. survey_app",
 			integration: "Intégration",
 			integrationPlaceholder: "Sélectionner une intégration",
-			oauthClient: "Client OAuth",
-			oauthClientPlaceholder: "Sélectionner un client OAuth",
+			oauthClient: "Client OAuth frontend",
+			oauthClientPlaceholder: "Sélectionner un client OAuth frontend",
 			division: "Division",
 			useExistingDivision: "Utiliser une division existante",
 			createNewDivision: "Créer une nouvelle division",

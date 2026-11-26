@@ -12,7 +12,7 @@ export const pollyArchyUpload = defineFunction((scope) => {
   return new NodejsFunction(scope, "PollyArchyUpload", {
     entry: join(__dirname, "handler.ts"),
     handler: "handler",
-    runtime: Runtime.NODEJS_20_X,
+    runtime: Runtime.NODEJS_24_X,
     architecture: Architecture.X86_64,
     timeout: Duration.seconds(30),
     bundling: {

@@ -90,7 +90,7 @@ Danach den Branch **neu bauen**, denn Vite setzt die Variable beim Build ein.
 
 In der Genesys-Org, in der getestet wird:
 
-1. **OAuth-Client für das Frontend** (Code-/Implicit-Grant): Die URL des Branches als Redirect-URL eintragen, z. B. `https://feature-websurveys.<appId>.amplifyapp.com/`. Scopes wie bei der bestehenden Installation, für die Rollenprüfung ggf. `authorization:readonly` (siehe [permissions.md](permissions.md)).
+1. **OAuth-Client für das Frontend** (Authorization Code mit PKCE, Typ `CODE`): Die URL des Branches als Redirect-URL eintragen, z. B. `https://feature-websurveys.<appId>.amplifyapp.com/`. Scopes wie bei der bestehenden Installation, für die Rollenprüfung ggf. `authorization:readonly` (siehe [permissions.md](permissions.md)).
 2. **App-Integration** (Custom Client Application) anlegen. Die URL **ohne** `datatable_id` und `mapping_datatable_id` eintragen. Fehlen die beiden Parameter, startet die App im Setup-Modus:
    ```
    https://feature-websurveys.<appId>.amplifyapp.com/?gcHostOrigin=https%3A%2F%2Fapps.mypurecloud.de&gcTargetEnv=prod&client_id=<OAuth-Client-ID>
@@ -104,11 +104,11 @@ In der Genesys-Org, in der getestet wird:
 3. Das Setup legt an bzw. trägt ein:
    - Division (oder übernimmt eine bestehende)
    - Data Tables `<projectTag>_polly_surveys` und `<projectTag>_polly_mapping`
-   - OAuth-Client für das Backend, Data-Action-Integration und Data Action (URL `<domain><präfix>/survey-responses`)
+   - OAuth-Client für das Backend, Data-Action-Integration und Data Action (URL `<domain><präfix>/survey-responses`). Genesys erlaubt einem Client nur Rollen, die die anlegende Person selbst hat (`bad.client.role`). Das Setup weist die neue Backend-Rolle deshalb kurz der eigenen Person zu und entfernt die Zuweisung danach wieder. Dafür braucht die Person das Recht, Rollen zuzuweisen (`authorization:grant:add`).
    - Onboarding gegen das neue Backend (Eintrag in der Tenants-Tabelle mit Status `PENDING`)
    - Bot- und Inbound-Flow in Architect
    - Rollen `<projectTag>_polly_write`, `_polly_deploy`, `_polly_reporting`
-   - Redirect-URL des Frontend-OAuth-Clients und URL der App-Integration, jetzt **mit** `datatable_id` und `mapping_datatable_id`. Diese Parameter muss man nicht selbst nachtragen.
+   - Redirect-URL des Frontend-OAuth-Clients und URL der App-Integration, jetzt **mit** `datatable_id` und `mapping_datatable_id`. Diese Parameter muss man nicht selbst nachtragen. Teilen sich mehrere Branches einen Frontend-OAuth-Client, bleiben deren Redirect-URLs erhalten: Setup und Uninstall tauschen nur die Einträge der eigenen Installation (gleiche Domain und Pfad, ohne `datatable_id` oder mit der eigenen). Der Uninstall setzt die URL der App-Integration nur zurück, wenn sie noch auf diese Installation zeigt; ein Rollback stellt dagegen die URL der App-Integration vor dem Setup wieder her, bei den Redirect-URLs aber nur die Einträge der eigenen Installation (Einträge, die andere Branches während des Setups ergänzt haben, bleiben erhalten). Alle übrigen Felder des OAuth-Clients (z. B. Beschreibung, Token-Laufzeit) bleiben unverändert. Setup und Uninstall zweier Installationen, die sich einen Frontend-OAuth-Client teilen, **nicht gleichzeitig** ausführen: Der Client wird gelesen und komplett zurückgeschrieben (ohne Versionsprüfung), der spätere Schreibvorgang kann sonst die Einträge des anderen überschreiben. Findet das Setup Redirect-URLs derselben Domain mit fremder `datatable_id` (andere Installation oder Reste früherer Installationen), meldet es sie im Protokoll; ungenutzte muss man von Hand entfernen.
 
 Alle angelegten Ressourcen stehen danach in `meta.setup` der `__meta`-Zeile. Der Uninstall braucht sie.
 

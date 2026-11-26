@@ -56,6 +56,17 @@ export async function GroupWithRole(subjectId: string, divisionId: string, roleI
   return usersApi.postAuthorizationSubjectDivisionRole(subjectId, divisionId, roleId, opts);
 }
 
+// Rolle direkt einer Person in einer Division zuweisen bzw. wieder entziehen (z. B. kurzzeitig für das Setup)
+export async function grantRoleToUser(userId: string, divisionId: string, roleId: string) {
+  const { usersApi } = useAppStore().genesys;
+  return usersApi.postAuthorizationSubjectDivisionRole(userId, divisionId, roleId, { subjectType: "PC_USER" });
+}
+
+export async function revokeRoleFromUser(userId: string, divisionId: string, roleId: string) {
+  const { usersApi } = useAppStore().genesys;
+  return usersApi.deleteAuthorizationSubjectDivisionRole(userId, divisionId, roleId);
+}
+
 export function getYourDivision() {
   const { objectsApi } = useAppStore().genesys;
   return objectsApi.getAuthorizationDivisions();

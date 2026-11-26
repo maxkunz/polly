@@ -366,6 +366,13 @@ onboardingCfn.addPropertyOverride(
   mcpOAuthTable.tableName,
 );
 
+// Delete und Wipe räumen die Web-Designs des Mandanten ab (shared/web_themes_table.ts); beim Uninstall bleiben sie
+webSurveyThemesTable.grant(onboardingLambda, "dynamodb:Query", "dynamodb:BatchWriteItem");
+onboardingCfn.addPropertyOverride(
+  "Environment.Variables.WEB_THEMES_TABLE_NAME",
+  webSurveyThemesTable.tableName,
+);
+
 new cognito.UserPoolResourceServer(stack, "BackendResourceServer", {
   userPool: backend.auth.resources.userPool,
   identifier: "backend",

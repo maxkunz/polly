@@ -42,6 +42,11 @@ Optionen (jeweils auch per Umgebungsvariable):
                           alle Verbindungen (API und Genesys) über einen SOCKS5-Proxy leiten,
                           DNS wird dabei auch über den Proxy aufgelöst.
                           Benötigt: pip install pysocks
+  --use-env-file          lädt tools/run_api_tests.env (Vorlage: run_api_tests.env.sample) und
+                          übernimmt daraus GENESYS_TOKEN, API_URL, GENESYS_REGION; die Werte der
+                          Datei haben Vorrang vor bereits gesetzten Umgebungsvariablen. Ohne
+                          angegebene Quelle wird SURVEY_ID als --surveyid verwendet, DATATABLE_ID
+                          erspart die Suche der Data Table nach Namen (--table entfällt dann).
   API_URL, GENESYS_REGION wie in api_tests.py
 
 ACHTUNG: Schreibt echte Daten in die deployte API.
@@ -105,6 +110,40 @@ def enable_socks5(proxy):
 
 def env_int(name, default):
     return int(os.environ.get(name, default))
+
+
+ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_api_tests.env")
+
+
+def load_env_file(path):
+    """Liest eine Shell-Datei mit `export NAME="wert"`-Zeilen (wie run_api_tests.env).
+
+    Kommentare und leere Werte werden übersprungen, spätere Zeilen überschreiben frühere.
+    Es wird nichts ausgeführt, nur Zeile für Zeile gelesen."""
+    values = {}
+    try:
+        f = open(path, encoding="utf-8")
+    except OSError as e:
+        sys.exit(f"Error: Env-Datei {path} nicht lesbar: {e.strerror}")
+    with f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].lstrip()
+            name, sep, raw = line.partition("=")
+            if not sep:
+                continue
+            raw = raw.strip()
+            if raw[:1] in ('"', "'"):
+                end = raw.find(raw[0], 1)
+                value = raw[1:end] if end > 0 else raw[1:]
+            else:
+                value = raw.split("#", 1)[0].strip()
+            if value:
+                values[name.strip()] = value
+    return values
 
 
 # ---------------------------------------------------------------- Antwort-Generatoren
@@ -443,10 +482,11 @@ def find_survey_id_by_title(region, token, table_id, table_name, title):
     return matches[0]["id"]
 
 
-def load_survey_from_datatable(region, token, table_name, survey_id=None, title=None):
+def load_survey_from_datatable(region, token, table_name, survey_id=None, title=None, table_id=None):
     """Lädt das Draft-Feld der Zeile survey_<uuid> aus der Genesys Data Table
-    (die UUID kommt direkt oder wird über den Titel aus survey_list ermittelt)."""
-    table_id = find_table_id(region, token, table_name)
+    (die UUID kommt direkt oder wird über den Titel aus survey_list ermittelt;
+    ist die ID der Data Table bekannt, entfällt die Suche nach dem Namen)."""
+    table_id = table_id or find_table_id(region, token, table_name)
     if survey_id is None:
         survey_id = find_survey_id_by_title(region, token, table_id, table_name, title)
         vprint(f"==== Titel '{title}' -> Umfrage-ID {survey_id} ====")
@@ -477,9 +517,21 @@ def main():
                     help="TLS-Zertifikate nicht prüfen (nur zum Testen)")
     ap.add_argument("--socks5", default=os.environ.get("SOCKS5_PROXY"), metavar="HOST:PORT",
                     help="Verbindungen über SOCKS5-Proxy leiten (benötigt pysocks)")
+    ap.add_argument("--use-env-file", action="store_true",
+                    help="Token, API-URL, Region, SURVEY_ID und DATATABLE_ID aus tools/run_api_tests.env verwenden")
     args = ap.parse_args()
     global VERBOSE, SSL_CONTEXT
     VERBOSE = args.verbose
+    datatable_id = None
+    if args.use_env_file:
+        env = load_env_file(ENV_FILE)
+        for key in ("GENESYS_TOKEN", "API_URL", "GENESYS_REGION"):
+            if key in env:
+                os.environ[key] = env[key]
+        datatable_id = env.get("DATATABLE_ID")
+        if not (args.survey or args.surveyid or args.surveytitle):
+            args.surveyid = env.get("SURVEY_ID")
+        print(f"==== Env-Datei: {ENV_FILE} ====", file=sys.stderr)
     if args.socks5:
         enable_socks5(args.socks5)
         print(f"==== SOCKS5-Proxy: {args.socks5.rpartition('@')[2]} ====", file=sys.stderr)
@@ -498,7 +550,8 @@ def main():
     if args.surveyid or args.surveytitle:
         source = f"Data Table '{args.table}', " + (f"survey_{args.surveyid}" if args.surveyid
                                                    else f"Titel '{args.surveytitle}'")
-        survey = load_survey_from_datatable(region, token, args.table, args.surveyid, args.surveytitle)
+        survey = load_survey_from_datatable(region, token, args.table, args.surveyid, args.surveytitle,
+                                            datatable_id)
     elif args.survey:
         source = args.survey
         with open(args.survey, encoding="utf-8") as f:
