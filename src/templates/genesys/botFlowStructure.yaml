@@ -285,6 +285,12 @@ botFlow:
           noValue: true
         isInput: true
         isOutput: true
+    - stringVariable:
+        name: Slot.yes_no
+        initialValue:
+          noValue: true
+        isInput: true
+        isOutput: true
   settingsActionDefaults:
     askForIntent:
       voiceEndOfInputTimeout:
@@ -330,10 +336,12 @@ botFlow:
   tasks:
     - task:
         name: yes_no_question
-        refId: yes_no_question_15
+        refId: yes_no_question_11
+        trackingId: 11
         actions:
           - updateData:
               name: update data before yes-no question
+              trackingId: 20
               statements:
                 - string:
                     variable: Flow.flow_next_question_id
@@ -353,6 +361,7 @@ botFlow:
                       exp: NOT_SET
           - askForBoolean:
               name: ask for yes-no
+              trackingId: 21
               question:
                 exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
               noInput:
@@ -366,11 +375,12 @@ botFlow:
                   actions:
                     - updateData:
                         name: update after yes-no after yes
+                        trackingId: 22
                         statements:
                           - string:
                               variable: Flow.flow_next_question_id
                               value:
-                                exp: "if (ToString(Flow.question.options.yes_next_question_id) == \"null\", \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.yes_next_question_id)\n)"
+                                exp: "if (IsNotSetOrEmpty(GetJsonObjectProperty(Flow.question.options, \"yes_next_question_id\")), \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.yes_next_question_id)\n)"
                           - json:
                               variable: Flow.flow_reporting_question_result
                               value:
@@ -378,16 +388,17 @@ botFlow:
                           - string:
                               variable: Flow.question_answer
                               value:
-                                lit: yes
+                                lit: "yes"
                 "no":
                   actions:
                     - updateData:
                         name: update after yes-no after no
+                        trackingId: 23
                         statements:
                           - string:
                               variable: Flow.flow_next_question_id
                               value:
-                                exp: "if (ToString(Flow.question.options.no_next_question_id) == \"null\", \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.no_next_question_id)\n)"
+                                exp: "if (IsNotSetOrEmpty(GetJsonObjectProperty(Flow.question.options, \"no_next_question_id\")), \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.no_next_question_id)\n)"
                           - json:
                               variable: Flow.flow_reporting_question_result
                               value:
@@ -395,21 +406,24 @@ botFlow:
                           - string:
                               variable: Flow.question_answer
                               value:
-                                lit: no
+                                lit: "no"
                 maxNoInputs:
                   enabled: true
                   actions:
                     - callTask:
                         name: Call Task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 24
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 maxNoMatches:
                   enabled: true
                   actions:
                     - callTask:
                         name: Call Task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 25
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
           - updateData:
               name: Update Data after yesno question
+              trackingId: 26
               statements:
                 - string:
                     variable: Flow.flow_next_question_id
@@ -417,24 +431,30 @@ botFlow:
                       exp: "if (Flow.flow_next_question_id == \"null\",\n\tNOT_SET\n\t,\n\tFlow.flow_next_question_id\n)"
           - endTask:
               name: End Task
+              trackingId: 27
               outputPath:
                 name: default
     - task:
         name: goodbye_and_exit
-        refId: goodbye_and_exit_17
+        refId: goodbye_and_exit_12
+        trackingId: 12
         actions:
           - communicate:
               name: goodbye prompt
+              trackingId: 28
               communication:
                 exp: "MakeCommunication(\n  \"Vielen Dank, dass sie sich Zeit für uns genommen haben.\")"
           - exitBotFlow:
               name: Exit Bot Flow
+              trackingId: 29
     - task:
         name: question_loop
-        refId: question_loop_29
+        refId: question_loop_13
+        trackingId: 13
         actions:
           - loop:
               name: Question Loop
+              trackingId: 30
               currentIndex:
                 var: Flow.question_loop_counter
               loopCount:
@@ -444,6 +464,7 @@ botFlow:
                   actions:
                     - updateData:
                         name: Update Data
+                        trackingId: 31
                         statements:
                           - json:
                               variable: Flow.question
@@ -451,6 +472,7 @@ botFlow:
                                 exp: Flow.survey_questions[Flow.question_loop_counter]
                     - decision:
                         name: Decision
+                        trackingId: 32
                         condition:
                           exp: ToString(Flow.question.id) == Flow.flow_next_question_id
                         outputs:
@@ -458,13 +480,16 @@ botFlow:
                             actions:
                               - loopExit:
                                   name: Exit Loop
+                                  trackingId: 33
           - endTask:
               name: End Task
+              trackingId: 34
               outputPath:
                 name: default
     - task:
         name: rating_question
-        refId: rating_question_46
+        refId: rating_question_14
+        trackingId: 14
         variables:
           - stringVariable:
               name: Task.rating_equals_next_question_id
@@ -517,6 +542,7 @@ botFlow:
         actions:
           - updateData:
               name: update data before rating question
+              trackingId: 35
               statements:
                 - integer:
                     variable: Task.rating_min_value
@@ -560,6 +586,7 @@ botFlow:
                       exp: NOT_SET
           - askForSlot:
               name: ask for rating
+              trackingId: 36
               slot:
                 name: rating
               question:
@@ -579,6 +606,7 @@ botFlow:
                   actions:
                     - updateData:
                         name: update after rating question
+                        trackingId: 37
                         statements:
                           - string:
                               variable: Flow.flow_next_question_id
@@ -593,22 +621,26 @@ botFlow:
                   actions:
                     - callTask:
                         name: call Task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 38
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 maxNoMatches:
                   enabled: true
                   actions:
                     - callTask:
                         name: call Task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 39
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 skipResponseCapture:
                   enabled: false
           - endTask:
               name: End Rating Task
+              trackingId: 40
               outputPath:
                 name: default
     - task:
         name: choice_question
-        refId: choice_question_50
+        refId: choice_question_15
+        trackingId: 15
         variables:
           - stringVariable:
               name: Task.choice_default_next_question_id
@@ -631,6 +663,7 @@ botFlow:
         actions:
           - updateData:
               name: update data before choice question
+              trackingId: 41
               statements:
                 - string:
                     variable: Flow.question_answer
@@ -654,6 +687,7 @@ botFlow:
                       exp: "Split(\n  Replace(\n    Replace(\n      Replace(\n        Replace(\n          Replace(\n            ToString(GetJsonObjectProperty(Flow.question, \"synonyms\")),\n            \"[\", \"\"\n          ), \n          \"]\", \"\"\n        ), \n        \"\\\"\", \"\"\n      ),\n      \",\", \"|\"\n    ),\n    \";\", \",\"\n  ), \n  \"|\"\n)"
           - askForSlot:
               name: ask choice
+              trackingId: 42
               slot:
                 name: choice
               question:
@@ -662,9 +696,8 @@ botFlow:
                 noValue: true
               confirmationMode:
                 lit: never
-              customizeNoInput:
-                noInputReprompts:
-                  lit: []
+              noInput:
+                exp: MakeCommunication(  ToCommunication(Flow.question_reprompt))
               noMatch:
                 exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
               voiceEndOfInputTimeout:
@@ -674,6 +707,7 @@ botFlow:
                   actions:
                     - updateData:
                         name: udate data after choice question
+                        trackingId: 43
                         statements:
                           - integer:
                               variable: Task.choice_label_index
@@ -700,22 +734,26 @@ botFlow:
                   actions:
                     - callTask:
                         name: call task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 44
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 maxNoMatches:
                   enabled: true
                   actions:
                     - callTask:
                         name: call task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 45
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 skipResponseCapture:
                   enabled: false
           - endTask:
               name: End Task
+              trackingId: 46
               outputPath:
                 name: default
     - task:
         name: nps_question
-        refId: nps_question_53
+        refId: nps_question_16
+        trackingId: 16
         variables:
           - stringVariable:
               name: Task.nps_equals_next_question_id
@@ -756,6 +794,7 @@ botFlow:
         actions:
           - updateData:
               name: update data before nps question
+              trackingId: 47
               statements:
                 - string:
                     variable: Flow.question_answer
@@ -787,6 +826,7 @@ botFlow:
                       exp: ToString(Flow.question.conditional_next_question[2].next_question_id)
           - askForSlot:
               name: ask for nps
+              trackingId: 48
               slot:
                 name: nps
               question:
@@ -806,6 +846,7 @@ botFlow:
                   actions:
                     - updateData:
                         name: update data after NPS question
+                        trackingId: 49
                         statements:
                           - string:
                               variable: Flow.flow_next_question_id
@@ -824,25 +865,30 @@ botFlow:
                   actions:
                     - callTask:
                         name: call task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 50
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 maxNoMatches:
                   enabled: true
                   actions:
                     - callTask:
                         name: call task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 51
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 skipResponseCapture:
                   enabled: false
           - endTask:
               name: End Task
+              trackingId: 52
               outputPath:
                 name: default
     - task:
         name: comment_question
-        refId: comment_question_81
+        refId: comment_question_17
+        trackingId: 17
         actions:
           - updateData:
               name: update date before comment question
+              trackingId: 53
               statements:
                 - string:
                     variable: Flow.question_answer
@@ -850,6 +896,7 @@ botFlow:
                       exp: NOT_SET
           - askForSlot:
               name: Ask for Slot
+              trackingId: 54
               slot:
                 name: comment
               question:
@@ -870,6 +917,7 @@ botFlow:
                   actions:
                     - updateData:
                         name: Update Data
+                        trackingId: 55
                         statements:
                           - string:
                               variable: Flow.flow_next_question_id
@@ -884,25 +932,30 @@ botFlow:
                   actions:
                     - callTask:
                         name: call task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 56
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 maxNoMatches:
                   enabled: true
                   actions:
                     - callTask:
                         name: call task check mandatory question
-                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_104]"
+                        trackingId: 57
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
                 skipResponseCapture:
                   enabled: false
           - endTask:
               name: End Task
+              trackingId: 58
               outputPath:
                 name: default
     - task:
         name: check_mandatory_question
-        refId: check_mandatory_question_104
+        refId: check_mandatory_question_18
+        trackingId: 18
         actions:
           - decision:
               name: Decision
+              trackingId: 59
               condition:
                 exp: Flow.question_mandatory == true
               outputs:
@@ -910,11 +963,13 @@ botFlow:
                   actions:
                     - callTask:
                         name: Call Task
-                        targetTaskRef: "/botFlow/tasks/task[goodbye_and_exit_17]"
+                        trackingId: 60
+                        targetTaskRef: "/botFlow/tasks/task[goodbye_and_exit_12]"
                 "no":
                   actions:
                     - updateData:
                         name: Update after rating NI
+                        trackingId: 61
                         statements:
                           - string:
                               variable: Flow.flow_next_question_id
@@ -922,18 +977,112 @@ botFlow:
                                 exp: Flow.question_default_next_id
           - endTask:
               name: End Task
+              trackingId: 62
               outputPath:
                 name: default
     - task:
         name: error_and_exit
-        refId: error_and_exit_120
+        refId: error_and_exit_19
+        trackingId: 19
         actions:
           - communicate:
               name: Communicate
+              trackingId: 63
               communication:
                 exp: "MakeCommunication(\n  \"Oh, da ist etwas schief gegangen.\")"
           - exitBotFlow:
               name: Exit Bot Flow
+              trackingId: 64
+    - task:
+        name: yesno_question
+        refId: yesno_question_98
+        trackingId: 98
+        actions:
+          - updateData:
+              name: update data before yes-no question
+              trackingId: 99
+              statements:
+                - string:
+                    variable: Flow.flow_next_question_id
+                    value:
+                      exp: Flow.question_default_next_id
+                - json:
+                    variable: Flow.flow_reporting_question_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_question_result, "id", Flow.question_id)
+                - json:
+                    variable: Flow.flow_reporting_question_result
+                    value:
+                      exp: SetJsonObjectProperty(Flow.flow_reporting_question_result, "name", Flow.question_name)
+                - string:
+                    variable: Flow.question_answer
+                    value:
+                      exp: NOT_SET
+          - askForSlot:
+              name: Ask for Slot
+              trackingId: 108
+              slot:
+                name: yes_no
+              question:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_prompt))"
+              customValidation:
+                noValue: true
+              confirmationMode:
+                lit: never
+              noInput:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              noMatch:
+                exp: "MakeCommunication(\n  ToCommunication(Flow.question_reprompt))"
+              voiceEndOfInputTimeout:
+                noValue: true
+              outputs:
+                default:
+                  actions:
+                    - updateData:
+                        name: update after yes-no
+                        trackingId: 101
+                        statements:
+                          - string:
+                              variable: Flow.flow_next_question_id
+                              value:
+                                exp: "if (ToString(Slot.yes_no) == \"ja\",\n   if (IsNotSetOrEmpty(GetJsonObjectProperty(Flow.question.options, \"yes_next_question_id\")), \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.yes_next_question_id)\n   )\n  ,\n  if (IsNotSetOrEmpty(GetJsonObjectProperty(Flow.question.options, \"no_next_question_id\")), \n      Flow.question_default_next_id\n      ,\n      ToString(Flow.question.options.no_next_question_id)\n  )\n)"
+                          - json:
+                              variable: Flow.flow_reporting_question_result
+                              value:
+                                exp: "if (ToString(Slot.yes_no) == \"ja\",\n  SetJsonObjectProperty(Flow.flow_reporting_question_result, \"result\", \"yes\")\n  ,\n  SetJsonObjectProperty(Flow.flow_reporting_question_result, \"result\", \"no\")\n)"
+                          - string:
+                              variable: Flow.question_answer
+                              value:
+                                exp: Slot.yes_no
+                maxNoInputs:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: Call Task check mandatory question
+                        trackingId: 103
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
+                maxNoMatches:
+                  enabled: true
+                  actions:
+                    - callTask:
+                        name: Call Task check mandatory question
+                        trackingId: 104
+                        targetTaskRef: "/botFlow/tasks/task[check_mandatory_question_18]"
+                skipResponseCapture:
+                  enabled: false
+          - updateData:
+              name: Update Data after yesno question
+              trackingId: 105
+              statements:
+                - string:
+                    variable: Flow.flow_next_question_id
+                    value:
+                      exp: "if (Flow.flow_next_question_id == \"null\",\n\tNOT_SET\n\t,\n\tFlow.flow_next_question_id\n)"
+          - endTask:
+              name: End Task
+              trackingId: 106
+              outputPath:
+                name: default
   settingsBotFlow:
     voiceProcessingPrompt:
       lit:
@@ -973,9 +1122,9 @@ botFlow:
     enableAutomaticQuickReplies:
       lit: true
     noMatchesMax:
-      lit: 2
+      lit: 1
     noInputsMax:
-      lit: 2
+      lit: 1
     noInputsTimeout:
       lit:
         seconds: 7
@@ -1016,9 +1165,11 @@ botFlow:
     - bot:
         name: Default Bot
         refId: Default Bot_10
+        trackingId: 10
         actions:
           - updateData:
               name: Update Data
+              trackingId: 65
               statements:
                 - string:
                     variable: Flow.inbound_called_address
@@ -1026,6 +1177,7 @@ botFlow:
                       exp: if(IsNotSetOrEmpty(Flow.inbound_called_address), "+496956516", Flow.inbound_called_address)
           - dataTableLookup:
               name: Data Table Lookup
+              trackingId: 66
               lookupValue:
                 exp: if(IsNotSetOrEmpty(Flow.inbound_queue_name), Flow.inbound_called_address, Flow.inbound_queue_name)
               dataTable:
@@ -1045,14 +1197,17 @@ botFlow:
                   actions:
                     - callTask:
                         name: Call Task
-                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                        trackingId: 67
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_19]"
                 failure:
                   actions:
                     - callTask:
                         name: Call Task
-                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                        trackingId: 68
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_19]"
           - dataTableLookup:
               name: data table lookup
+              trackingId: 69
               lookupValue:
                 exp: "\"survey_\" + Flow.mapped_survey_id"
               dataTable:
@@ -1078,6 +1233,7 @@ botFlow:
                   actions:
                     - updateData:
                         name: parse survey
+                        trackingId: 70
                         statements:
                           - string:
                               variable: Flow.data_table_value
@@ -1139,18 +1295,22 @@ botFlow:
                   actions:
                     - callTask:
                         name: call error task
-                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                        trackingId: 71
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_19]"
                 failure:
                   actions:
                     - callTask:
                         name: call error task
-                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                        trackingId: 72
+                        targetTaskRef: "/botFlow/tasks/task[error_and_exit_19]"
           - communicate:
               name: welcome
+              trackingId: 73
               communication:
                 exp: "MakeCommunication(\n  ToCommunication(Flow.survey_greeting))"
           - updateData:
               name: init reporting
+              trackingId: 74
               statements:
                 - json:
                     variable: Flow.flow_reporting_result
@@ -1186,6 +1346,7 @@ botFlow:
                       exp: SetJsonObjectProperty(Flow.flow_reporting_result, "question_results", Flow.flow_reporting_question_results)
           - setParticipantData:
               name: Set Participant Data
+              trackingId: 75
               attributes:
                 - attribute:
                     name:
@@ -1194,6 +1355,7 @@ botFlow:
                       exp: ToString(Flow.flow_reporting_result)
           - loop:
               name: loop over questions
+              trackingId: 76
               currentIndex:
                 var: Flow.loop_counter
               loopCount:
@@ -1203,12 +1365,14 @@ botFlow:
                   actions:
                     - callTask:
                         name: get question
-                        targetTaskRef: "/botFlow/tasks/task[question_loop_29]"
+                        trackingId: 77
+                        targetTaskRef: "/botFlow/tasks/task[question_loop_13]"
                         outputs:
                           default:
                             actions:
                               - updateData:
                                   name: update question data
+                                  trackingId: 78
                                   statements:
                                     - string:
                                         variable: Flow.question_id
@@ -1229,7 +1393,7 @@ botFlow:
                                     - string:
                                         variable: Flow.question_reprompt
                                         value:
-                                          exp: ToString(Flow.question.reprompt)
+                                          exp: "if(IsNotSetOrEmpty(Flow.question.reprompt),\n  ToString(Flow.question_prompt), \n  ToString(Flow.question.reprompt)\n)"
                                     - boolean:
                                         variable: Flow.question_mandatory
                                         value:
@@ -1240,18 +1404,21 @@ botFlow:
                                           exp: ToString(Flow.question.default_next_question_id)
                     - switch:
                         name: question type switch
+                        trackingId: 79
                         evaluate:
                           firstTrue:
                             default:
                               actions:
                                 - callTask:
                                     name: comment
-                                    targetTaskRef: "/botFlow/tasks/task[comment_question_81]"
+                                    trackingId: 87
+                                    targetTaskRef: "/botFlow/tasks/task[comment_question_17]"
                                     outputs:
                                       default:
                                         actions:
                                           - clearSlot:
                                               name: Clear Slot
+                                              trackingId: 88
                                               slots:
                                                 - slot:
                                                     name: comment
@@ -1262,12 +1429,14 @@ botFlow:
                                   actions:
                                     - callTask:
                                         name: choice
-                                        targetTaskRef: "/botFlow/tasks/task[choice_question_50]"
+                                        trackingId: 80
+                                        targetTaskRef: "/botFlow/tasks/task[choice_question_15]"
                                         outputs:
                                           default:
                                             actions:
                                               - clearSlot:
                                                   name: Clear Slot
+                                                  trackingId: 81
                                                   slots:
                                                     - slot:
                                                         name: choice
@@ -1277,12 +1446,14 @@ botFlow:
                                   actions:
                                     - callTask:
                                         name: rating
-                                        targetTaskRef: "/botFlow/tasks/task[rating_question_46]"
+                                        trackingId: 82
+                                        targetTaskRef: "/botFlow/tasks/task[rating_question_14]"
                                         outputs:
                                           default:
                                             actions:
                                               - clearSlot:
                                                   name: Clear Slot
+                                                  trackingId: 83
                                                   slots:
                                                     - slot:
                                                         name: rating
@@ -1292,24 +1463,37 @@ botFlow:
                                   actions:
                                     - callTask:
                                         name: yes no
-                                        targetTaskRef: "/botFlow/tasks/task[yes_no_question_15]"
+                                        trackingId: 84
+                                        targetTaskRef: "/botFlow/tasks/task[yesno_question_98]"
+                                        outputs:
+                                          default:
+                                            actions:
+                                              - clearSlot:
+                                                  name: Clear Slot
+                                                  trackingId: 109
+                                                  slots:
+                                                    - slot:
+                                                        name: yes_no
                               - case:
                                   value:
                                     exp: Flow.question_type == "nps"
                                   actions:
                                     - callTask:
                                         name: nps
-                                        targetTaskRef: "/botFlow/tasks/task[nps_question_53]"
+                                        trackingId: 85
+                                        targetTaskRef: "/botFlow/tasks/task[nps_question_16]"
                                         outputs:
                                           default:
                                             actions:
                                               - clearSlot:
                                                   name: Clear Slot
+                                                  trackingId: 86
                                                   slots:
                                                     - slot:
                                                         name: nps
                     - updateData:
                         name: update date after question
+                        trackingId: 89
                         statements:
                           - boolean:
                               variable: Flow.flow_is_finished
@@ -1317,6 +1501,7 @@ botFlow:
                                 exp: IsNotSetOrEmpty(Flow.flow_next_question_id) or Flow.flow_next_question_id == "null"
                     - callData:
                         name: submit results
+                        trackingId: 90
                         timeout:
                           lit:
                             minutes: 1
@@ -1373,14 +1558,17 @@ botFlow:
                             actions:
                               - callTask:
                                   name: Call Task
-                                  targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                                  trackingId: 91
+                                  targetTaskRef: "/botFlow/tasks/task[error_and_exit_19]"
                           timeout:
                             actions:
                               - callTask:
                                   name: Call Task
-                                  targetTaskRef: "/botFlow/tasks/task[error_and_exit_120]"
+                                  trackingId: 92
+                                  targetTaskRef: "/botFlow/tasks/task[error_and_exit_19]"
                     - decision:
                         name: exit loop decision
+                        trackingId: 93
                         condition:
                           exp: Flow.flow_is_finished
                         outputs:
@@ -1388,12 +1576,15 @@ botFlow:
                             actions:
                               - loopExit:
                                   name: Exit Loop
+                                  trackingId: 94
           - communicate:
               name: Communicate
+              trackingId: 95
               communication:
                 exp: "MakeCommunication(\n  \"Vielen Dank, dass sie sich Zeit für uns genommen haben.\")"
           - exitBotFlow:
               name: Exit Bot Flow
+              trackingId: 96
   settingsNaturalLanguageUnderstanding:
     nluDomainVersion:
       intents: []
@@ -1406,6 +1597,8 @@ botFlow:
           type: nps_type
         - name: rating
           type: rating_type
+        - name: yes_no
+          type: yes_no_type
       entityTypes:
         - name: choice_type
           description: The description of the Entity Type "choice_type"
@@ -1417,7 +1610,7 @@ botFlow:
             type: Regex
             restricted: true
             items:
-              - value: 10|[0-9]
+              - value: "^(?:10|[0-9])$"
                 synonyms: []
         - name: rating_type
           description: The description of the Entity Type "rating_type"
