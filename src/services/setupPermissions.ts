@@ -51,11 +51,15 @@ export type SetupPermissionSnapshot = {
 // des Import-Jobs, das dauert; Setup und Botflow-Update prüfen sie deshalb vorher.
 export const FLOW_IMPORT_PERMISSIONS = [
   "architect:ui:view",
+  "architect:flow:add",
   "architect:flow:view",
   "architect:flow:edit",
   "architect:flow:publish",
   "architect:job:create",
-  "architect:datatable:search"
+  "architect:job:view",
+  "architect:datatable:search",
+  "architect:systemPrompt:view",
+  "integrations:action:view"
 ];
 
 const REQUIREMENTS: PermissionRequirement[] = [
@@ -131,7 +135,6 @@ const REQUIREMENTS: PermissionRequirement[] = [
     label: "setup.permissions.requirements.flowsManage",
     mode: "base",
     allOf: [
-      ["architect:flow:add"],
       ["architect:flow:delete"],
       ...FLOW_IMPORT_PERMISSIONS.map((permission) => [permission])
     ]
