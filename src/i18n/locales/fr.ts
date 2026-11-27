@@ -780,6 +780,7 @@ export const fr: MessageSchema = {
 			updateSuccess: "Bot Flow mis à jour",
 			updateSuccessDetail: "Le Bot Flow a été mis à jour avec succès à partir du modèle actuel.",
 			updateFailed: "Impossible de mettre à jour le Bot Flow",
+			updateMissingPermissions: "Autorisations manquantes pour l'import du Bot Flow : {permissions}",
 			exportTemplates: "Exporter les modèles de flux",
 			exportMissing: "Le flux bot ou le flux entrant est absent des métadonnées d'installation.",
 			exportSuccess: "Le flux bot et le flux entrant ont été exportés avec des espaces réservés.",

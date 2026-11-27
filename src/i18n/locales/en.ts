@@ -780,6 +780,7 @@ export const en: MessageSchema = {
 			updateSuccess: "Bot flow updated",
 			updateSuccessDetail: "The bot flow was successfully updated from the current template.",
 			updateFailed: "Could not update bot flow",
+			updateMissingPermissions: "You are missing permissions for the bot flow import: {permissions}",
 			exportTemplates: "Export flow templates",
 			exportMissing: "Bot flow or inbound flow is missing in the setup metadata.",
 			exportSuccess: "Bot flow and inbound flow were exported with placeholders.",

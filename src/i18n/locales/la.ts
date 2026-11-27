@@ -781,6 +781,7 @@ export const la: MessageSchema = {
 			updateSuccess: "Botflow renovatum",
 			updateSuccessDetail: "Botflow feliciter ex exemplari hodierno renovatum est.",
 			updateFailed: "Botflow renovari non potuit",
+			updateMissingPermissions: "Desunt tibi permissiones ad Botflow importandum: {permissions}",
 			exportTemplates: "Exemplaria fluxuum exporta",
 			exportMissing: "Botflow vel Inbound-Flow in metadatis institutionis desunt.",
 			exportSuccess: "Botflow et Inbound-Flow cum locis vacuis exportata sunt.",

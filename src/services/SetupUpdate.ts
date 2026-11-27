@@ -1,5 +1,7 @@
 import { useAppStore } from "@/stores/appStore";
 import { applyFlowPlaceholders, importFlow } from "@/services/SetupOrchestrator";
+import { loadSetupPermissionSnapshot, missingFlowImportPermissions } from "@/services/setupPermissions";
+import { i18n } from "@/i18n";
 import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 
 export async function updateInstalledBotFlow(onProgress: (msg: string) => void = () => {}): Promise<void> {
@@ -31,6 +33,7 @@ export async function updateInstalledBotFlow(onProgress: (msg: string) => void =
 	// Architect ordnet den YAML-Import über Namen und Division zu.
 	// Vorher prüfen, dass diese Metadaten weiterhin zum installierten Flow gehören.
 	app.initGenesysClients();
+	await assertFlowImportPermissions();
 	const existingFlow = await app.genesys.architectApi.getFlow(setup.botFlow.id);
 	if (existingFlow.name !== setup.botFlow.name || existingFlow.division?.id !== setup.division?.id) {
 		throw new Error("The installed bot flow no longer matches the setup name or division.");
@@ -45,5 +48,20 @@ export async function updateInstalledBotFlow(onProgress: (msg: string) => void =
 	);
 	if (flowId !== setup.botFlow.id) {
 		throw new Error(`Architect returned a different flow ID while updating ${setup.botFlow.name}.`);
+	}
+}
+
+// Fehlende Architect-Rechte vorher melden, statt minutenlang auf den scheiternden Import-Job zu warten.
+// Lassen sich die Rechte nicht lesen, entscheidet wie bisher Genesys beim Import.
+async function assertFlowImportPermissions(): Promise<void> {
+	let missing: string[];
+	try {
+		missing = missingFlowImportPermissions(await loadSetupPermissionSnapshot());
+	} catch (error) {
+		console.warn("Rechteprüfung vor dem Botflow-Update nicht möglich", error);
+		return;
+	}
+	if (missing.length) {
+		throw new Error(i18n.global.t("settings.setup.updateMissingPermissions", { permissions: missing.join(", ") }));
 	}
 }
