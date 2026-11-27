@@ -16,6 +16,7 @@ import botFlowTemplate from "@/templates/genesys/botFlowStructure.yaml?raw";
 import inboundFlowTemplate from "@/templates/genesys/inboundFlowStructure.yaml?raw";
 import { normalizeFeatures, type FeatureFlags } from "@/domain/features/featureFlags";
 import { otherInstallationRedirectUris, replaceInstallationRedirectUris } from "@/domain/setup/redirectUris";
+import { summarizeArchitectJobMessages } from "@/domain/setup/architectJobMessages";
 
 type FlowSetupResource = {
   id: string;
@@ -454,8 +455,10 @@ export async function importFlow(
       return result.flow.id;
     }
     if (result.status === "Failure") {
-      const details = JSON.stringify(result.messages ?? []);
-      throw new Error(`Architect import failed for ${flowName}: ${details}`);
+      // Vollständige Archy-Meldungen nur in die Konsole, im Fehlertext nur die Ursache
+      console.error(`Architect import failed for ${flowName}`, result.messages ?? []);
+      const reason = summarizeArchitectJobMessages(result.messages);
+      throw new Error(`Architect import failed for ${flowName}: ${reason}`);
     }
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
