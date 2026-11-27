@@ -47,6 +47,17 @@ export type SetupPermissionSnapshot = {
   policies: Policy[];
 };
 
+// Rechte, die ein Architect-Import (Archy) des Botflows braucht. Archy prüft sie erst während
+// des Import-Jobs, das dauert; Setup und Botflow-Update prüfen sie deshalb vorher.
+export const FLOW_IMPORT_PERMISSIONS = [
+  "architect:ui:view",
+  "architect:flow:view",
+  "architect:flow:edit",
+  "architect:flow:publish",
+  "architect:job:create",
+  "architect:datatable:search"
+];
+
 const REQUIREMENTS: PermissionRequirement[] = [
   {
     id: "groups-manage",
@@ -122,10 +133,7 @@ const REQUIREMENTS: PermissionRequirement[] = [
     allOf: [
       ["architect:flow:add"],
       ["architect:flow:delete"],
-      ["architect:flow:edit"],
-      ["architect:job:create"],
-      ["architect:flow:publish"],
-      ["architect:flow:view"]
+      ...FLOW_IMPORT_PERMISSIONS.map((permission) => [permission])
     ]
   },
   {
@@ -200,6 +208,11 @@ export async function loadSetupPermissionSnapshot(): Promise<SetupPermissionSnap
     userName: app.currentUser?.name ?? "",
     policies
   };
+}
+
+// Liefert die fehlenden Rechte für einen Flow-Import (leer = alles vorhanden)
+export function missingFlowImportPermissions(snapshot: SetupPermissionSnapshot): string[] {
+  return FLOW_IMPORT_PERMISSIONS.filter((permission) => !hasPermission(snapshot.policies, permission));
 }
 
 export function evaluateSetupPermissions(

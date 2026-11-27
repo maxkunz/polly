@@ -778,6 +778,7 @@ export const de = {
 			updateSuccess: "Botflow aktualisiert",
 			updateSuccessDetail: "Der Botflow wurde erfolgreich aus der aktuellen Vorlage aktualisiert.",
 			updateFailed: "Botflow konnte nicht aktualisiert werden",
+			updateMissingPermissions: "Dir fehlen Berechtigungen für den Botflow-Import: {permissions}",
 			exportTemplates: "Flow-Templates exportieren",
 			exportMissing: "Botflow oder Inbound-Flow fehlen in den Setup-Metadaten.",
 			exportSuccess: "Botflow und Inbound-Flow wurden mit Platzhaltern exportiert.",

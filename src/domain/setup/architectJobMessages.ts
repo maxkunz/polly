@@ -31,7 +31,7 @@ function responseBodyMessage(body: string | undefined): string | null {
 function cleanText(text: string): string {
 	return text
 		.replace(/^promise tracked by async tracker rejected\.\s*Error:\s*/i, "")
-		.replace(/\s*--\s*\[Arch[A-Za-z]*\]\s*$/, "")
+		.replace(/\s*--\s*\[Arch[^\]]*\]\s*$/, "")
 		.replace(/\s+/g, " ")
 		.trim();
 }

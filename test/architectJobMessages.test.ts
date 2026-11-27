@@ -43,6 +43,13 @@ test("ohne Diagnose: Texte bereinigt, Rauschen und Dubletten entfernt", () => {
 	assert.equal(result, "Flow is locked by another user.");
 });
 
+test("Archy-Zusatz mit Sitzungsdaten wird abgeschnitten", () => {
+	const result = summarizeArchitectJobMessages([
+		{ type: "Error", text: "missing permission 'architect:ui:view'. -- [ArchSession, Environment:'prod', Host:'apps.mypurecloud.de', Region:'eu-central-1', ArchSessionId:'x']" }
+	]);
+	assert.equal(result, "missing permission 'architect:ui:view'.");
+});
+
 test("kaputter responseBody fällt auf die Texte zurück", () => {
 	const result = summarizeArchitectJobMessages([
 		{ type: "Error", text: "Etwas ging schief", details: [{ responseBody: "<html>" }] }

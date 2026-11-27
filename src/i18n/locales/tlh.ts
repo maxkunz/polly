@@ -781,6 +781,7 @@ export const tlh: MessageSchema = {
 			updateSuccess: "Botflow chu'moHlu'pu'",
 			updateSuccessDetail: "mIw chu' vo' Botflow chu'moHlu'pu'. Qapla'!",
 			updateFailed: "Botflow chu'moHlaHbe'lu'",
+			updateMissingPermissions: "Botflow lI'lu'meH chaw' Daghajbe': {permissions}",
 			exportTemplates: "mIw ghunmey yIlIH",
 			exportMissing: "Botflow pagh Inbound-Flow tu'lu'be' setup mu'meyDaq.",
 			exportSuccess: "Botflow je Inbound-Flow lIHlu'pu' ghunmey-vetlh.",
